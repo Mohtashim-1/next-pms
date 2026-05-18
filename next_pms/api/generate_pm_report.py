@@ -5,6 +5,7 @@ import frappe
 import requests
 from frappe import _
 from frappe.utils import getdate
+from frappe.utils.password import get_decrypted_password
 
 LLM_SUMMARIZE_URL = "https://rt-report-automation.rt.gw/api/llm/summarize"
 LLM_STATUS_URL = "https://rt-report-automation.rt.gw/api/inngest/runs"
@@ -17,11 +18,11 @@ COMPLETION_POLL_INTERVAL = 30
 
 
 def get_api_key() -> str:
-    api_key = frappe.conf.get("pm_report_api_key")
+    api_key = get_decrypted_password("Timesheet Settings", "Timesheet Settings", "pm_report_api_key")
     if isinstance(api_key, str):
         api_key = api_key.strip()
     if not api_key:
-        frappe.throw(_("PM Report API key is not configured. Please set `pm_report_api_key` in site config."))
+        frappe.throw(_("PM Report API key is not configured. Please set it in Timesheet Settings."))
     return api_key
 
 
