@@ -413,8 +413,7 @@ def notify_mentions(
     if project_status_update and frappe.db.exists("Project Status Update", project_status_update):
         status_update_doc = frappe.get_doc("Project Status Update", project_status_update)
         project_name = status_update_doc.project
-        update_title = status_update_doc.title
-        notification_context = f"project status update '{update_title}'"
+        notification_context = f"project status update for: {project_name}"
     else:
         return {"message": "No project status update found"}
 
@@ -435,6 +434,7 @@ def notify_mentions(
                 "document_type": doc_type,
                 "document_name": doc_name,
                 "from_user": current_user,
+                "link": project_url,
                 "email_content": frappe.render_template(  # nosemgrep - trusted template file
                     "next_pms/timesheet/templates/project_status_update/mention_notification.html",
                     {
