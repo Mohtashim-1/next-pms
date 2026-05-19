@@ -258,7 +258,7 @@ const PMReport = ({ projectId }: PMReportProps) => {
         });
       }
 
-      await call({
+      const result = await call({
         project: projectId,
         from_date: fromDate,
         to_date: toDate,
@@ -267,6 +267,17 @@ const PMReport = ({ projectId }: PMReportProps) => {
           ? { previous_doc_url: lastReportLink }
           : {}),
       });
+
+      if (result?.message?.status === "error") {
+        setIsGenerating(false);
+        toast({
+          variant: "destructive",
+          description:
+            "PM Report is not configured correctly. Please contact your system administrator.",
+        });
+        return;
+      }
+
       mutateRef.current();
 
       toast({
