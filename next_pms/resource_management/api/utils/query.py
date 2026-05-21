@@ -186,7 +186,9 @@ def get_employee_holidays(employee: str | tuple, start_date: str, end_date: str)
         query = query.where(Employee.name.isin(employee))
     else:
         query = query.where(Employee.name == employee)
-    query = query.where((Holiday.holiday_date >= start_date) & (Holiday.holiday_date <= end_date))
+    query = query.where((Holiday.holiday_date >= start_date) & (Holiday.holiday_date <= end_date)).orderby(
+        Employee.name
+    )
 
     results = query.run(as_dict=True)
 
