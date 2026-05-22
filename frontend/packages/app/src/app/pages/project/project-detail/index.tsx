@@ -237,6 +237,12 @@ const ProjectDetail = () => {
                     custom_slack_channel_slug: { hidden: true },
                     custom_project_reports: { hidden: true },
                     custom_project_drive_link: { hidden: true },
+                    custom_enable_project_report_generation: {
+                      hidden:
+                        !window?.frappe?.boot?.user?.roles?.includes(
+                          "Delivery Manager",
+                        ),
+                    },
                   } as FieldConfigType
                 }
                 mutateData={mutate}

@@ -5,9 +5,7 @@ import frappe
 import requests
 from frappe import _
 from frappe.utils import getdate
-
-LLM_SUMMARIZE_URL = "https://rt-report-automation.rt.gw/api/llm/summarize"
-LLM_STATUS_URL = "https://rt-report-automation.rt.gw/api/inngest/runs"
+from frappe.utils.password import get_decrypted_password
 
 INITIAL_DELAY = 30
 POLL_INTERVAL = 15
@@ -16,12 +14,28 @@ MAX_OUTPUT_RETRIES = 5
 COMPLETION_POLL_INTERVAL = 30
 
 
-def get_api_key() -> str:
-    api_key = frappe.conf.get("pm_report_api_key")
+def get_llm_urls() -> tuple[str, str] | None:
+    # URLs are configured in site_config.json:
+    summarize_url = frappe.conf.get("llm_summarize_url")
+    status_url = frappe.conf.get("llm_status_url")
+    if not summarize_url or not status_url:
+        frappe.log_error(
+            "LLM URLs are not configured. Please set `llm_summarize_url` and `llm_status_url` in site config.",
+            "PM Report — Config Error",
+        )
+        return None
+    return summarize_url, status_url
+
+
+def get_api_key() -> str | None:
+    api_key = get_decrypted_password("Timesheet Settings", "Timesheet Settings", "pm_report_api_key")
     if isinstance(api_key, str):
         api_key = api_key.strip()
     if not api_key:
-        frappe.throw(_("PM Report API key is not configured. Please set `pm_report_api_key` in site config."))
+        frappe.log_error(
+            "PM Report API key is not configured. Please set it in Timesheet Settings.", "PM Report — Config Error"
+        )
+        return None
     return api_key
 
 
@@ -34,6 +48,15 @@ def generate_pm_report(
     selected_repo: str | None = None,
 ) -> dict:
     frappe.has_permission("Project", doc=project, ptype="write", throw=True)
+
+    urls = get_llm_urls()
+    if not urls:
+        return {"status": "error"}
+    LLM_SUMMARIZE_URL = urls[0]
+
+    api_key = get_api_key()
+    if not api_key:
+        return {"status": "error"}
 
     project_doc = frappe.get_doc("Project", project)
 
@@ -72,7 +95,7 @@ def generate_pm_report(
     try:
         response = requests.post(
             LLM_SUMMARIZE_URL,
-            headers={"Content-Type": "application/json", "x-api-key": get_api_key()},
+            headers={"Content-Type": "application/json", "x-api-key": api_key},
             data=json.dumps(payload),
             timeout=60,
         )
@@ -127,6 +150,19 @@ def check_and_save_report(project, run_id, user, from_date, to_date):
     time.sleep(INITIAL_DELAY)
     poll_start = time.time()
 
+    api_key = get_api_key()
+    if not api_key:
+        update_report_row(project, run_id, status="Failed", generated_on=frappe.utils.now())
+        _notify(project, user, error="PM Report is not configured correctly. Please contact your system administrator.")
+        return
+
+    urls = get_llm_urls()
+    if not urls:
+        update_report_row(project, run_id, status="Failed", generated_on=frappe.utils.now())
+        _notify(project, user, error="PM Report is not configured correctly. Please contact your system administrator.")
+        return
+    LLM_STATUS_URL = urls[1]
+
     while True:
         elapsed = time.time() - poll_start
 
@@ -138,7 +174,7 @@ def check_and_save_report(project, run_id, user, from_date, to_date):
             return
 
         try:
-            response = requests.get(f"{LLM_STATUS_URL}/{run_id}", headers={"x-api-key": get_api_key()}, timeout=30)
+            response = requests.get(f"{LLM_STATUS_URL}/{run_id}", headers={"x-api-key": api_key}, timeout=30)
             response.raise_for_status()
             data = response.json()
 
@@ -236,6 +272,15 @@ def resync_report(project: str, run_id: str) -> dict:
     """Poll for document_url for a completed run"""
     frappe.has_permission("Project", doc=project, ptype="write", throw=True)
 
+    api_key = get_api_key()
+    if not api_key:
+        frappe.throw(_("PM Report is not configured. Please contact your system administrator."))
+
+    urls = get_llm_urls()
+    if not urls:
+        frappe.throw(_("PM Report is not configured. Please contact your system administrator."))
+    LLM_STATUS_URL = urls[1]
+
     project_doc = frappe.get_doc("Project", project)
     matching_row = next(
         (row for row in project_doc.custom_project_reports if row.run_id == run_id and row.status == "Completed"), None
@@ -257,7 +302,7 @@ def resync_report(project: str, run_id: str) -> dict:
 
             response = requests.get(
                 f"{LLM_STATUS_URL}/{run_id}",
-                headers={"x-api-key": get_api_key()},
+                headers={"x-api-key": api_key},
                 timeout=30,
             )
             response.raise_for_status()
