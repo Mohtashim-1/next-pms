@@ -29,7 +29,6 @@ import { setSidebarCollapsed } from "@/store/user";
 import type { NestedRoute, Route } from "./types";
 import UserNavigation from "./userNavigation";
 import ViewLoader from "./viewLoader";
-import logo from "../../../logo.svg";
 import { RootState } from "../../../store";
 import type { ViewData } from "../../../store/view";
 
@@ -144,20 +143,15 @@ const Sidebar = () => {
           className={mergeClassNames("flex shrink-0 gap-x-2 items-center", !user.isSidebarCollapsed && "px-2")}
           id="app-logo"
         >
-          <img
-            src={logo}
-            alt="app-logo"
-            className=" w-8 h-auto max-xl:w-7 max-xl:h-7   max-lg:w-7 max-lg:h-7 max-md:w-7 max-md:h-7"
-          />
           <Typography
-            title="Next PMS"
+            title="Project Management"
             variant="h5"
             className={mergeClassNames(
               "transition-all cursor-pointer duration-300 truncate  max-md:hidden",
               user.isSidebarCollapsed && "hidden"
             )}
           >
-            Next PMS
+            Project Management
           </Typography>
         </div>
         <div className="overflow-y-auto no-scrollbar">

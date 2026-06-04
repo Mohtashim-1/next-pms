@@ -1,5 +1,5 @@
 app_name = "next_pms"
-app_title = "Next PMS"
+app_title = "Project Management"
 app_publisher = "rtCamp"
 app_description = "Simplified Project Management System"
 app_email = "frappe@rtcamp.com"
@@ -12,8 +12,7 @@ required_apps = ["frappe/erpnext", "frappe/hrms"]
 add_to_apps_screen = [
     {
         "name": "next_pms",
-        "logo": "/assets/next_pms/next-pms-logo.png",
-        "title": "Next PMS",
+        "title": "Project Management",
         "route": "/next-pms",
         "has_permission": "next_pms.api.check_app_permission",
     }

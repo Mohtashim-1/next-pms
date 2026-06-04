@@ -53,7 +53,7 @@ def get_context(context):
         }
     )
 
-    context["app_name"] = "Next PMS"
+    context["app_name"] = "Project Management"
 
     return context
 
@@ -72,7 +72,7 @@ def get_boot():
     boot["has_business_unit"] = has_bu_field()
     boot["has_industry"] = has_industry_field()
     boot["is_calendar_setup"] = is_google_calendar_enabled()
-    boot["app_name"] = "Next PMS"
+    boot["app_name"] = "Project Management"
     boot["global_filters"] = get_global_filters()
     boot_json = frappe.as_json(boot, indent=None, separators=(",", ":"))
     boot_json = re.sub(
