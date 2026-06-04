@@ -5,33 +5,33 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 222 47% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 217 33% 17%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 176 77% 26%;
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary-foreground: 222 47% 11%;
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
     --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 210 40% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --ring: 176 77% 26%;
     --radius: 0.5rem;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --success: 142 76% 36%;
+    --chart-1: 176 77% 26%;
+    --chart-2: 221 83% 53%;
+    --chart-3: 142 76% 36%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 0 72% 51%;
+    --success: 142 71% 45%;
     --success-foreground: 210 40% 98%;
-    --warning: 31.82 100% 51%;
+    --warning: 38 92% 50%;
     --warning-foreground: 210 40% 98%;
   }
 
@@ -42,7 +42,7 @@
     --card-foreground: 210 40% 98%;
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
+    --primary: 174 72% 56%;
     --primary-foreground: 222.2 47.4% 11.2%;
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
@@ -50,19 +50,19 @@
     --muted-foreground: 215 20.2% 65.1%;
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 210 40% 98%;
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --success: 142 76% 36%;
+    --chart-1: 174 72% 56%;
+    --chart-2: 217 91% 60%;
+    --chart-3: 142 71% 45%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 0 72% 51%;
+    --success: 142 71% 45%;
     --success-foreground: 210 40% 98%;
-    --warning: 31.82 100% 51%;
+    --warning: 38 92% 50%;
     --warning-foreground: 210 40% 98%;
   }
 }
@@ -85,7 +85,7 @@
 .ql-formats>span svg:hover polyline,
 .ql-formats>span svg:hover line,
 .ql-formats>span svg:hover rect {
-  stroke: hsl(210, 100%, 50%) !important;
+  stroke: hsl(var(--primary)) !important;
 }
 
 .ql-formats button svg path,
@@ -99,7 +99,7 @@
 .ql-formats button svg:hover line,
 .ql-formats button svg:hover polyline,
 .ql-formats>button svg:hover rect {
-  stroke: hsl(210, 100%, 50%) !important;
+  stroke: hsl(var(--primary)) !important;
 }
 
 .ql-picker-options {
@@ -148,7 +148,7 @@
   25%,
   50%,
   75% {
-    border-color: #3b82f6;
+    border-color: hsl(var(--primary));
   }
 }
 

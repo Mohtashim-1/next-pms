@@ -69,7 +69,7 @@ const ViewLoader = ({
                 <div
                   className={mergeClassNames(
                     "flex w-full  rounded-lg items-center p-2 hover:bg-slate-200 text-primary gap-x-2 dark:hover:bg-secondary",
-                    isActive && "bg-primary shadow-md hover:bg-slate-700 dark:hover:bg-secondary dark:bg-foreground"
+                    isActive && "bg-primary shadow-md hover:bg-primary/90 dark:hover:bg-secondary dark:bg-foreground"
                   )}
                 >
                   <span className="shrink-0">

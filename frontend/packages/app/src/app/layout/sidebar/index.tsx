@@ -201,7 +201,7 @@ const Sidebar = () => {
                           <div
                             className={mergeClassNames(
                               "flex w-full p-2 rounded-lg items-center  hover:bg-slate-200 text-primary gap-x-2 max-md:justify-center dark:hover:bg-secondary",
-                              isChildActive && "bg-primary shadow-md hover:bg-slate-700 ",
+                              isChildActive && "bg-primary shadow-md hover:bg-primary/90 ",
                               !user.isSidebarCollapsed && "pl-3"
                             )}
                           >
@@ -236,7 +236,7 @@ const Sidebar = () => {
                       className={mergeClassNames(
                         "flex w-full pl-2 rounded-lg items-center p-2 hover:bg-slate-200 dark:hover:bg-secondary  gap-x-2 max-md:justify-center  ",
                         isActive &&
-                          "bg-primary shadow-md hover:bg-slate-700 dark:hover:bg-secondary dark:bg-foreground "
+                          "bg-primary shadow-md hover:bg-primary/90 dark:hover:bg-secondary dark:bg-foreground "
                       )}
                     >
                       <route.icon
