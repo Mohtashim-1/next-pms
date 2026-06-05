@@ -103,7 +103,7 @@ export const TaskHoverCard = ({
               )}
             </Typography>
 
-            <Typography variant="small" className="text-primary/80 whitespace-nowrap text-ellipsis overflow-hidden ">
+            <Typography variant="small" className="text-muted-foreground whitespace-nowrap text-ellipsis overflow-hidden ">
               {taskData?.project_name}
             </Typography>
           </HoverCardTrigger>
@@ -114,7 +114,7 @@ export const TaskHoverCard = ({
         <span className="flex gap-x-2">
           <div>
             <Typography>{taskData.subject}</Typography>
-            <Typography variant="small" className="text-primary/80 whitespace-nowrap text-ellipsis overflow-hidden ">
+            <Typography variant="small" className="text-muted-foreground whitespace-nowrap text-ellipsis overflow-hidden ">
               {taskData.project_name}
             </Typography>
           </div>

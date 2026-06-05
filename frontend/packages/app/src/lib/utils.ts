@@ -239,7 +239,7 @@ export const currencyFormat = (currency: string = "INR"): Intl.NumberFormat => {
 };
 
 export const getBgCsssForToday = (date: string) => {
-  return isToday(getUTCDateTime(date)) ? "bg-slate-100 dark:bg-muted/50 " : "";
+  return isToday(getUTCDateTime(date)) ? "bg-accent/60" : "";
 };
 
 export const isDateInRange = (

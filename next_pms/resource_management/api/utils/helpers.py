@@ -123,16 +123,16 @@ def filter_project_list(project_name=None, customer=None, billing_type=None, pag
         filters["name"] = ["in", ids]
 
     else:
-        if project_name:
+        if project_name and project_name != "None":
             filters["project_name"] = ["like", f"%{project_name}%"]
 
-        if customer:
+        if customer and customer != "None":
             if isinstance(customer, str):
                 customer = json.loads(customer)
             if customer and len(customer) > 0:
                 filters["customer"] = ["in", customer]
 
-        if billing_type:
+        if billing_type and billing_type != "None":
             if isinstance(billing_type, str):
                 billing_type = json.loads(billing_type)
             if billing_type and len(billing_type) > 0:

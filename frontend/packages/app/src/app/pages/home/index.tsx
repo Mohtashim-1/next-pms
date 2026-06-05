@@ -135,7 +135,7 @@ const HomeComponent = ({ viewData }: HomeComponentProps) => {
                   {homeState.data?.dates[0]?.key}
                 </Typography>
               </TableHead>
-              <TableHead colSpan={7} className="h-fit divide-solid bg-slate-200 dark:bg-secondary ">
+              <TableHead colSpan={7} className="h-fit divide-solid bg-secondary">
                 <Typography variant="p" className="w-full flex justify-center items-center">
                   {homeState.data?.dates[1]?.key}
                 </Typography>
@@ -151,8 +151,8 @@ const HomeComponent = ({ viewData }: HomeComponentProps) => {
                     <TableHead
                       key={`${index}-${date}`}
                       className={mergeClassNames(
-                        "text-slate-500 dark:text-primary/60 font-medium max-w-20 h-8 text-center",
-                        index != 0 && "bg-slate-200 dark:bg-secondary"
+                        "text-muted-foreground font-medium max-w-20 h-8 text-center",
+                        index != 0 && "bg-secondary"
                       )}
                     >
                       {formattedDate.day}

@@ -21,7 +21,7 @@ import type {
 } from "./types";
 
 const emptyProjectDayData: ProjectResourceProps = {
-  date: "None",
+  date: "",
   total_allocated_hours: 0,
   total_worked_hours: 0,
   project_resource_allocation_for_given_date: [],

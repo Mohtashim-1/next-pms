@@ -46,7 +46,7 @@ const Typography = ({
   const Tag = as || tags[variant];
 
   return (
-    <Tag className={mergeClassNames("text-primary", sizeClasses, className)} {...props}>
+    <Tag className={mergeClassNames("text-foreground", sizeClasses, className)} {...props}>
       {children}
     </Tag>
   );

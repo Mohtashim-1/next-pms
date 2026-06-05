@@ -21,6 +21,7 @@ import { getCurrencySymbol, parseFrappeErrorMsg } from "@/lib/utils";
 import { ProjectDetailHeader } from "./components/header";
 import PMReport from "./components/pm-report";
 import ProjectDashboard from "./components/project-dashboard";
+import ProjectLifecycle from "./components/project-lifecycle";
 import ProjectTasks from "./components/project-tasks";
 import ProjectUpdates from "./components/project-updates";
 import ProjectSidebar from "./components/sidebar";
@@ -115,6 +116,10 @@ const ProjectDetail = () => {
       },
       Tasks: {
         component: <ProjectTasks projectId={projectId} />,
+        isCustom: true,
+      },
+      Lifecycle: {
+        component: <ProjectLifecycle projectId={projectId} />,
         isCustom: true,
       },
       ...(projectData?.custom_enable_project_report_generation === 1 && {

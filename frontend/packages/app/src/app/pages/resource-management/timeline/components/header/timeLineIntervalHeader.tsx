@@ -49,7 +49,7 @@ const TimeLineIntervalHeader = ({ getIntervalProps, intervalContext, data }: Tim
   return (
     <TableHead
       {...headerProps}
-      className={mergeClassNames("h-full pb-2 pt-1 px-0 text-center truncate cursor-pointer border-r border-gray-300")}
+      className={mergeClassNames("h-full pb-2 pt-1 px-0 text-center truncate cursor-pointer border-r border-border")}
     >
       <Typography variant="small">{getKey()}</Typography>
     </TableHead>

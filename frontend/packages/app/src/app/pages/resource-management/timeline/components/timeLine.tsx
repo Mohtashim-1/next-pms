@@ -67,23 +67,23 @@ const ResourceTimeLine = ({ handleFormSubmit }: ResourceTimeLineProps) => {
       const nextMonth = getMonthYearKey(getDayKeyOfMoment(moment(startTime).add(-1, "days")));
 
       if (currentMonth !== nextMonth) {
-        return [" border-0 border-r border-gray-300 opacity-80"];
+        return [" border-0 border-r border-border opacity-80"];
       }
 
       return classNames;
     }
 
     if (day == "Sun") {
-      classNames = ["border-r border-gray-300 opacity-80"];
+      classNames = ["border-r border-border opacity-80"];
     }
 
     if (currentDay == today) {
       if (day == "Sat") {
-        classNames = ["border-l border-gray-300 opacity-80 rct-day-6-today"];
+        classNames = ["border-l border-border bg-accent/40 opacity-80 rct-day-6-today"];
       } else if (day == "Sun") {
-        classNames = ["border-l border-gray-300 opacity-80 rct-day-0-today"];
+        classNames = ["border-l border-border bg-accent/40 opacity-80 rct-day-0-today"];
       } else {
-        classNames = ["border-l border-r border-gray-300 opacity-80"];
+        classNames = ["border-l border-r border-border bg-accent/40 opacity-80"];
       }
     }
 
@@ -305,7 +305,7 @@ const ResourceTimeLine = ({ handleFormSubmit }: ResourceTimeLineProps) => {
         className="overflow-x-auto"
       >
         <TimelineHeaders
-          className="bg-slate-50 dark:bg-muted text-[14px] sticky z-[1000] top-0"
+          className="bg-muted text-foreground text-[14px] sticky z-[1000] top-0"
           calendarHeaderClassName="border-0 border-l border-inherit"
         >
           <SidebarHeader>

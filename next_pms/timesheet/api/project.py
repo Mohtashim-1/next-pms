@@ -3,7 +3,7 @@ import json
 import frappe
 from erpnext.accounts.report.utils import get_rate_as_at
 from frappe import get_list, get_meta, whitelist
-from frappe.utils import flt, get_datetime, getdate, now_datetime
+from frappe.utils import add_to_date, flt, get_datetime, getdate, now_datetime
 
 from . import get_count
 
@@ -371,6 +371,257 @@ def get_project_tasks(project: str, search: str | None = None, status: str | Non
             "visible": len(tasks),
         },
     }
+
+
+@whitelist()
+def get_project_lifecycle(project: str):
+    if not project or not frappe.db.exists("Project", project):
+        frappe.throw(frappe._("Project not found"))
+
+    frappe.has_permission("Project", doc=project, throw=True)
+
+    project_doc = frappe.get_doc("Project", project)
+    project_name = project_doc.get("project_name") or project_doc.name
+    kickoff_date = (
+        project_doc.get("expected_start_date")
+        or project_doc.get("actual_start_date")
+        or project_doc.get("creation")
+    )
+    delivery_date = project_doc.get("expected_end_date") or project_doc.get("actual_end_date")
+    support_start = delivery_date or project_doc.get("modified") or kickoff_date
+    support_end = add_to_date(support_start, years=3, as_string=True) if support_start else None
+
+    tasks = _get_lifecycle_tasks(project)
+    development_tasks = [task for task in tasks if task.category == "Development"]
+    support_tasks = [task for task in tasks if task.category == "Support"]
+    completed_dev = len([task for task in development_tasks if task.status in ("Completed", "Closed")])
+    completed_support = len([task for task in support_tasks if task.status in ("Completed", "Closed")])
+
+    updates = _get_lifecycle_updates(project)
+    events = _build_lifecycle_events(project_doc, tasks, updates)
+
+    development_completion = flt((completed_dev / len(development_tasks)) * 100, 2) if development_tasks else 0
+    support_completion = flt((completed_support / len(support_tasks)) * 100, 2) if support_tasks else 0
+
+    stages = [
+        {
+            "key": "kickoff",
+            "label": "Kickoff",
+            "status": "Completed" if kickoff_date else "Pending",
+            "start": kickoff_date,
+            "end": kickoff_date,
+            "progress": 100 if kickoff_date else 0,
+            "description": "Project kickoff, initial alignment, and handover from sales to execution.",
+            "count": 1 if kickoff_date else 0,
+        },
+        {
+            "key": "planning",
+            "label": "Planning",
+            "status": "Completed" if tasks or updates else "Pending",
+            "start": kickoff_date,
+            "end": kickoff_date,
+            "progress": 100 if tasks or updates else 0,
+            "description": "Scope, resource allocation, and project tracking setup.",
+            "count": len(updates),
+        },
+        {
+            "key": "development",
+            "label": "Development",
+            "status": _stage_status(development_completion, len(development_tasks)),
+            "start": kickoff_date,
+            "end": delivery_date,
+            "progress": development_completion,
+            "description": "Development, implementation, fixes, and delivery tasks.",
+            "count": len(development_tasks),
+        },
+        {
+            "key": "handover",
+            "label": "Handover",
+            "status": "Completed" if delivery_date and development_completion >= 100 else "In Progress",
+            "start": delivery_date,
+            "end": delivery_date,
+            "progress": 100 if delivery_date and development_completion >= 100 else min(development_completion, 80),
+            "description": "UAT, deployment, acceptance, and production handover.",
+            "count": len([event for event in events if event.get("stage") == "handover"]),
+        },
+        {
+            "key": "support",
+            "label": "Support",
+            "status": "In Progress" if support_tasks or delivery_date else "Pending",
+            "start": support_start,
+            "end": support_end,
+            "progress": support_completion,
+            "description": "Long-running support window after delivery. Support tasks can continue for 2 to 3 years.",
+            "count": len(support_tasks),
+        },
+    ]
+
+    return {
+        "project": {
+            "name": project_doc.name,
+            "project_name": project_name,
+            "status": project_doc.get("status") or "Not Set",
+            "customer": project_doc.get("customer"),
+        },
+        "dates": {
+            "kickoff": kickoff_date,
+            "delivery": delivery_date,
+            "support_start": support_start,
+            "support_end": support_end,
+        },
+        "stages": stages,
+        "summary": {
+            "development_tasks": len(development_tasks),
+            "development_completed": completed_dev,
+            "support_tasks": len(support_tasks),
+            "support_completed": completed_support,
+            "updates": len(updates),
+            "events": len(events),
+        },
+        "development_tasks": development_tasks,
+        "support_tasks": support_tasks,
+        "events": events[:30],
+    }
+
+
+def _get_lifecycle_tasks(project: str):
+    task_meta = frappe.get_meta("Task")
+    fields = [
+        "name",
+        "subject",
+        "status",
+        "priority",
+        "expected_time",
+        "actual_time",
+        "exp_start_date",
+        "exp_end_date",
+        "creation",
+        "modified",
+        "modified_by",
+    ]
+    if task_meta.has_field("progress"):
+        fields.append("progress")
+
+    tasks = frappe.get_all(
+        "Task",
+        filters={"project": project},
+        fields=fields,
+        order_by="modified desc",
+        limit_page_length=200,
+    )
+
+    user_ids = {task.modified_by for task in tasks if task.modified_by}
+    user_names = {}
+    if user_ids:
+        for row in frappe.get_all("User", filters={"name": ["in", list(user_ids)]}, fields=["name", "full_name"]):
+            user_names[row.name] = row.full_name or row.name
+
+    for task in tasks:
+        task.category = _task_category(task)
+        task.progress = flt(task.get("progress") or (100 if task.status in ("Completed", "Closed") else 0), 2)
+        task.start = task.get("exp_start_date") or task.get("creation")
+        task.end = task.get("exp_end_date") or task.get("modified")
+        task.modified_by_name = user_names.get(task.modified_by, task.modified_by)
+
+    return tasks
+
+
+def _get_lifecycle_updates(project: str):
+    if not frappe.db.exists("DocType", "Project Status Update"):
+        return []
+
+    return frappe.get_all(
+        "Project Status Update",
+        filters={"project": project},
+        fields=["name", "title", "status", "owner", "creation", "modified"],
+        order_by="modified desc",
+        limit_page_length=50,
+    )
+
+
+def _build_lifecycle_events(project_doc, tasks, updates):
+    events = []
+    kickoff_date = (
+        project_doc.get("expected_start_date")
+        or project_doc.get("actual_start_date")
+        or project_doc.get("creation")
+    )
+    if kickoff_date:
+        events.append(
+            {
+                "type": "Milestone",
+                "stage": "kickoff",
+                "title": "Kickoff Meeting",
+                "status": "Completed",
+                "date": kickoff_date,
+            }
+        )
+
+    delivery_date = project_doc.get("expected_end_date") or project_doc.get("actual_end_date")
+    if delivery_date:
+        events.append(
+            {
+                "type": "Milestone",
+                "stage": "handover",
+                "title": "Target Delivery / Handover",
+                "status": project_doc.get("status") or "Planned",
+                "date": delivery_date,
+            }
+        )
+
+    for update in updates:
+        events.append(
+            {
+                "type": "Project Update",
+                "stage": "planning",
+                "title": update.title or update.name,
+                "status": update.status,
+                "date": update.modified,
+            }
+        )
+
+    for task in tasks:
+        events.append(
+            {
+                "type": "Task",
+                "stage": "support" if task.category == "Support" else "development",
+                "title": task.subject or task.name,
+                "status": task.status,
+                "date": task.get("modified") or task.get("creation"),
+                "task": task.name,
+            }
+        )
+
+    return sorted(
+        events,
+        key=lambda item: get_datetime(item.get("date") or now_datetime()),
+        reverse=True,
+    )
+
+
+def _task_category(task):
+    text = f"{task.get('subject') or ''} {task.get('name') or ''}".lower()
+    support_keywords = ("support", "warranty", "amc", "maintenance", "issue", "bug", "ticket", "after sales")
+    if any(keyword in text for keyword in support_keywords):
+        return "Support"
+    return "Development"
+
+
+def _stage_status(progress, total):
+    if not total:
+        return "Pending"
+    if progress >= 100:
+        return "Completed"
+    if progress > 0:
+        return "In Progress"
+    return "Pending"
+
+
+def _first_date(values):
+    dates = [value for value in values if value]
+    if not dates:
+        return None
+    return min(dates, key=lambda value: get_datetime(value))
 
 
 def get_project_filter_for_contractor(only_list=False):

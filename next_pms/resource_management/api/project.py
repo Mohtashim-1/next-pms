@@ -210,6 +210,8 @@ def get_employees_resrouce_data_for_given_project(project: str, start_date: str,
         employee = frappe.db.get_value(
             "Employee", employee, ["employee_name", "name", "image", "reports_to"], as_dict=1
         )
+        if not employee:
+            continue
 
         current_date = start_date
 

@@ -135,7 +135,7 @@ const Sidebar = () => {
     <ErrorFallback>
       <aside
         className={mergeClassNames(
-          "bg-slate-100  w-1/5   px-4 py-4 flex flex-col dark:bg-background border-r",
+          "bg-card w-1/5 px-4 py-4 flex flex-col border-r",
           user.isSidebarCollapsed && "w-16 items-center"
         )}
       >
@@ -165,7 +165,7 @@ const Sidebar = () => {
                     variant="ghost"
                     title={route.label}
                     className={mergeClassNames(
-                      "flex items-center gap-x-2 justify-start w-full text-left p-2 hover:bg-slate-200 rounded-lg dark:hover:bg-secondary",
+                      "flex items-center gap-x-2 justify-start w-full text-left p-2 hover:bg-accent rounded-lg",
                       user.isSidebarCollapsed && "hidden"
                     )}
                     onClick={() => toggleNestedRoutes(route.key)}
@@ -200,24 +200,24 @@ const Sidebar = () => {
                         >
                           <div
                             className={mergeClassNames(
-                              "flex w-full p-2 rounded-lg items-center  hover:bg-slate-200 text-primary gap-x-2 max-md:justify-center dark:hover:bg-secondary",
-                              isChildActive && "bg-primary shadow-md hover:bg-primary/90 ",
+                              "flex w-full p-2 rounded-lg items-center hover:bg-accent text-foreground gap-x-2 max-md:justify-center",
+                              isChildActive && "border-l-2 border-primary bg-accent shadow-md",
                               !user.isSidebarCollapsed && "pl-3"
                             )}
                           >
                             {child.icon && (
                               <child.icon
                                 className={mergeClassNames(
-                                  "shrink-0 stroke-primary h-4 w-4",
-                                  isChildActive && "stroke-background dark:group-hover:stroke-foreground"
+                                  "shrink-0 stroke-foreground h-4 w-4",
+                                  isChildActive && "stroke-primary"
                                 )}
                               />
                             )}
                             <Typography
                               variant="p"
                               className={mergeClassNames(
-                                "text-background  dark:group-hover:text-foreground truncate",
-                                !isChildActive && "text-primary",
+                                "truncate text-foreground",
+                                isChildActive && "text-foreground",
                                 user.isSidebarCollapsed && "hidden"
                               )}
                             >
@@ -234,22 +234,22 @@ const Sidebar = () => {
                   {({ isActive }) => (
                     <div
                       className={mergeClassNames(
-                        "flex w-full pl-2 rounded-lg items-center p-2 hover:bg-slate-200 dark:hover:bg-secondary  gap-x-2 max-md:justify-center  ",
+                        "flex w-full pl-2 rounded-lg items-center p-2 hover:bg-accent gap-x-2 max-md:justify-center",
                         isActive &&
-                          "bg-primary shadow-md hover:bg-primary/90 dark:hover:bg-secondary dark:bg-foreground "
+                          "border-l-2 border-primary bg-accent shadow-md"
                       )}
                     >
                       <route.icon
                         className={mergeClassNames(
-                          "shrink-0 stroke-primary h-4 w-4",
-                          isActive && "stroke-background  dark:group-hover:stroke-foreground"
+                          "shrink-0 stroke-foreground h-4 w-4",
+                          isActive && "stroke-primary"
                         )}
                       />
                       <Typography
                         variant="p"
                         className={mergeClassNames(
-                          "text-background  dark:group-hover:text-foreground",
-                          !isActive && "text-primary ",
+                          "text-foreground",
+                          isActive && "text-foreground",
                           user.isSidebarCollapsed && "hidden"
                         )}
                       >

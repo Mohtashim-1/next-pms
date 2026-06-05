@@ -83,7 +83,7 @@ export const Cell = ({ date, data, isHoliday, onCellClick, disabled, className }
             <Typography
               variant="p"
               className={mergeClassNames(
-                isHoliday || (isDisabled && "text-slate-400 dark:text-primary/50"),
+                isHoliday || (isDisabled && "text-slate-400 dark:text-muted-foreground/60"),
                 !hours && !isDisabled && "group-hover:hidden"
               )}
             >

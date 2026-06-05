@@ -23,7 +23,7 @@ import type {
 import { getDatesArrays } from "../utils/dates";
 
 const defaultEmployeeDayData: EmployeeResourceProps = {
-  date: "None",
+  date: "",
   total_allocated_hours: 0,
   total_working_hours: 0,
   total_worked_hours: 0,

@@ -153,7 +153,7 @@ const EmployeeCombo = ({
                       onSelect={() => {
                         onEmployeeChange(item.name);
                       }}
-                      className="flex gap-x-2 text-primary font-normal cursor-pointer"
+                      className="flex gap-x-2 text-foreground font-normal cursor-pointer"
                       value={item.employee_name}
                     >
                       <Check className={mergeClassNames("mr-2 h-4 w-4", isActive ? "opacity-100" : "opacity-0")} />

@@ -168,7 +168,7 @@ export const ResourceAllocationCard = ({
 
           {resourceAllocation.note && (
             <div className="note-section mt-2 flex items-center gap-1 w-11/12" title={"Note"}>
-              <Typography variant="small" className=" text-gray-600 dark:text-primary italic">
+              <Typography variant="small" className=" text-gray-600 dark:text-muted-foreground italic">
                 Note : {getFilterValue(resourceAllocation.note, 150)}
               </Typography>
             </div>

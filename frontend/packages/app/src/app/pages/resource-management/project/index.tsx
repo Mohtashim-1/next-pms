@@ -71,8 +71,8 @@ const ResourceProjectViewComponent = ({ viewData }: ResourceProjectViewComponent
           max_week: filters.maxWeek,
           page_length: filters.pageLength,
           project_name: filters.projectName,
-          customer: filters.customer,
-          billing_type: filters.billingType,
+          customer: JSON.stringify(filters.customer ?? []),
+          billing_type: JSON.stringify(filters.billingType ?? []),
           is_billable: getIsBillableValue(filters.allocationType as string[]),
           start: filters.start,
         }

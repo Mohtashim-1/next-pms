@@ -1,4 +1,4 @@
-/**
+p/**
  * External dependencies.
  */
 import { LegacyRef } from "react";
@@ -38,7 +38,7 @@ const ResourceTableHeader = ({
       <TableRow className="flex items-center flex-shrink-0">
         <TableHead
           className={mergeClassNames(
-            "flex items-center sticky left-0 bg-slate-50 dark:bg-muted h-[81px] w-full z-30 border-r border-gray-300"
+            "flex items-center sticky left-0 bg-muted text-foreground h-[81px] w-full z-30 border-r border-border"
           )}
           style={{ width: getCellWidthString(tableProperties.firstCellWidth) }}
         >
@@ -52,7 +52,7 @@ const ResourceTableHeader = ({
                   key={weekIndex}
                   variant="small"
                   className={mergeClassNames(
-                    "py-2 text-center truncate cursor-pointer border-r border-gray-300",
+                    "py-2 text-center truncate cursor-pointer border-r border-border",
                     weekIndex == 0 && "border-l"
                   )}
                   style={{ width: getCellWidthString(tableProperties.cellWidth * 5) }}
@@ -122,8 +122,8 @@ const TableHeaderCell = ({
       <Typography
         variant="p"
         className={mergeClassNames(
-          "text-slate-600 text-[11px] dark:text-primary/80",
-          isToday(getUTCDateTime(date)) && "font-semibold dark:text-primary"
+          "text-slate-600 text-[11px] dark:text-muted-foreground",
+          isToday(getUTCDateTime(date)) && "font-semibold text-foreground"
         )}
       >
         {day}
@@ -131,8 +131,8 @@ const TableHeaderCell = ({
       <Typography
         variant="small"
         className={mergeClassNames(
-          "text-slate-500 text-[11px] max-lg:text-[0.65rem] dark:text-primary/60",
-          isToday(getUTCDateTime(date)) && "font-semibold dark:text-primary"
+          "text-slate-500 text-[11px] max-lg:text-[0.65rem] dark:text-muted-foreground",
+          isToday(getUTCDateTime(date)) && "font-semibold text-foreground"
         )}
       >
         {dateStr}

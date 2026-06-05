@@ -65,12 +65,12 @@ export const EmployeeTimesheetListItem = ({
           {prettyDate(date).date}
         </Typography>
         {isHoliday && (
-          <Typography variant="p" className="max-md:text-wrap text-primary/60">
+          <Typography variant="p" className="max-md:text-wrap text-muted-foreground">
             {extractTextFromHTML(holidayDescription ?? "")}
           </Typography>
         )}
         {hasLeave && !isHoliday && (
-          <Typography variant="p" className="max-md:text-wrap text-primary/60">
+          <Typography variant="p" className="max-md:text-wrap text-muted-foreground">
             ({isHalfDayLeave && totalHours != dailyWorkingHour ? "Half day leave" : "Full Day Leave"})
           </Typography>
         )}

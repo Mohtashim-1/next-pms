@@ -63,26 +63,49 @@ html,
 .react-calendar-timeline .rct-sidebar .rct-sidebar-row.rct-sidebar-row-odd,
 .react-calendar-timeline .rct-horizontal-lines .rct-hl-odd {
   background: none !important;
-  border-color: rgb(209 213 219) !important;
+  border-color: hsl(var(--border)) !important;
 }
 
 .react-calendar-timeline .rct-sidebar .rct-sidebar-row.rct-sidebar-row-even,
 .react-calendar-timeline .rct-horizontal-lines .rct-hl-event {
-  border-color: rgb(209 213 219) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.react-calendar-timeline .rct-header-root,
+.react-calendar-timeline .rct-calendar-header,
+.react-calendar-timeline .rct-dateHeader {
+  background: hsl(var(--muted)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.react-calendar-timeline .rct-dateHeader-primary {
+  background: hsl(var(--secondary)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.react-calendar-timeline .rct-vertical-lines .rct-vl,
+.react-calendar-timeline .rct-horizontal-lines .rct-hl-even,
+.react-calendar-timeline .rct-horizontal-lines .rct-hl-odd,
+.react-calendar-timeline .rct-sidebar {
+  border-color: hsl(var(--border)) !important;
 }
 
 .rct-day-0,
 .rct-day-6 {
-  background: transparent !important;
+  background: hsl(var(--muted) / 0.35) !important;
   border: 0;
 }
 
 .rct-day-0-today {
-  border-right: 1px solid;
+  background: hsl(var(--accent) / 0.55) !important;
+  border-right: 1px solid hsl(var(--border));
 }
 
 .rct-day-6-today {
-  border-left: 1px solid;
+  background: hsl(var(--accent) / 0.55) !important;
+  border-left: 1px solid hsl(var(--border));
 }
 
 .rct-scroll {

@@ -38,7 +38,7 @@ const ViewLoader = ({
           <Button
             variant="ghost"
             className={mergeClassNames(
-              "flex items-center gap-x-2 w-full text-left p-2 hover:bg-slate-200 rounded-lg justify-between dark:hover:bg-secondary"
+              "flex items-center gap-x-2 w-full text-left p-2 hover:bg-accent rounded-lg justify-between"
             )}
             onClick={onClick}
           >
@@ -68,8 +68,8 @@ const ViewLoader = ({
               >
                 <div
                   className={mergeClassNames(
-                    "flex w-full  rounded-lg items-center p-2 hover:bg-slate-200 text-primary gap-x-2 dark:hover:bg-secondary",
-                    isActive && "bg-primary shadow-md hover:bg-primary/90 dark:hover:bg-secondary dark:bg-foreground"
+                    "flex w-full rounded-lg items-center p-2 hover:bg-accent text-foreground gap-x-2",
+                    isActive && "border-l-2 border-primary bg-accent shadow-md"
                   )}
                 >
                   <span className="shrink-0">
@@ -78,8 +78,8 @@ const ViewLoader = ({
                   <Typography
                     variant="p"
                     className={mergeClassNames(
-                      "transition-all duration-300 truncate ease-in-out text-white",
-                      !isActive && "text-primary",
+                      "transition-all duration-300 truncate ease-in-out text-foreground",
+                      isActive && "text-foreground",
                       isSidebarCollapsed && "hidden"
                     )}
                   >

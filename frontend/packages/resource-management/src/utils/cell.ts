@@ -11,7 +11,7 @@ import { isToday } from "date-fns";
  */
 const getCellBackGroundColor = (allocationPercentage: number) => {
   if (allocationPercentage === -1) {
-    return "bg-gray-200 dark:bg-muted/20";
+    return "bg-muted/40";
   }
 
   if (allocationPercentage >= 100 || allocationPercentage < 0) {
@@ -42,11 +42,11 @@ const getTableCellClass = (index: number, weekIndex: number = 0) => {
   let className = "";
 
   if (index == 4) {
-    className = "border-r border-gray-300";
+    className = "border-r border-border";
   }
 
   if (index == 0 && weekIndex == 0) {
-    className += " border-l border-gray-300";
+    className += " border-l border-border";
   }
 
   return className;
@@ -69,7 +69,7 @@ const getTableCellRow = () => {
  */
 const getTodayDateCellClass = (date: string): string => {
   if (isToday(date)) {
-    return "bg-opacity-90 font-semibold border-l border-r border-gray-300 opacity-80";
+    return "bg-accent/60 font-semibold border-l border-r border-border";
   }
   return "";
 };

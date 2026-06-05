@@ -119,9 +119,15 @@ export const Filter = ({ filter }: { filter: FilterPops }) => {
             ? null
             : filter?.isMultiComboBox
             ? ((filter.value as string[])?.length ?? 0) > 0 && (
-                <Badge className="p-0 justify-center w-5 h-5">{(filter.value as string[]).length}</Badge>
+                <Badge className="p-0 justify-center w-5 h-5 border border-primary/40 bg-secondary text-foreground">
+                  {(filter.value as string[]).length}
+                </Badge>
               )
-            : (filter.value?.toString()?.length ?? 0) > 0 && <Badge className="p-0 justify-center w-5 h-5">1</Badge>
+            : (filter.value?.toString()?.length ?? 0) > 0 && (
+                <Badge className="p-0 justify-center w-5 h-5 border border-primary/40 bg-secondary text-foreground">
+                  1
+                </Badge>
+              )
         }
         leftIcon={
           isCurrencyFilter ? (
@@ -145,7 +151,7 @@ export const Filter = ({ filter }: { filter: FilterPops }) => {
           })) ?? []
         }
         onSearch={filter?.onSearch}
-        className="text-primary border-dashed gap-x-2 font-normal w-fit"
+        className="text-foreground border-dashed gap-x-2 font-normal w-fit"
       />
     );
   }

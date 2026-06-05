@@ -109,7 +109,11 @@ const ComboBox = ({
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          className={mergeClassNames("justify-between w-full text-slate-400", hasValue && "text-primary", className)}
+          className={mergeClassNames(
+            "justify-between w-full text-muted-foreground",
+            hasValue && "border-primary/45 bg-accent text-foreground",
+            className
+          )}
           disabled={disabled}
           onClick={onClick}
         >
@@ -145,7 +149,7 @@ const ComboBox = ({
                       key={index}
                       keywords={[item.label, item.value]}
                       onSelect={handleSelect}
-                      className="flex gap-x-2 text-primary cursor-pointer"
+                      className="flex gap-x-2 text-foreground cursor-pointer"
                       value={item.value}
                     >
                       {!isMulti ? (

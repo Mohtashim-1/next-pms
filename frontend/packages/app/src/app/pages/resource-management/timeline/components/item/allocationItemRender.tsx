@@ -111,8 +111,8 @@ const AllocationItemRender = ({
               className={mergeClassNames(
                 "text-[12px] truncate overflow-hidden block",
                 resourceAllocation.is_billable
-                  ? "bg-gradient-to-r from-success/50 to-success bg-clip-text text-transparent dark:text-primary"
-                  : "text-yellow-500 dark:text-primary"
+                  ? "text-success"
+                  : "text-yellow-400"
               )}
             >
               {title}

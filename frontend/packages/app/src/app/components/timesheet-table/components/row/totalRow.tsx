@@ -48,7 +48,7 @@ export const TotalHourRow = ({ leaves, dates, tasks, holidays, workingHour, work
             <TableCell key={date} className="text-center">
               <Typography
                 variant="p"
-                className={mergeClassNames(!holiday.weekly_off && "text-slate-400 dark:text-primary/50")}
+                className={mergeClassNames(!holiday.weekly_off && "text-slate-400 dark:text-muted-foreground/60")}
               >
                 {holiday.weekly_off ? floatToTime(totalHours) : floatToTime(workingHour)}
               </Typography>

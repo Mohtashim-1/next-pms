@@ -168,22 +168,22 @@ const TeamComponent = ({ viewData }: TeamComponentProps) => {
         <Table className="lg:[&_tr]:pr-3 relative">
           <TableHeader className="border-t-0 sticky top-0 z-10">
             <TableRow className="flex items-center w-full">
-              <TableHead className="w-full max-w-md flex items-center text-primary">Members</TableHead>
+              <TableHead className="w-full max-w-md flex items-center text-foreground">Members</TableHead>
               {teamState.data?.dates.map((item: DateProps) => {
                 return item?.dates?.map((date) => {
                   const { date: dateStr, day } = prettyDate(date);
                   return (
                     <TableHead key={date} className="flex flex-col max-w-20 w-full items-center justify-center">
                       <Typography variant="p">{day}</Typography>
-                      <Typography variant="small" className="text-slate-500 dark:text-primary/60 max-lg:text-[0.65rem]">
+                      <Typography variant="small" className="text-slate-500 dark:text-muted-foreground max-lg:text-[0.65rem]">
                         {dateStr}
                       </Typography>
                     </TableHead>
                   );
                 });
               })}
-              <TableHead className="w-full max-w-24 flex items-center justify-end text-primary">Total</TableHead>
-              <TableHead className="w-full max-w-20 flex items-center justify-center text-primary">
+              <TableHead className="w-full max-w-24 flex items-center justify-end text-foreground">Total</TableHead>
+              <TableHead className="w-full max-w-20 flex items-center justify-center text-foreground">
                 <CircleCheck />
               </TableHead>
             </TableRow>
@@ -235,7 +235,7 @@ const TeamComponent = ({ viewData }: TeamComponentProps) => {
                                     <Typography
                                       className={mergeClassNames(
                                         data.is_leave && "text-warning",
-                                        data.hour == 0 && "text-primary"
+                                        data.hour == 0 && "text-muted-foreground"
                                       )}
                                       variant="p"
                                     >
