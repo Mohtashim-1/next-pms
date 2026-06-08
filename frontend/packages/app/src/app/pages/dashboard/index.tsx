@@ -21,19 +21,26 @@ import {
 import { useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
 import {
   Activity,
+  AlertTriangle,
   Briefcase,
+  CheckCircle2,
+  ClipboardList,
   DollarSign,
   HeartPulse,
   LayoutDashboard,
   LineChart,
+  PieChart,
   RefreshCw,
   Settings2,
+  UserCheck,
   Users,
 } from "lucide-react";
 
 /**
  * Internal dependencies.
  */
+import { DashboardPanels } from "@/app/pages/dashboard/dashboardPanels";
+import type { DashboardPanelsData } from "@/app/pages/dashboard/dashboardPanels";
 import { Header as RootHeader } from "@/app/layout/root";
 import { BASE_ROUTE } from "@/lib/constant";
 import { mergeClassNames, parseFrappeErrorMsg } from "@/lib/utils";
@@ -52,6 +59,7 @@ type DashboardTile = {
 
 type DashboardResponse = {
   tiles: DashboardTile[];
+  panels?: DashboardPanelsData;
   available_tiles: Array<{ key: string; label: string; description?: string; enabled_by_role?: boolean }>;
   layout?: { tiles?: string[] };
   refreshed_at?: string;
@@ -64,6 +72,12 @@ const TILE_ICONS: Record<string, typeof Activity> = {
   margin: LineChart,
   ar: DollarSign,
   client_health: HeartPulse,
+  approvals: ClipboardList,
+  revenue: DollarSign,
+  billable_ratio: PieChart,
+  overdue_tasks: AlertTriangle,
+  team_active: UserCheck,
+  active_allocations: CheckCircle2,
 };
 
 const statusClass = (status?: string) => {
@@ -97,6 +111,7 @@ const ExecutiveDashboard = () => {
 
   const response = data?.message as DashboardResponse | undefined;
   const tiles = response?.tiles ?? [];
+  const panels = response?.panels;
 
   const openCustomize = () => {
     setSelectedTiles(response?.layout?.tiles || tiles.map((tile) => tile.key));
@@ -151,7 +166,7 @@ const ExecutiveDashboard = () => {
       <div className="flex-1 space-y-4 p-3 sm:p-4">
         {isLoading ? (
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            {Array.from({ length: 6 }).map((_, index) => (
+            {Array.from({ length: 12 }).map((_, index) => (
               <Skeleton key={index} className="h-32 w-full rounded-xl" />
             ))}
           </div>
@@ -198,6 +213,21 @@ const ExecutiveDashboard = () => {
                       {tile.details.upcoming_demand_hours}h demand · {tile.details.open_projects} projects
                     </Typography>
                   ) : null}
+                  {tile.key === "approvals" && tile.details ? (
+                    <Typography variant="small" className="mt-2 text-muted-foreground">
+                      {tile.details.pending_sheets} sheets pending
+                    </Typography>
+                  ) : null}
+                  {tile.key === "billable_ratio" && tile.details ? (
+                    <Typography variant="small" className="mt-2 text-muted-foreground">
+                      {tile.details.billable_hours}h billable / {tile.details.logged_hours}h logged
+                    </Typography>
+                  ) : null}
+                  {tile.key === "active_allocations" && tile.details ? (
+                    <Typography variant="small" className="mt-2 text-muted-foreground">
+                      {tile.details.tentative} tentative
+                    </Typography>
+                  ) : null}
                 </button>
               );
             })}
@@ -213,6 +243,8 @@ const ExecutiveDashboard = () => {
             </CardContent>
           </Card>
         ) : null}
+
+        {!isLoading && tiles.length ? <DashboardPanels panels={panels} /> : null}
       </div>
 
       <Dialog open={customizeOpen} onOpenChange={setCustomizeOpen}>
