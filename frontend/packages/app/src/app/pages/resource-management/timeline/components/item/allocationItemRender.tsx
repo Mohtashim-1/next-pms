@@ -10,6 +10,8 @@ import { Avatar, AvatarFallback, AvatarImage, Typography } from "@next-pms/desig
 import { mergeClassNames } from "@/lib/utils";
 import { DeleteIcon } from "../../../components/resource-allocation-list";
 import { getInitials } from "../../../utils/helper";
+import { getAllocationColors } from "../../timelineColors";
+import { isWideZoom, normalizeColorMode } from "../../timelineZoom";
 import type { ResourceTimeLineItemProps } from "../../types";
 
 const AllocationItemRender = ({
@@ -38,7 +40,9 @@ const AllocationItemRender = ({
       return title;
     }
 
-    if (dayDiff <= 2 || (resourceAllocation.isShowMonth && dayDiff <= 10)) {
+    const compactLabels = isWideZoom(resourceAllocation.zoomLevel ?? (resourceAllocation.isShowMonth ? "month" : "week"));
+
+    if (dayDiff <= 2 || (compactLabels && dayDiff <= 10)) {
       return "";
     }
 
@@ -52,18 +56,21 @@ const AllocationItemRender = ({
   let itemProps = getItemProps(resourceAllocation.itemProps);
 
   const title = getTitle();
+  const colorMode = normalizeColorMode({ colorMode: resourceAllocation.colorMode });
+  const colors = getAllocationColors(resourceAllocation, colorMode);
+  const compactLabels = isWideZoom(resourceAllocation.zoomLevel ?? (resourceAllocation.isShowMonth ? "month" : "week"));
 
   itemProps = {
     ...itemProps,
     style: {
       ...itemProps.style,
       padding: "1px",
-      background: resourceAllocation.is_billable ? "rgba(147, 221, 137, 0.39)" : "#d7d77b26",
+      background: colors.background,
       borderRadius: "4px",
-      border: "1px solid #d1d5db",
+      border: `1px solid ${colors.border}`,
       borderWidth: 0,
       borderRightWidth: resourceAllocation.canDelete && itemContext.selected ? 3 : 0,
-      overflow: dayDiff <= (resourceAllocation.isShowMonth ? 30 * 3 : 10) ? "hidden" : "visible",
+      overflow: dayDiff <= (compactLabels ? 30 * 3 : 10) ? "hidden" : "visible",
     },
   };
 
@@ -108,12 +115,8 @@ const AllocationItemRender = ({
           {title && (
             <Typography
               variant="small"
-              className={mergeClassNames(
-                "text-[12px] truncate overflow-hidden block",
-                resourceAllocation.is_billable
-                  ? "text-success"
-                  : "text-yellow-400"
-              )}
+              className="text-[12px] truncate overflow-hidden block"
+              style={{ color: colors.text }}
             >
               {title}
             </Typography>

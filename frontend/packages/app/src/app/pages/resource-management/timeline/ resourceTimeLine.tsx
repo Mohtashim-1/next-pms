@@ -24,6 +24,7 @@ import type {
   ResourceTimeLineViewComponentProps,
 } from "./types";
 import { createFilter } from "./utils";
+import { getTimelineZoomConfig, normalizeZoomLevel } from "./timelineZoom";
 import AddResourceAllocations from "../components/addAllocation";
 import { ResourceFormContext } from "../store/resourceFormContext";
 import { TimeLineContext } from "../store/timeLineContext";
@@ -65,19 +66,27 @@ const ResourceTimeLineViewComponent = ({ viewData }: ResourceTimeLineViewCompone
 
   const user = useSelector((state: RootState) => state.user);
 
+  const zoomLevel = normalizeZoomLevel(filters);
+  const zoomConfig = getTimelineZoomConfig(zoomLevel);
+
   const getFilterApiBody = useCallback(
     (req: ResourceTeamAPIBodyProps): ResourceTeamAPIBodyProps => {
       let newReqBody: ResourceTeamAPIBodyProps = {
         ...req,
         employee_name: filters.employeeName,
         page_length: filters.page_length,
+        max_week: zoomConfig.apiMaxWeek,
       };
       if (resourceAllocationPermission.write) {
         newReqBody = {
           ...newReqBody,
           business_unit: JSON.stringify(filters.businessUnit),
+          department: JSON.stringify(filters.department),
           reports_to: filters.reportingManager,
           designation: JSON.stringify(filters.designation),
+          user_group: JSON.stringify(filters.userGroup),
+          branch: JSON.stringify(filters.branch),
+          roles: JSON.stringify(filters.roles),
           is_billable: getIsBillableValue(filters.allocationType as string[]),
           skills: filters?.skillSearch && filters?.skillSearch?.length > 0 ? JSON.stringify(filters.skillSearch) : "[]",
         };
@@ -86,7 +95,7 @@ const ResourceTimeLineViewComponent = ({ viewData }: ResourceTimeLineViewCompone
 
       return newReqBody;
     },
-    [resourceAllocationPermission.write, filters]
+    [resourceAllocationPermission.write, filters, zoomConfig.apiMaxWeek]
   );
 
   const handleApiCall = useCallback(
@@ -135,6 +144,10 @@ const ResourceTimeLineViewComponent = ({ viewData }: ResourceTimeLineViewCompone
         title: employee.employee_name,
       }));
 
+      const employeeSkillMap = Object.fromEntries(
+        updatedData.employees.map((employee) => [employee.name, employee.primary_skill ?? employee.designation ?? ""])
+      );
+
       updatedData.resource_allocations = updatedData.resource_allocations.map(
         (allocation: ResourceAllocationTimeLineProps) => ({
           ...allocation,
@@ -155,6 +168,10 @@ const ResourceTimeLineViewComponent = ({ viewData }: ResourceTimeLineViewCompone
           canDelete: resourceAllocationPermission.delete,
           onDelete: handleDelete,
           isShowMonth: filters.isShowMonth,
+          zoomLevel,
+          colorMode: filters.colorMode ?? "project",
+          status: allocation.status,
+          primary_skill: employeeSkillMap[allocation.employee],
           type: "allocation",
         })
       );
@@ -168,18 +185,20 @@ const ResourceTimeLineViewComponent = ({ viewData }: ResourceTimeLineViewCompone
         end_time: getUTCDateTime(leave.to_date).setDate(getUTCDateTime(leave.to_date).getDate() + 1),
         canDelete: false,
         isShowMonth: filters.isShowMonth,
+        zoomLevel,
         type: "leave",
       }));
 
       return updatedData;
     },
-    [filters, handleDelete, resourceAllocationPermission.delete]
+    [filters, handleDelete, resourceAllocationPermission.delete, zoomLevel]
   );
 
   const loadIntialData = useCallback(async () => {
     const req: ResourceTeamAPIBodyProps = {
       date: filters.weekDate,
       start: filters.start,
+      max_week: zoomConfig.apiMaxWeek,
     };
 
     const mainThredData = await handleApiCall(req);
@@ -194,6 +213,7 @@ const ResourceTimeLineViewComponent = ({ viewData }: ResourceTimeLineViewCompone
   }, [
     filters.weekDate,
     filters.start,
+    zoomConfig.apiMaxWeek,
     handleApiCall,
     filterApiData,
     setEmployeesData,

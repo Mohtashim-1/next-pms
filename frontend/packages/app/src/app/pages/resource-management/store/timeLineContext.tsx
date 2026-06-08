@@ -10,6 +10,11 @@ import { createContext } from "use-context-selector";
  * Internal dependencies.
  */
 import type { APIControlerProps, TimeLineContextProps, TimeLineContextProviderProps } from "./types";
+import {
+  buildTimelineDisplayGroups,
+  isLeafTimelineGroup,
+  type ResourceGroupByDimension,
+} from "../shared/groupBy";
 import type {
   ResourceAllocationCustomerProps,
   ResourceAllocationEmployeeProps,
@@ -81,6 +86,7 @@ const TimeLineContext = createContext<TimeLineContextProps>({
     isEmployeeExits: () => false,
     setAllocationData: () => {},
     setHasViewUpdated: () => false,
+    updateGroupBy: () => {},
   },
 });
 
@@ -93,14 +99,21 @@ const TimeLineContextProvider = ({ children }: TimeLineContextProviderProps) => 
   const [filters, setFilters] = useState<ResourceAllocationTimeLineFilterProps>({
     employeeName: "",
     businessUnit: [],
+    department: [],
     reportingManager: "",
     designation: [],
+    userGroup: [],
+    branch: [],
+    roles: [],
     allocationType: [],
     skillSearch: [],
+    groupBy: "employee",
     start: 0,
     page_length: 20,
     weekDate: getTodayDate(),
     isShowMonth: false,
+    zoomLevel: "week",
+    colorMode: "project",
   });
 
   const [apiControler, setApiControler] = useState<APIControlerProps>({
@@ -144,8 +157,15 @@ const TimeLineContextProvider = ({ children }: TimeLineContextProviderProps) => 
     return employees.find((employe) => employe.name == id);
   };
 
+  const getDisplayGroups = () => buildTimelineDisplayGroups(employees, filters.groupBy ?? "employee");
+
   const getEmployeeWithIndex = (index: number) => {
-    return index <= employees.length - 1 ? employees[index] : -1;
+    const displayGroups = getDisplayGroups();
+    const group = displayGroups[index];
+    if (!group || !isLeafTimelineGroup(group)) {
+      return -1;
+    }
+    return group;
   };
 
   const isEmployeeExits = (name: string) => {
@@ -175,23 +195,27 @@ const TimeLineContextProvider = ({ children }: TimeLineContextProviderProps) => 
     updateApiControler({ isNeedToFetchDataAfterUpdate: true, isLoading: true, hasMore: true });
   };
 
+  const updateGroupBy = (groupBy: ResourceGroupByDimension) => {
+    setFilters((prev) => ({ ...prev, groupBy }));
+  };
+
   const updateApiControler = (updatedApiControler: APIControlerProps) => {
     setApiControler({ ...apiControler, ...updatedApiControler });
   };
 
   const getLastTimeLineItem = () => {
-    const length = employees.length;
+    const leafGroups = getDisplayGroups().filter(isLeafTimelineGroup);
 
-    if (length == 0) {
+    if (leafGroups.length === 0) {
       return "-1";
     }
 
-    const index = Math.min(length - 2, employees.length - 1);
+    const index = Math.min(leafGroups.length - 2, leafGroups.length - 1);
 
     if (index < 0) {
       return "-1";
     }
-    return employees[index].name;
+    return leafGroups[index].name;
   };
 
   const verticalLodMore = () => {
@@ -226,6 +250,7 @@ const TimeLineContextProvider = ({ children }: TimeLineContextProviderProps) => 
           updateAllocation,
           isEmployeeExits,
           setHasViewUpdated,
+          updateGroupBy,
         },
       }}
     >

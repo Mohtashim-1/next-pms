@@ -26,6 +26,8 @@
   "report_configuration_section",
   "pm_report_api_key",
   "tab_break_34k6",
+  "allocation_conflict_section",
+  "allocation_conflict_action",
   "notifications_section",
   "send_missing_allocation_reminder",
   "remind_on",
@@ -160,6 +162,19 @@
    "fieldname": "timesheet_tab",
    "fieldtype": "Tab Break",
    "label": "Timesheet"
+  },
+  {
+   "fieldname": "allocation_conflict_section",
+   "fieldtype": "Section Break",
+   "label": "Allocation Conflicts"
+  },
+  {
+   "default": "Warn",
+   "description": "When an allocation exceeds an employee's daily capacity, choose whether to show a warning or block the save.",
+   "fieldname": "allocation_conflict_action",
+   "fieldtype": "Select",
+   "label": "Conflict Action",
+   "options": "Warn\nBlock"
   },
   {
    "fieldname": "notifications_section",

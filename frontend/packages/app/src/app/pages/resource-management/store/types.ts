@@ -258,8 +258,13 @@ export interface ResourceTeamDataProps {
 export interface ResourceTeamFilters {
   employeeName?: string;
   businessUnit?: string[];
+  department?: string[];
   reportingManager?: string;
   designation?: string[];
+  userGroup?: string[];
+  branch?: string[];
+  roles?: string[];
+  groupBy?: string;
   weekDate: string;
   employeeWeekDate: string;
   allocationType?: string[];
@@ -272,8 +277,13 @@ export interface ResourceTeamFilters {
 export interface OptionalResourceTeamFilters {
   employeeName?: string;
   businessUnit?: string[];
+  department?: string[];
   reportingManager?: string;
   designation?: string[];
+  userGroup?: string[];
+  branch?: string[];
+  roles?: string[];
+  groupBy?: string;
   weekDate?: string;
   employeeWeekDate?: string;
   allocationType?: string[];
@@ -317,6 +327,7 @@ export interface TeamContextProps extends ResourceTeamState {
     setCombineWeekHours: (value: boolean) => void;
     setWeekDate: (value: string) => void;
     setHasViewUpdated: (value: boolean) => void;
+    updateGroupBy: (groupBy: string) => void;
   };
 }
 export interface TimeLineContextState {
@@ -367,6 +378,7 @@ export interface TimeLineContextProps {
       new?: ResourceAllocationTimeLineProps;
     }) => void;
     setHasViewUpdated: (value: boolean) => void;
+    updateGroupBy: (groupBy: string) => void;
   };
 }
 

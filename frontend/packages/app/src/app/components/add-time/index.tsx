@@ -37,16 +37,20 @@ import EmployeeCombo from "@/app/components/employeeComboBox";
 import { BillableFields } from "@/app/components/timesheet-billable/billableFields";
 import { TimesheetDescriptionField } from "@/app/components/timesheet-description/descriptionField";
 import { InputModeToggle } from "@/app/components/timesheet-input/inputModeToggle";
-import { isBillableValue } from "@/lib/timesheetBillable";
 import { TimeRangeFields } from "@/app/components/timesheet-input/timeRangeFields";
 import { TIMESHEET_INPUT_MODE_KEY } from "@/lib/constant";
 import { getLocalStorage, setLocalStorage } from "@/lib/storage";
+import { isBillableValue } from "@/lib/timesheetBillable";
 import type { TimesheetInputMode } from "@/lib/timesheetTime";
 import { mergeClassNames, expectatedHours, parseFrappeErrorMsg } from "@/lib/utils";
 import { TimesheetDraftSchema, timeStringToFloat } from "@/schema/timesheet";
 import type { TaskData } from "@/types";
 import TimeSelector from "./time-selector";
 import type { AddTimeProps } from "./type";
+
+const debugAddTime = (event: string, details?: unknown) => {
+  console.log(`[TimesheetAddTime] ${event}`, details ?? {});
+};
 
 /**
  * Add Time Component
@@ -114,11 +118,18 @@ const AddTime = ({
   const selectedTaskName = form.watch("task");
   const selectedTask = tasks.find((item) => item.name === selectedTaskName);
   const descriptionRequired = Boolean(selectedTask?.custom_require_timesheet_description);
-  const handleOpen = () => {
-    if (submitting) return;
+  const closeDialog = useCallback(() => {
     form.reset();
     onOpenChange(form.getValues());
-  };
+  }, [form, onOpenChange]);
+  const handleOpen = useCallback(() => {
+    debugAddTime("dialog close requested", {
+      submitting,
+      values: form.getValues(),
+    });
+    if (submitting) return;
+    closeDialog();
+  }, [closeDialog, form, submitting]);
   const handleDateChange = (date: Date | undefined) => {
     if (!date) return;
     form.setValue("date", getFormatedDate(date), {
@@ -229,23 +240,54 @@ const AddTime = ({
   const persistDraft = useCallback(
     async (data: z.infer<typeof TimesheetDraftSchema>, closeOnSuccess = false) => {
       const parsed = TimesheetDraftSchema.safeParse(data);
+      debugAddTime("persist requested", {
+        closeOnSuccess,
+        data,
+        parsed: parsed.success,
+      });
       if (!parsed.success || !canAutoSaveDraft(parsed.data)) {
+        debugAddTime("persist skipped", {
+          closeOnSuccess,
+          parsedError: parsed.success ? undefined : parsed.error.flatten(),
+          canAutoSave: parsed.success ? canAutoSaveDraft(parsed.data) : false,
+          data: parsed.success ? parsed.data : data,
+        });
         return false;
       }
 
       const requestId = ++autoSaveRequestRef.current;
       setDraftSaveStatus("saving");
+      const payload = buildSavePayload(parsed.data);
+      debugAddTime("persist payload", {
+        requestId,
+        closeOnSuccess,
+        payload,
+      });
 
       try {
-        const res = await save(buildSavePayload(parsed.data));
+        const res = await save(payload);
+        debugAddTime("persist response", {
+          requestId,
+          latestRequestId: autoSaveRequestRef.current,
+          response: res,
+        });
         if (requestId !== autoSaveRequestRef.current) {
+          debugAddTime("persist ignored stale response", {
+            requestId,
+            latestRequestId: autoSaveRequestRef.current,
+          });
           return false;
         }
         setDraftSaveStatus("saved");
         mutatePerDayHrs();
         onSuccess?.(parsed.data);
+        debugAddTime("persist success", {
+          requestId,
+          closeOnSuccess,
+          data: parsed.data,
+        });
         if (closeOnSuccess) {
-          handleOpen();
+          closeDialog();
           toast({
             variant: "success",
             description: res.message,
@@ -253,6 +295,12 @@ const AddTime = ({
         }
         return true;
       } catch (err) {
+        debugAddTime("persist failed", {
+          requestId,
+          closeOnSuccess,
+          rawError: err,
+          parsedError: parseFrappeErrorMsg(err),
+        });
         if (requestId === autoSaveRequestRef.current) {
           setDraftSaveStatus("error");
           if (closeOnSuccess) {
@@ -266,12 +314,17 @@ const AddTime = ({
         return false;
       }
     },
-    [save, mutatePerDayHrs, onSuccess, toast]
+    [save, mutatePerDayHrs, onSuccess, closeDialog, toast]
   );
 
   const handleSubmit = async (data: z.infer<typeof TimesheetDraftSchema>) => {
+    debugAddTime("submit started", data);
     setSubmitting(true);
-    await persistDraft(data, true);
+    const saved = await persistDraft(data, true);
+    debugAddTime("submit finished", {
+      saved,
+      data,
+    });
     setSubmitting(false);
   };
   const fetchTask = useCallback(() => {
@@ -459,7 +512,7 @@ const AddTime = ({
 
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
-      <DialogContent className="max-w-xl" onPointerDownOutside={event?.preventDefault}>
+      <DialogContent className="max-w-xl" onPointerDownOutside={(event) => event.preventDefault()}>
         <DialogHeader>
           <DialogTitle className="flex gap-x-2 items-center">
             Add Time

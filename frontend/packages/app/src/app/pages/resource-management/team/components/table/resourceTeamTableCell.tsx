@@ -4,7 +4,8 @@
 import { useMemo, useCallback, memo } from "react";
 import { prettyDate } from "@next-pms/design-system/date";
 import { ResourceTableCell } from "@next-pms/resource-management/components";
-import { getTableCellClass, getTodayDateCellClass, getCellBackGroundColor } from "@next-pms/resource-management/utils";
+import { getTableCellClass, getTodayDateCellClass } from "@next-pms/resource-management/utils";
+import { getRemainingCapacityClass } from "../../../utils/conflictHeat";
 import { useContextSelector } from "use-context-selector";
 
 /**
@@ -79,7 +80,10 @@ const ResourceTeamTableCellComponent = ({
     weekData,
   ]);
 
-  const cellBackGroundColor = useMemo(() => getCellBackGroundColor(allocationPercentage), [allocationPercentage]);
+  const cellBackGroundColor = useMemo(
+    () => getRemainingCapacityClass(allocationPercentage),
+    [allocationPercentage]
+  );
 
   const hasTentativeAllocation = useMemo(
     () =>

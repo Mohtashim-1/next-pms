@@ -42,6 +42,11 @@ const defaultFilters: ResourceTeamFilters = {
   allocationType: [],
   designation: [],
   businessUnit: [],
+  department: [],
+  userGroup: [],
+  branch: [],
+  roles: [],
+  groupBy: "employee",
   maxWeek: 5,
   skillSearch: [],
 };
@@ -83,6 +88,7 @@ const defaulTeamState: TeamContextProps = {
     setCombineWeekHours: () => {},
     setWeekDate: () => {},
     setHasViewUpdated: () => false,
+    updateGroupBy: () => {},
   },
 };
 
@@ -188,6 +194,10 @@ const TeamContextProvider = ({ children }: ContextProviderProps) => {
     }));
   };
 
+  const updateGroupBy = (groupBy: string) => {
+    setFilters((prev) => ({ ...prev, groupBy }));
+  };
+
   const updateTableView = (updatedTableView: TableViewProps) => {
     setTableView({ ...defaultTableView, ...updatedTableView });
   };
@@ -267,6 +277,7 @@ const TeamContextProvider = ({ children }: ContextProviderProps) => {
           setCombineWeekHours: setCombineWeekHours,
           setWeekDate: setWeekDate,
           setHasViewUpdated,
+          updateGroupBy,
         },
       }}
     >

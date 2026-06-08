@@ -17,6 +17,16 @@ class ResourceAllocation(Document):
         if self.allocation_end_date < self.allocation_start_date:
             frappe.throw(frappe._("End date should be greater than or equal to start date"))
 
+        from next_pms.resource_management.utils.conflicts import assert_allocation_conflicts_allowed
+
+        assert_allocation_conflicts_allowed(
+            self.employee,
+            self.allocation_start_date,
+            self.allocation_end_date,
+            self.hours_allocated_per_day or 0,
+            exclude_name=self.name,
+        )
+
     def on_update(self):
         # Clear all type of allocation related chache if something is changed in allocation
         clear_cache()

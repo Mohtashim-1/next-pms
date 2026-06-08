@@ -10,6 +10,8 @@ import { Moment } from "moment";
 import type { ViewData } from "@/store/view";
 import { ResourceAllocationProps } from "@/types/resource_management";
 import { AllocationDataProps, Skill } from "../store/types";
+import type { ResourceGroupByDimension } from "../shared/groupBy";
+import type { TimelineColorMode, TimelineZoomLevel } from "./timelineZoom";
 
 interface ResourceAllocationItemProps {
   style: {
@@ -28,14 +30,21 @@ interface ResourceAllocationItemProps {
 interface ResourceAllocationTimeLineFilterProps {
   employeeName?: string;
   businessUnit?: string[];
+  department?: string[];
   reportingManager?: string;
   designation?: string[];
+  userGroup?: string[];
+  branch?: string[];
+  roles?: string[];
   allocationType?: string[];
   skillSearch?: Skill[];
+  groupBy?: ResourceGroupByDimension;
   start?: number;
   page_length?: number;
   weekDate?: string;
   isShowMonth?: boolean;
+  zoomLevel?: TimelineZoomLevel;
+  colorMode?: TimelineColorMode;
 }
 
 interface ResourceAllocationEmployeeProps {
@@ -44,6 +53,17 @@ interface ResourceAllocationEmployeeProps {
   employee_name: string;
   department: string;
   designation: string;
+  primary_skill?: string;
+  daily_working_hours?: number;
+  business_unit?: string;
+  user_group?: string;
+  branch?: string;
+  primary_role?: string;
+  id?: string;
+  title?: string;
+  isGroupHeader?: boolean;
+  parent?: string;
+  root?: boolean;
 }
 
 interface ResourceAllocationCustomerProps {
@@ -55,6 +75,7 @@ interface ResourceAllocationCustomerProps {
 }
 
 interface ResourceAllocationTimeLineProps extends ResourceAllocationProps {
+  id?: string;
   customerData: {
     name: string;
     abbr: string;
@@ -69,11 +90,15 @@ interface ResourceAllocationTimeLineProps extends ResourceAllocationProps {
   end_time: number;
   canDelete?: boolean;
   isShowMonth?: boolean;
+  zoomLevel?: TimelineZoomLevel;
+  colorMode?: TimelineColorMode;
+  status?: string;
+  primary_skill?: string;
   onDelete?: (
     oldData: AllocationDataProps,
     newData: AllocationDataProps
   ) => void;
-  type: "allocation" | "leave";
+  type: "allocation" | "leave" | "draft";
 }
 
 interface ResourceTimeLineDataProps {
@@ -90,8 +115,12 @@ interface ResourceTeamAPIBodyProps {
   employee_name?: string;
   page_length?: number;
   business_unit?: string;
+  department?: string;
   reports_to?: string;
   designation?: string;
+  user_group?: string;
+  branch?: string;
+  roles?: string;
   is_billable?: string;
   skills?: string;
   need_hours_summary?: boolean;

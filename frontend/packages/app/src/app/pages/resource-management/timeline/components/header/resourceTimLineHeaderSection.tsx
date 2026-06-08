@@ -7,7 +7,7 @@ import { ButtonProps, useToast } from "@next-pms/design-system/components";
 import { useQueryParam } from "@next-pms/hooks";
 import { useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
 import _ from "lodash";
-import { Plus, ZoomIn, ZoomOut } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useContextSelector } from "use-context-selector";
 
 /**
@@ -17,10 +17,14 @@ import { Header } from "@/app/components/list-view/header";
 import { parseFrappeErrorMsg } from "@/lib/utils";
 import { RootState } from "@/store";
 import { ViewData } from "@/store/view";
+import { ResourceViewActions } from "../../../components/resourceViewActions";
+import { getGroupByLabel, type ResourceGroupByDimension } from "../../../shared/groupBy";
 import { ResourceFormContext } from "../../../store/resourceFormContext";
 import { TimeLineContext } from "../../../store/timeLineContext";
 import type { PermissionProps, Skill } from "../../../store/types";
 import SkillSearch from "../../../team/components/skillSearch";
+import { createFilter } from "../../utils";
+import type { TimelineColorMode, TimelineZoomLevel } from "../../timelineZoom";
 
 /**
  * This component is responsible for loading the team view header.
@@ -33,6 +37,11 @@ const ResourceTimLineHeaderSection = ({ viewData }: { viewData: ViewData }) => {
   const [reportingNameParam] = useQueryParam<string>("reports-to", "");
   const [allocationTypeParam] = useQueryParam<string[]>("allocation-type", []);
   const [designationParam] = useQueryParam<string[]>("designation", []);
+  const [departmentParam] = useQueryParam<string[]>("department", []);
+  const [teamParam] = useQueryParam<string[]>("team", []);
+  const [locationParam] = useQueryParam<string[]>("location", []);
+  const [roleParam] = useQueryParam<string[]>("role", []);
+  const [groupByParam] = useQueryParam<ResourceGroupByDimension>("group-by", "employee");
   const [skillSearchParam, setSkillSearchParam] = useQueryParam<Skill[]>("skill-search", []);
   const { toast } = useToast();
 
@@ -46,8 +55,14 @@ const ResourceTimLineHeaderSection = ({ viewData }: { viewData: ViewData }) => {
     reportingManagerId ? { filters: { name: reportingManagerId } } : undefined
   );
 
-  const { filters, hasViewUpdated } = useContextSelector(TimeLineContext, (value) => value.state);
-  const { updateFilters, setHasViewUpdated } = useContextSelector(TimeLineContext, (value) => value.actions);
+  const { filters, hasViewUpdated, employees, allocations } = useContextSelector(
+    TimeLineContext,
+    (value) => value.state
+  );
+  const { updateFilters, setHasViewUpdated, updateGroupBy } = useContextSelector(
+    TimeLineContext,
+    (value) => value.actions
+  );
 
   const { call, loading } = useFrappePostCall(
     "next_pms.resource_management.api.permission.get_user_resources_permissions"
@@ -117,10 +132,63 @@ const ResourceTimLineHeaderSection = ({ viewData }: { viewData: ViewData }) => {
         skillSearchParam && skillSearchParam.length > 0
           ? skillSearchParam
           : viewData.filters.skillSearch ?? [],
+      department:
+        departmentParam && departmentParam.length > 0 ? departmentParam : viewData.filters.department ?? [],
+      userGroup: teamParam && teamParam.length > 0 ? teamParam : viewData.filters.userGroup ?? [],
+      branch: locationParam && locationParam.length > 0 ? locationParam : viewData.filters.branch ?? [],
+      roles: roleParam && roleParam.length > 0 ? roleParam : viewData.filters.roles ?? [],
+      groupBy: groupByParam || (viewData.filters.groupBy as ResourceGroupByDimension) || "employee",
       isShowMonth: viewData.filters.isShowMonth,
+      zoomLevel: (viewData.filters.zoomLevel as TimelineZoomLevel) ?? (viewData.filters.isShowMonth ? "month" : "week"),
+      colorMode: (viewData.filters.colorMode as TimelineColorMode) ?? "project",
     });
   };
   let sectionFilters = [
+    {
+      queryParameterName: "timeline-zoom",
+      handleChange: (value: string | string[]) => {
+        const zoomLevel = value as TimelineZoomLevel;
+        updateFilters({
+          zoomLevel,
+          isShowMonth: zoomLevel === "month" || zoomLevel === "quarter",
+        });
+      },
+      handleDelete: () => {
+        updateFilters({ zoomLevel: "week", isShowMonth: false });
+      },
+      type: "select-list",
+      value: [filters.zoomLevel ?? (filters.isShowMonth ? "month" : "week")],
+      shouldFilterComboBox: false,
+      isMultiComboBox: false,
+      label: "Zoom",
+      data: [
+        { label: "Day", value: "day" },
+        { label: "Week", value: "week" },
+        { label: "Month", value: "month" },
+        { label: "Quarter", value: "quarter" },
+      ],
+      queryParameterDefault: ["week"],
+    },
+    {
+      queryParameterName: "timeline-color",
+      handleChange: (value: string | string[]) => {
+        updateFilters({ colorMode: value as TimelineColorMode });
+      },
+      handleDelete: () => {
+        updateFilters({ colorMode: "project" });
+      },
+      type: "select-list",
+      value: [filters.colorMode ?? "project"],
+      shouldFilterComboBox: false,
+      isMultiComboBox: false,
+      label: "Color By",
+      data: [
+        { label: "Project", value: "project" },
+        { label: "Status", value: "status" },
+        { label: "Skill", value: "skill" },
+      ],
+      queryParameterDefault: ["project"],
+    },
     {
       queryParameterName: "employee-name",
       handleChange: (value: string) => {
@@ -180,6 +248,139 @@ const ResourceTimLineHeaderSection = ({ viewData }: { viewData: ViewData }) => {
           skillSearch={(filters.skillSearch ?? []) as Skill[]}
         />
       ),
+    },
+    {
+      queryParameterName: "group-by",
+      handleChange: (value: string | string[]) => {
+        updateGroupBy((value as ResourceGroupByDimension) || "employee");
+      },
+      handleDelete: () => {
+        updateGroupBy("employee");
+      },
+      type: "select-list",
+      value: [filters.groupBy ?? "employee"],
+      shouldFilterComboBox: false,
+      isMultiComboBox: false,
+      label: "Group By",
+      data: (["employee", "department", "designation", "business_unit", "team", "location", "role"] as ResourceGroupByDimension[]).map(
+        (dimension) => ({
+          label: getGroupByLabel(dimension),
+          value: dimension,
+        })
+      ),
+      queryParameterDefault: ["employee"],
+    },
+    {
+      queryParameterName: "department",
+      handleChange: (value: string | string[]) => {
+        updateFilters({ department: value as string[] });
+      },
+      handleDelete: (value: string[] | undefined) => {
+        updateFilters({ department: value as string[] });
+      },
+      type: "select-search",
+      value: filters.department,
+      label: "Department",
+      shouldFilterComboBox: true,
+      isMultiComboBox: true,
+      hide: !resourceAllocationPermission.write,
+      apiCall: {
+        url: "frappe.client.get_list",
+        filters: {
+          doctype: "Department",
+          fields: ["name"],
+          limit_page_length: 0,
+        },
+        options: {
+          revalidateOnFocus: false,
+          revalidateIfStale: false,
+        },
+      },
+      queryParameterDefault: filters.department,
+    },
+    {
+      queryParameterName: "team",
+      handleChange: (value: string | string[]) => {
+        updateFilters({ userGroup: value as string[] });
+      },
+      handleDelete: (value: string[] | undefined) => {
+        updateFilters({ userGroup: value as string[] });
+      },
+      type: "select-search",
+      value: filters.userGroup,
+      label: "Team",
+      shouldFilterComboBox: true,
+      isMultiComboBox: true,
+      hide: !resourceAllocationPermission.write,
+      apiCall: {
+        url: "frappe.client.get_list",
+        filters: {
+          doctype: "User Group",
+          fields: ["name"],
+          limit_page_length: 0,
+        },
+        options: {
+          revalidateOnFocus: false,
+          revalidateIfStale: false,
+        },
+      },
+      queryParameterDefault: filters.userGroup,
+    },
+    {
+      queryParameterName: "location",
+      handleChange: (value: string | string[]) => {
+        updateFilters({ branch: value as string[] });
+      },
+      handleDelete: (value: string[] | undefined) => {
+        updateFilters({ branch: value as string[] });
+      },
+      type: "select-search",
+      value: filters.branch,
+      label: "Location",
+      shouldFilterComboBox: true,
+      isMultiComboBox: true,
+      hide: !resourceAllocationPermission.write,
+      apiCall: {
+        url: "frappe.client.get_list",
+        filters: {
+          doctype: "Branch",
+          fields: ["name"],
+          limit_page_length: 0,
+        },
+        options: {
+          revalidateOnFocus: false,
+          revalidateIfStale: false,
+        },
+      },
+      queryParameterDefault: filters.branch,
+    },
+    {
+      queryParameterName: "role",
+      handleChange: (value: string | string[]) => {
+        updateFilters({ roles: value as string[] });
+      },
+      handleDelete: (value: string[] | undefined) => {
+        updateFilters({ roles: value as string[] });
+      },
+      type: "select-search",
+      value: filters.roles,
+      label: "Role",
+      shouldFilterComboBox: true,
+      isMultiComboBox: true,
+      hide: !resourceAllocationPermission.write,
+      apiCall: {
+        url: "frappe.client.get_list",
+        filters: {
+          doctype: "Role",
+          fields: ["name"],
+          limit_page_length: 0,
+        },
+        options: {
+          revalidateOnFocus: false,
+          revalidateIfStale: false,
+        },
+      },
+      queryParameterDefault: filters.roles,
     },
     {
       queryParameterName: "business-unit",
@@ -269,9 +470,20 @@ const ResourceTimLineHeaderSection = ({ viewData }: { viewData: ViewData }) => {
   if (!user.hasBuField) {
     sectionFilters = sectionFilters.filter((filter) => filter.queryParameterName !== "business-unit");
   }
+  const viewFilters = createFilter({ filters } as import("../../../store/types").TimeLineContextState);
+
   return (
     <Header
       filters={sectionFilters}
+      customComponents={[
+        <ResourceViewActions
+          key="resource-view-actions"
+          viewData={viewData}
+          filters={viewFilters}
+          employees={employees}
+          allocations={allocations}
+        />,
+      ]}
       buttons={[
         {
           title: "Save changes",
@@ -292,28 +504,6 @@ const ResourceTimLineHeaderSection = ({ viewData }: { viewData: ViewData }) => {
           icon: () => <Plus className="w-4 max-md:w-3 h-4 max-md:h-3 bg" />,
           variant: "default",
           hide: !resourceAllocationPermission.write,
-        },
-        {
-          title: "Zoom In",
-          handleClick: () => {
-            updateFilters({ isShowMonth: true });
-          },
-          className: "px-3",
-          icon: () => <ZoomIn className="w-4 max-md:w-3 h-4 max-md:h-3 bg" />,
-          variant: "outline",
-          hide: !resourceAllocationPermission.write,
-          disabled: filters.isShowMonth,
-        },
-        {
-          title: "Zoom Out",
-          handleClick: () => {
-            updateFilters({ isShowMonth: false });
-          },
-          className: "px-3",
-          icon: () => <ZoomOut className="w-4 max-md:w-3 h-4 max-md:h-3 bg" />,
-          variant: "outline",
-          hide: !resourceAllocationPermission.write,
-          disabled: !filters.isShowMonth,
         },
       ]}
       showFilterValue

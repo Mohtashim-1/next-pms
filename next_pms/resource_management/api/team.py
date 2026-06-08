@@ -22,6 +22,60 @@ from next_pms.timesheet.api.employee import get_employee_working_hours
 from next_pms.timesheet.api.team import get_holidays
 
 
+def _attach_employee_view_metadata(employees):
+    if not employees:
+        return employees
+
+    user_ids = [employee.user_id for employee in employees if employee.get("user_id")]
+    user_group_map = {}
+    role_map = {}
+
+    if user_ids:
+        for row in frappe.get_all(
+            "User Group Member",
+            filters={"user": ["in", user_ids]},
+            fields=["user", "parent"],
+            order_by="modified desc",
+        ):
+            user_group_map.setdefault(row.user, row.parent)
+
+        for row in frappe.get_all(
+            "Has Role",
+            filters={"parent": ["in", user_ids], "parenttype": "User"},
+            fields=["parent", "role"],
+            order_by="modified desc",
+        ):
+            role_map.setdefault(row.parent, row.role)
+
+    for employee in employees:
+        employee["business_unit"] = employee.get("custom_business_unit") or ""
+        employee["user_group"] = user_group_map.get(employee.get("user_id"), "")
+        employee["primary_role"] = role_map.get(employee.get("user_id"), "")
+
+    return employees
+
+
+def _attach_primary_skills(employees):
+    if not employees:
+        return employees
+
+    employee_names = [employee.name for employee in employees]
+    skill_rows = frappe.get_all(
+        "Employee Skill",
+        filters={"parent": ["in", employee_names]},
+        fields=["parent", "skill"],
+        order_by="modified desc",
+    )
+    skill_map = {}
+    for row in skill_rows:
+        skill_map.setdefault(row.parent, row.skill)
+
+    for employee in employees:
+        employee["primary_skill"] = skill_map.get(employee.name) or employee.get("designation") or ""
+
+    return employees
+
+
 @frappe.whitelist()
 @redis_cache()
 def get_resource_management_team_view_data(
@@ -29,8 +83,12 @@ def get_resource_management_team_view_data(
     max_week: int = 2,
     employee_name: str | None = None,
     business_unit: str | None = None,
+    department: str | None = None,
     designation: str | None = None,
     reports_to: str | None = None,
+    user_group: str | None = None,
+    branch: str | None = None,
+    roles: str | None = None,
     is_billable: int = -1,
     page_length: int = 10,
     start: int = 0,
@@ -43,8 +101,12 @@ def get_resource_management_team_view_data(
     if not permissions["write"]:
         is_billable = -1
         business_unit = None
+        department = None
         designation = None
         reports_to = None
+        user_group = None
+        branch = None
+        roles = None
         customer = None
         employee_id = None
 
@@ -88,7 +150,11 @@ def get_resource_management_team_view_data(
     employees, total_count = filter_employees(
         employee_name,
         business_unit=business_unit,
+        department=department,
         designation=designation,
+        user_group=user_group,
+        branch=branch,
+        role_filter=roles,
         page_length=page_length,
         reports_to=reports_to,
         start=start,
@@ -96,6 +162,8 @@ def get_resource_management_team_view_data(
         ids=ids,
         ignore_permissions=True,
     )
+
+    _attach_employee_view_metadata(employees)
 
     resource_allocation_data = get_allocation_list_for_employee_for_given_range(
         [
@@ -142,6 +210,16 @@ def get_resource_management_team_view_data(
         resource_allocation_map[resource_allocation.employee].append(resource_allocation)
 
     if not need_hours_summary:
+        _attach_primary_skills(employees)
+        _attach_employee_view_metadata(employees)
+        for employee in employees:
+            working_hours = get_employee_working_hours(employee.name)
+            daily_working_hours = (
+                working_hours.get("working_hour")
+                if working_hours.get("working_frequency") == "Per Day"
+                else (working_hours.get("working_hour") or 0) / 5
+            )
+            employee["daily_working_hours"] = daily_working_hours
         all_leave_data = frappe.get_all(
             "Leave Application",
             filters={

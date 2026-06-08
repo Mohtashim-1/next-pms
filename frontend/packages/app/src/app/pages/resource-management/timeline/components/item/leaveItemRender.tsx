@@ -9,6 +9,7 @@ import { CalendarX } from "lucide-react";
  * Internal dependencies.
  */
 import { mergeClassNames } from "@/lib/utils";
+import { isWideZoom } from "../../timelineZoom";
 import type { ResourceTimeLineItemProps } from "../../types";
 
 const LeaveItemRender = ({ item: leave, itemContext, getItemProps }: ResourceTimeLineItemProps) => {
@@ -19,6 +20,8 @@ const LeaveItemRender = ({ item: leave, itemContext, getItemProps }: ResourceTim
 
   let itemProps = getItemProps(leave.itemProps);
 
+  const compactLabels = isWideZoom(leave.zoomLevel ?? (leave.isShowMonth ? "month" : "week"));
+
   const getTitle = (isNeedFullTitle = false) => {
     const dayLabel = leave.total_leave_days && leave?.total_leave_days <= 1 ? "day" : "days";
     const title = `${startDate} - ${endDate} (${leave.total_leave_days} ${dayLabel})`;
@@ -27,11 +30,11 @@ const LeaveItemRender = ({ item: leave, itemContext, getItemProps }: ResourceTim
       return title;
     }
 
-    if (dayDiff <= 2 || (leave.isShowMonth && dayDiff <= 20)) {
+    if (dayDiff <= 2 || (compactLabels && dayDiff <= 20)) {
       return "";
     }
 
-    if (dayDiff <= 3 || (leave.isShowMonth && dayDiff <= 50)) {
+    if (dayDiff <= 3 || (compactLabels && dayDiff <= 50)) {
       return `${startDate} - ${endDate}`;
     }
 
@@ -49,7 +52,7 @@ const LeaveItemRender = ({ item: leave, itemContext, getItemProps }: ResourceTim
       border: "1px solid #d1d5db",
       borderWidth: 0,
       borderRightWidth: 0,
-      overflow: dayDiff <= (leave.isShowMonth ? 30 * 3 : 10) ? "hidden" : "visible",
+      overflow: dayDiff <= (compactLabels ? 30 * 3 : 10) ? "hidden" : "visible",
     },
   };
 

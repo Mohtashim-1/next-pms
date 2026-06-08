@@ -103,8 +103,12 @@ const ResourceTeamViewComponent = ({
         newReqBody = {
           ...newReqBody,
           business_unit: JSON.stringify(filters.businessUnit),
+          department: JSON.stringify(filters.department),
           reports_to: filters.reportingManager,
           designation: JSON.stringify(filters.designation),
+          user_group: JSON.stringify(filters.userGroup),
+          branch: JSON.stringify(filters.branch),
+          roles: JSON.stringify(filters.roles),
           is_billable: getIsBillableValue(filters.allocationType as string[]),
           skills:
             filters?.skillSearch?.length && filters?.skillSearch?.length > 0

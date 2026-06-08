@@ -24,24 +24,45 @@ def handle_allocation(allocation: object, repeat_till_week_count: int = 0):
 
 
 def add_allocation(allocation: object, repeat_till_week_count: int = 0):
+    from next_pms.resource_management.utils.conflicts import assert_allocation_conflicts_allowed
+
+    assert_allocation_conflicts_allowed(
+        allocation.get("employee"),
+        allocation.get("allocation_start_date"),
+        allocation.get("allocation_end_date"),
+        allocation.get("hours_allocated_per_day") or 0,
+    )
     new_allocation = frappe.get_doc(allocation)
     new_allocation.save()
 
     if repeat_till_week_count:
         for _ in range(repeat_till_week_count):
-            next_allocation_dict = allocation
-
+            next_allocation_dict = {**allocation}
             next_allocation_dict["allocation_start_date"] = add_days(allocation["allocation_start_date"], 7)
-
             next_allocation_dict["allocation_end_date"] = add_days(allocation["allocation_end_date"], 7)
-
+            assert_allocation_conflicts_allowed(
+                next_allocation_dict.get("employee"),
+                next_allocation_dict.get("allocation_start_date"),
+                next_allocation_dict.get("allocation_end_date"),
+                next_allocation_dict.get("hours_allocated_per_day") or 0,
+            )
             next_allocation = frappe.get_doc(next_allocation_dict)
             next_allocation.save()
+            allocation = next_allocation_dict
 
     return new_allocation
 
 
 def update_allocation(allocation: object):
+    from next_pms.resource_management.utils.conflicts import assert_allocation_conflicts_allowed
+
+    assert_allocation_conflicts_allowed(
+        allocation.get("employee"),
+        allocation.get("allocation_start_date"),
+        allocation.get("allocation_end_date"),
+        allocation.get("hours_allocated_per_day") or 0,
+        exclude_name=allocation.get("name"),
+    )
     allocation_doc = frappe.get_doc("Resource Allocation", allocation["name"])
     allocation_doc.update(allocation)
     allocation_doc.save()

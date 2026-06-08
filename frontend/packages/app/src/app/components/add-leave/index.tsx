@@ -162,7 +162,7 @@ const AddLeave = ({ employee, employeeName, open = false, onOpenChange, onSucces
   return (
     <>
       <Dialog open={open} onOpenChange={handleOpen}>
-        <DialogContent className="max-w-xl " onPointerDownOutside={event?.preventDefault}>
+        <DialogContent className="max-w-xl " onPointerDownOutside={(event) => event.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="flex gap-x-2">Add Leave</DialogTitle>
             <Separator />

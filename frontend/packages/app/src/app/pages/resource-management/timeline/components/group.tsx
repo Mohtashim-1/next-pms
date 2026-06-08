@@ -55,6 +55,15 @@ const ResourceTimeLineGroup = ({ group }: ResourceTimeLineGroupProps) => {
     );
   }, [group.image, group.employee_name]);
 
+  if (group.isGroupHeader) {
+    return (
+      <TableInformationCellContent
+        cellClassName="overflow-hidden flex items-center font-semibold bg-muted/40 text-sm"
+        value={group.title || group.employee_name}
+      />
+    );
+  }
+
   return (
     <TableInformationCellContent
       cellClassName="overflow-hidden flex items-center font-normal bg-none"

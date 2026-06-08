@@ -22,15 +22,20 @@ const TimeLineIntervalHeader = ({ getIntervalProps, intervalContext, data }: Tim
   });
 
   const getKey = () => {
-    const keys = { week: "Week", month: "Month", year: "Year" };
+    const keys = { week: "Week", month: "Month", year: "Year", quarter: "Quarter" };
 
     if (start.getTime() >= startMoment.toDate().getTime() && start.getTime() <= endMoment.toDate().getTime()) {
       if (data.unit === "week") {
         return `This ${keys[data.unit]}`;
       }
     }
-    if (data.unit === "month" && data.showYear) {
+    if (data.unit === "year" || (data.unit === "month" && data.showYear)) {
       return getMonthYearKey(getDayKeyOfMoment(startMoment));
+    }
+
+    if (data.unit === "quarter") {
+      const quarter = Math.floor(startMoment.month() / 3) + 1;
+      return `Q${quarter} ${startMoment.format("YYYY")}`;
     }
 
     return `${getMonthKey(getDayKeyOfMoment(startMoment))} - ${getMonthKey(

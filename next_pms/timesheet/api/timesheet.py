@@ -245,6 +245,19 @@ def _get_timesheet_submission_summary(employee: str, start_date: str):
     }
 
 
+def _enrich_tasks_with_period_locks(tasks: dict, start_date, end_date):
+    from next_pms.timesheet.utils.period_lock import enrich_entry_period_lock_fields, get_active_locks_between
+
+    if not tasks:
+        return tasks
+
+    locks = get_active_locks_between(start_date, end_date)
+    for task_data in tasks.values():
+        for log_data in task_data.get("data", []):
+            enrich_entry_period_lock_fields(log_data, locks)
+    return tasks
+
+
 def _assert_week_editable(employee: str, date):
     from next_pms.timesheet.utils.period_lock import assert_date_not_period_locked
 
@@ -363,6 +376,11 @@ def get_timesheet_data(employee: str, start_date: str | None = None, max_week: i
             week_data = frappe.cache().hget(cache_key, week_cache_key)
 
             if week_data:
+                week_data["tasks"] = _enrich_tasks_with_period_locks(
+                    week_data.get("tasks", {}),
+                    week_dates["start_date"],
+                    week_dates["end_date"],
+                )
                 start_date = add_days(getdate(week_dates["start_date"]), -1)
                 data[week_key] = week_data
                 continue
@@ -394,6 +412,7 @@ def get_timesheet_data(employee: str, start_date: str | None = None, max_week: i
 
                 if daily_norm * 5 == leave_total:
                     status = "Approved"
+            tasks = _enrich_tasks_with_period_locks(tasks, week_dates["start_date"], week_dates["end_date"])
             data[week_key] = {
                 **week_dates,
                 "total_hours": total_hours,

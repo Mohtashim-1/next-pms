@@ -1,8 +1,8 @@
 /**
  * External dependencies.
  */
-import { useCallback, useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Button,
@@ -42,6 +42,10 @@ import { ResourceAllocationSchema } from "@/schema/resource";
 import { ResourceFormContext } from "../store/resourceFormContext";
 import type { AllocationDataProps, ResourceKeys } from "../store/types";
 import { getRoundOfValue } from "../utils/helper";
+import {
+  AllocationConflictAlert,
+  type AllocationConflictResult,
+} from "./allocationConflictAlert";
 
 /**
  * This component is used to add and update resource allocations data.
@@ -64,6 +68,9 @@ const AddResourceAllocations = ({
   const [projectSearch, setProjectSearch] = useState(resourceAllocationForm.project_name);
   const [customerSearch, setCustomerSearch] = useState(resourceAllocationForm.customer_name);
   const [enableRepeatOnWeek, setEnableRepeatOnWeek] = useState(false);
+  const [conflictResult, setConflictResult] = useState<AllocationConflictResult | null>(null);
+  const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
+  const conflictRequestRef = useRef(0);
 
   const form = useForm<z.infer<typeof ResourceAllocationSchema>>({
     resolver: zodResolver(ResourceAllocationSchema),
@@ -123,6 +130,14 @@ const AddResourceAllocations = ({
   const { call: handleCreateAndUpdateOfallocation, loading } = useFrappePostCall(
     "next_pms.resource_management.api.allocation.handle_allocation"
   );
+  const { call: checkConflicts } = useFrappePostCall(
+    "next_pms.resource_management.api.conflicts.check_allocation_conflicts"
+  );
+
+  const watchedEmployee = useWatch({ control: form.control, name: "employee" });
+  const watchedStartDate = useWatch({ control: form.control, name: "allocation_start_date" });
+  const watchedEndDate = useWatch({ control: form.control, name: "allocation_end_date" });
+  const watchedHoursPerDay = useWatch({ control: form.control, name: "hours_allocated_per_day" });
 
   const handleEmployeeChange = (value: string) => {
     form.setValue("employee", value, {
@@ -372,25 +387,96 @@ const AddResourceAllocations = ({
     });
   };
 
+  const runConflictCheck = useCallback(async () => {
+    if (!watchedEmployee || !watchedStartDate || !watchedEndDate) {
+      setConflictResult(null);
+      return;
+    }
+
+    const requestId = ++conflictRequestRef.current;
+    setIsCheckingConflicts(true);
+
+    try {
+      const response = await checkConflicts({
+        employee: watchedEmployee,
+        allocation_start_date: watchedStartDate,
+        allocation_end_date: watchedEndDate,
+        hours_allocated_per_day: parseFloat(String(watchedHoursPerDay || 0)) || 0,
+        exclude_name: resourceDialogState.isNeedToEdit ? resourceAllocationForm.name : undefined,
+      });
+
+      if (requestId !== conflictRequestRef.current) {
+        return;
+      }
+
+      setConflictResult(response.message as AllocationConflictResult);
+    } catch {
+      if (requestId === conflictRequestRef.current) {
+        setConflictResult(null);
+      }
+    } finally {
+      if (requestId === conflictRequestRef.current) {
+        setIsCheckingConflicts(false);
+      }
+    }
+  }, [
+    checkConflicts,
+    resourceAllocationForm.name,
+    resourceDialogState.isNeedToEdit,
+    watchedEmployee,
+    watchedEndDate,
+    watchedHoursPerDay,
+    watchedStartDate,
+  ]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void runConflictCheck();
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [runConflictCheck]);
+
   const handleSubmit = (data: AllocationDataProps & { repeat_till_week_count: number }) => {
     if (!data) {
       return;
     }
-    getAllocationApi(data)
-      .then(() => {
-        toast({
-          variant: "success",
-          description: `Resouce allocation ${resourceDialogState.isNeedToEdit ? "updated" : "created"} successfully`,
+
+    const submitAllocation = () =>
+      getAllocationApi(data)
+        .then(() => {
+          toast({
+            variant: "success",
+            description: `Resouce allocation ${resourceDialogState.isNeedToEdit ? "updated" : "created"} successfully`,
+          });
+          onSubmit(resourceAllocationForm, data);
+          handleOpen(false);
+        })
+        .catch(() => {
+          toast({
+            variant: "destructive",
+            description: `Failed to ${resourceDialogState.isNeedToEdit ? "updated" : "create"} resource allocation`,
+          });
         });
-        onSubmit(resourceAllocationForm, data);
-        handleOpen(false);
-      })
-      .catch(() => {
-        toast({
-          variant: "destructive",
-          description: `Failed to ${resourceDialogState.isNeedToEdit ? "updated" : "create"} resource allocation`,
-        });
+
+    if (conflictResult?.has_conflicts && conflictResult.action === "Block") {
+      toast({
+        variant: "destructive",
+        description: "This allocation exceeds daily capacity. Adjust hours or dates before saving.",
       });
+      return;
+    }
+
+    if (conflictResult?.has_conflicts && conflictResult.action === "Warn") {
+      const proceed = window.confirm(
+        "This allocation conflicts with existing assignments on one or more days. Save anyway?"
+      );
+      if (!proceed) {
+        return;
+      }
+    }
+
+    submitAllocation();
   };
 
   const handleNumberInputValue = (value: string) => {
@@ -756,9 +842,18 @@ const AddResourceAllocations = ({
                 </FormItem>
               )}
             />
+            <AllocationConflictAlert result={conflictResult} loading={isCheckingConflicts} />
+
             <DialogFooter className="sm:justify-start w-full pt-3">
               <div className="flex gap-x-4 w-full">
-                <Button disabled={!form.formState.isDirty || !form.formState.isValid || loading}>
+                <Button
+                  disabled={
+                    !form.formState.isDirty ||
+                    !form.formState.isValid ||
+                    loading ||
+                    (conflictResult?.has_conflicts && conflictResult.action === "Block")
+                  }
+                >
                   {loading ? <LoaderCircle className="animate-spin w-4 h-4" /> : <Save className="w-4 h-4" />}
                   {resourceDialogState.isNeedToEdit ? "Save" : "Create"}
                 </Button>
