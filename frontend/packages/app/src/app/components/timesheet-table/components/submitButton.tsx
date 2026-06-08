@@ -3,32 +3,32 @@
  */
 import type { MouseEvent } from "react";
 import { Button } from "@next-pms/design-system/components";
-import { CircleCheck, CircleX, Clock3, LoaderCircle, RotateCcw } from "lucide-react";
+import { CircleCheck, CircleX, Clock3, FilePenLine, LoaderCircle, RotateCcw, Trash2 } from "lucide-react";
 /**
  * Internal dependencies
  */
+import { getTimesheetStatusLabel, isDraftTimesheetStatus } from "@/lib/timesheetStatus";
 import { calculateWeeklyHour, mergeClassNames } from "@/lib/utils";
 import type { submitButtonProps } from "./types";
 
 /**
  * Submit Button
  * @description Button to show the status of the timesheet & to submit the timesheet.
- *
- * @param {string} props.start_date - Start date of the timesheet
- * @param {string} props.end_date - End date of the timesheet
- * @param {Function} props.onApproval - Function to call when the button is clicked
- * @param {string} props.status - Status of the timesheet
  */
 export const SubmitButton = ({
   start_date,
   end_date,
   onApproval,
   onRecall,
+  onAbandonDraft,
   status,
   expectedHours,
   totalHours,
   workingFrequency,
 }: submitButtonProps) => {
+  const statusLabel = getTimesheetStatusLabel(status);
+  const isDraft = isDraftTimesheetStatus(status);
+
   const handleClick = () => {
     onApproval?.(start_date, end_date);
   };
@@ -36,8 +36,14 @@ export const SubmitButton = ({
     event.stopPropagation();
     onRecall?.(start_date, end_date);
   };
+  const handleAbandonDraft = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    onAbandonDraft?.(start_date, end_date);
+  };
   const expectedWeeklyHours = calculateWeeklyHour(expectedHours, workingFrequency);
   const canRecall = ["Approval Pending", "Processing Timesheet", "Approved", "Partially Approved"].includes(status);
+  const canAbandonDraft = isDraft && totalHours > 0 && onAbandonDraft;
+
   return (
     <div className="flex items-center gap-2 shrink-0">
       <Button
@@ -52,9 +58,8 @@ export const SubmitButton = ({
             "bg-warning/20 text-warning hover:bg-warning/20 hover:text-warning  border border-warning/30",
           status === "Processing Timesheet" &&
             "bg-warning/20 text-warning hover:bg-warning/20 hover:text-warning  border border-warning/30",
-          status == "Not Submitted" &&
-            totalHours >= expectedWeeklyHours &&
-            "bg-yellow-50 text-yellow-600 hover:bg-yellow-50 hover:text-yellow-600 dark:bg-yellow-400/20 border border-yellow-600"
+          isDraft &&
+            "bg-sky-500/10 text-sky-700 hover:bg-sky-500/10 hover:text-sky-700 dark:text-sky-300 border border-sky-500/30"
         )}
         onClick={(e) => {
           e.stopPropagation();
@@ -67,11 +72,17 @@ export const SubmitButton = ({
           {(status == "Approved" || status == "Partially Approved") && <CircleCheck className="stroke-success" />}
           {(status == "Rejected" || status == "Partially Rejected") && <CircleX className="stroke-destructive" />}
           {status == "Approval Pending" && <Clock3 className="stroke-warning" />}
-          {status == "Not Submitted" && <CircleCheck className="" />}
+          {isDraft && <FilePenLine className="stroke-current" />}
           {status == "Processing Timesheet" && <LoaderCircle className="stroke-warning animate-spin" />}
-          {status}
+          {statusLabel}
         </span>
       </Button>
+      {canAbandonDraft && (
+        <Button variant="outline" className="h-9 px-3" onClick={handleAbandonDraft} title="Discard draft">
+          <Trash2 className="w-4 h-4" />
+          Discard
+        </Button>
+      )}
       {canRecall && onRecall && (
         <Button variant="outline" className="h-9 px-3" onClick={handleRecall}>
           <RotateCcw className="w-4 h-4" />

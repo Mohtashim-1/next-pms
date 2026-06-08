@@ -8,17 +8,18 @@ import {
   HoverCardTrigger,
   Input,
   TableCell,
-  TextEditor,
   Typography,
   useToast,
 } from "@next-pms/design-system/components";
 import { floatToTime } from "@next-pms/design-system/utils";
 import { useFrappePostCall } from "frappe-react-sdk";
-import { CircleDollarSign, CirclePlus, PencilLine, Timer } from "lucide-react";
+import { CirclePlus, PencilLine, Timer } from "lucide-react";
 
 /**
  * Internal dependencies
  */
+import { BillableIndicator } from "@/app/components/timesheet-billable/billableIndicator";
+import { MarkdownContent } from "@/app/components/timesheet-description/markdownContent";
 import { DEFAULT_INLINE_DESCRIPTION, formatRangeLabel, isRangeEntry } from "@/lib/timesheetTime";
 import { mergeClassNames, getBgCsssForToday, parseFrappeErrorMsg } from "@/lib/utils";
 import { timeStringToFloat } from "@/schema/timesheet";
@@ -32,9 +33,13 @@ type EditableCellProps = cellProps & {
   isEditing: boolean;
   onFocusCell: (row: number, col: number) => void;
   onStartEditing: (row: number, col: number) => void;
-  onStopEditing: () => void;
+  onStopEditing: (row?: number, col?: number) => void;
   onMoveFocus?: (rowDelta: number, colDelta: number) => void;
   onSaved?: () => void;
+};
+
+const debugInlineEdit = (event: string, details?: Record<string, unknown>) => {
+  console.log(`[TimesheetInlineEdit] ${event}`, details ?? {});
 };
 
 export const EditableCell = ({
@@ -65,19 +70,13 @@ export const EditableCell = ({
   const primaryEntry = realEntries[0];
   const hasMultipleEntries = realEntries.length > 1;
 
-  const { hours, description, isTimeBothBillableAndNonBillable, isTimeBillable, rangeLabel } = useMemo(() => {
+  const { hours, description, rangeLabel } = useMemo(() => {
     let totalHours = 0;
     let desc = "";
-    let billableMixed = false;
-    let billable = false;
 
     if (data) {
       totalHours = data.reduce((sum, item) => sum + (item.hours || 0), 0);
       desc = data.reduce((acc, item) => acc + (item.description ? item.description + "\n" : ""), "").trim();
-      billableMixed =
-        data.some((item) => item.is_billable === false || item.is_billable === 0) &&
-        data.some((item) => item.is_billable === true || item.is_billable === 1);
-      billable = data.every((item) => item.is_billable === true || item.is_billable === 1);
     }
 
     const label =
@@ -86,20 +85,31 @@ export const EditableCell = ({
     return {
       hours: totalHours,
       description: desc,
-      isTimeBothBillableAndNonBillable: billableMixed,
-      isTimeBillable: billable,
       rangeLabel: label,
     };
   }, [data, primaryEntry]);
 
   const [draftHours, setDraftHours] = useState(floatToTime(hours));
-  const isDisabled = useMemo(() => disabled || data?.[0]?.docstatus === 1, [disabled, data]);
+  const [optimisticHours, setOptimisticHours] = useState<number | null>(null);
+  const isDisabled = useMemo(
+    () => disabled || data?.[0]?.docstatus === 1 || Boolean(data?.[0]?.is_period_locked),
+    [disabled, data]
+  );
+  const displayHours = optimisticHours ?? hours;
 
   useEffect(() => {
-    if (!isEditing) {
-      setDraftHours(floatToTime(hours));
+    if (
+      optimisticHours !== null &&
+      timeStringToFloat(floatToTime(hours)) === timeStringToFloat(floatToTime(optimisticHours))
+    ) {
+      setOptimisticHours(null);
+      return;
     }
-  }, [hours, isEditing]);
+
+    if (!isEditing) {
+      setDraftHours(floatToTime(displayHours));
+    }
+  }, [displayHours, hours, isEditing, optimisticHours]);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -112,42 +122,87 @@ export const EditableCell = ({
 
   const openDetailDialog = useCallback(() => {
     if (isDisabled) return;
+    debugInlineEdit("open detail dialog", {
+      date,
+      displayHours,
+      gridRow,
+      gridCol,
+      taskName,
+      primaryEntryName: primaryEntry?.name,
+      parent: primaryEntry?.parent,
+    });
     const value = {
       date,
-      hours,
+      hours: displayHours,
       description: primaryEntry?.description ?? "",
       name: primaryEntry?.name ?? "",
       task: data?.[0]?.task ?? "",
       project: data?.[0]?.project ?? "",
     };
     onCellClick?.(value);
-  }, [isDisabled, date, hours, primaryEntry, data, onCellClick]);
+  }, [isDisabled, date, displayHours, gridRow, gridCol, taskName, primaryEntry, data, onCellClick]);
 
   const persistHours = useCallback(
-    async (navigate?: { rowDelta: number; colDelta: number }) => {
-      const parsedHours = timeStringToFloat(draftHours);
+    async (
+      navigate?: { rowDelta: number; colDelta: number },
+      keepEditing = false,
+      nextDraftHours = draftHours
+    ) => {
+      const parsedHours = timeStringToFloat(nextDraftHours);
+      debugInlineEdit("persist requested", {
+        date,
+        gridRow,
+        gridCol,
+        draftHours,
+        nextDraftHours,
+        parsedHours,
+        currentHours: hours,
+        displayHours,
+        taskName,
+        employee,
+        primaryEntryName: primaryEntry?.name,
+        parent: primaryEntry?.parent,
+        keepEditing,
+        navigate,
+      });
+
       if (Number.isNaN(parsedHours) || parsedHours <= 0) {
-        setDraftHours(floatToTime(hours));
-        onStopEditing();
+        debugInlineEdit("persist skipped: invalid hours", {
+          date,
+          nextDraftHours,
+          parsedHours,
+        });
+        setDraftHours(floatToTime(displayHours));
+        if (!keepEditing) onStopEditing(gridRow, gridCol);
         if (navigate) onMoveFocus?.(navigate.rowDelta, navigate.colDelta);
         return;
       }
 
       if (timeStringToFloat(floatToTime(hours)) === parsedHours) {
-        onStopEditing();
+        debugInlineEdit("persist skipped: unchanged hours", {
+          date,
+          parsedHours,
+          currentHours: hours,
+        });
+        if (!keepEditing) onStopEditing(gridRow, gridCol);
         if (navigate) onMoveFocus?.(navigate.rowDelta, navigate.colDelta);
         return;
       }
 
       if (!taskName) {
-        onStopEditing();
+        debugInlineEdit("persist skipped: missing task, opening dialog", {
+          date,
+          parsedHours,
+          data,
+        });
+        if (!keepEditing) onStopEditing(gridRow, gridCol);
         openDetailDialog();
         return;
       }
 
       try {
         if (primaryEntry?.name && primaryEntry.parent) {
-          await updateTimesheet({
+          const payload = {
             name: primaryEntry.name,
             parent: primaryEntry.parent,
             hours: parsedHours,
@@ -155,34 +210,70 @@ export const EditableCell = ({
             task: taskName,
             date,
             input_mode: "duration",
+          };
+          debugInlineEdit("update payload", payload);
+          const response = await updateTimesheet(payload);
+          debugInlineEdit("update success", {
+            response,
+            payload,
           });
         } else {
-          await saveTimesheet({
+          const payload = {
             date,
             description: DEFAULT_INLINE_DESCRIPTION,
             task: taskName,
             hours: parsedHours,
             employee,
             input_mode: "duration",
+          };
+          debugInlineEdit("save payload", payload);
+          const response = await saveTimesheet(payload);
+          debugInlineEdit("save success", {
+            response,
+            payload,
           });
         }
+        setDraftHours(floatToTime(parsedHours));
+        setOptimisticHours(parsedHours);
         onSaved?.();
       } catch (err) {
         const error = parseFrappeErrorMsg(err as Error);
+        debugInlineEdit("persist failed", {
+          parsedError: error,
+          rawError: err,
+          date,
+          parsedHours,
+          taskName,
+          employee,
+          primaryEntryName: primaryEntry?.name,
+          parent: primaryEntry?.parent,
+        });
         toast({ variant: "destructive", description: error });
+        setOptimisticHours(null);
         setDraftHours(floatToTime(hours));
       } finally {
-        onStopEditing();
+        debugInlineEdit("persist finished", {
+          date,
+          gridRow,
+          gridCol,
+          keepEditing,
+          navigate,
+        });
+        if (!keepEditing) onStopEditing(gridRow, gridCol);
         if (navigate) onMoveFocus?.(navigate.rowDelta, navigate.colDelta);
       }
     },
     [
       draftHours,
+      displayHours,
       hours,
       primaryEntry,
+      data,
       taskName,
       date,
       employee,
+      gridRow,
+      gridCol,
       openDetailDialog,
       updateTimesheet,
       saveTimesheet,
@@ -193,25 +284,60 @@ export const EditableCell = ({
     ]
   );
 
+  useEffect(() => {
+    if (!isEditing) return;
+
+    const parsedHours = timeStringToFloat(draftHours);
+    if (Number.isNaN(parsedHours) || parsedHours <= 0) return;
+    if (timeStringToFloat(floatToTime(hours)) === parsedHours) return;
+
+    const timer = window.setTimeout(() => {
+      debugInlineEdit("autosave timer fired", {
+        date,
+        gridRow,
+        gridCol,
+        draftHours,
+        parsedHours,
+      });
+      void persistHours(undefined, true);
+    }, 800);
+
+    return () => window.clearTimeout(timer);
+  }, [date, draftHours, gridRow, gridCol, hours, isEditing, persistHours]);
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     event.stopPropagation();
     if (event.key === "Enter") {
       event.preventDefault();
+      debugInlineEdit("keydown enter", { date, gridRow, gridCol, draftHours });
       void persistHours({ rowDelta: 0, colDelta: 1 });
     }
     if (event.key === "Escape") {
       event.preventDefault();
+      debugInlineEdit("keydown escape", { date, gridRow, gridCol, draftHours });
       setDraftHours(floatToTime(hours));
-      onStopEditing();
+      onStopEditing(gridRow, gridCol);
     }
     if (event.key === "Tab") {
       event.preventDefault();
+      debugInlineEdit("keydown tab", { date, gridRow, gridCol, draftHours, shiftKey: event.shiftKey });
       void persistHours({ rowDelta: 0, colDelta: event.shiftKey ? -1 : 1 });
     }
   };
 
   const handleCellClick = () => {
     if (isDisabled) return;
+    debugInlineEdit("cell clicked", {
+      date,
+      gridRow,
+      gridCol,
+      taskName,
+      hasMultipleEntries,
+      primaryEntryInputMode: primaryEntry?.input_mode,
+      fromTime: primaryEntry?.from_time,
+      toTime: primaryEntry?.to_time,
+      data,
+    });
     onFocusCell(gridRow, gridCol);
     if (
       !taskName ||
@@ -255,6 +381,7 @@ export const EditableCell = ({
       default:
         if (/^[0-9.:]$/.test(event.key) && taskName && !hasMultipleEntries) {
           event.preventDefault();
+          debugInlineEdit("typed to start editing", { date, gridRow, gridCol, key: event.key });
           onStartEditing(gridRow, gridCol);
           setDraftHours(event.key);
         }
@@ -262,7 +389,7 @@ export const EditableCell = ({
     }
   };
 
-  const displayValue = hours > 0 ? (rangeLabel || floatToTime(hours)) : "-";
+  const displayValue = displayHours > 0 ? (rangeLabel || floatToTime(displayHours)) : "-";
 
   return (
     <HoverCard openDelay={500} closeDelay={500}>
@@ -293,8 +420,24 @@ export const EditableCell = ({
             <Input
               ref={inputRef}
               value={draftHours}
-              onChange={(event) => setDraftHours(event.target.value)}
-              onBlur={() => void persistHours()}
+              onChange={(event) => {
+                debugInlineEdit("input changed", {
+                  date,
+                  gridRow,
+                  gridCol,
+                  value: event.target.value,
+                });
+                setDraftHours(event.target.value);
+              }}
+              onBlur={(event) => {
+                debugInlineEdit("input blurred", {
+                  date,
+                  gridRow,
+                  gridCol,
+                  value: event.currentTarget.value,
+                });
+                void persistHours(undefined, false, event.currentTarget.value);
+              }}
               onKeyDown={handleKeyDown}
               className="h-8 px-1 text-center"
               placeholder="00:00"
@@ -311,22 +454,21 @@ export const EditableCell = ({
                 variant="p"
                 className={mergeClassNames(
                   isHoliday || (isDisabled && "text-slate-400 dark:text-muted-foreground/60"),
-                  !hours && !isDisabled && "group-hover:hidden"
+                  !displayHours && !isDisabled && "group-hover:hidden"
                 )}
               >
                 {displayValue}
               </Typography>
-              {(isTimeBothBillableAndNonBillable || isTimeBillable) && (
-                <CircleDollarSign
-                  className={mergeClassNames(!isDisabled && "group-hover:hidden", isTimeBillable && "stroke-success")}
-                />
-              )}
+              {displayHours > 0 && <BillableIndicator entries={data} compact />}
               <PencilLine
-                className={mergeClassNames("text-center hidden", hours > 0 && !isDisabled && "group-hover:block")}
+                className={mergeClassNames(
+                  "text-center hidden",
+                  displayHours > 0 && !isDisabled && "group-hover:block"
+                )}
                 size={16}
               />
               <CirclePlus
-                className={mergeClassNames("text-center hidden", !hours && !isDisabled && "group-hover:block ")}
+                className={mergeClassNames("text-center hidden", !displayHours && !isDisabled && "group-hover:block ")}
                 size={16}
               />
             </span>
@@ -337,7 +479,7 @@ export const EditableCell = ({
             className="text-left whitespace-pre text-wrap w-full max-w-96 max-h-52 overflow-auto hover-content p-0"
             onClick={(e) => e.stopPropagation()}
           >
-            <TextEditor onChange={() => {}} hideToolbar={true} readOnly={true} value={description} />
+            <MarkdownContent value={description} className="p-3" />
           </HoverCardContent>
         )}
       </TableCell>

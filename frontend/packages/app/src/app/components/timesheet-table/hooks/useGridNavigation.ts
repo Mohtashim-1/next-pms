@@ -82,8 +82,13 @@ export const useGridNavigation = ({ rowCount, colCount }: UseGridNavigationOptio
     setEditingCell({ row, col });
   }, []);
 
-  const stopEditing = useCallback(() => {
-    setEditingCell(null);
+  const stopEditing = useCallback((row?: number, col?: number) => {
+    setEditingCell((current) => {
+      if (!current) return null;
+      if (row === undefined || col === undefined) return null;
+      if (current.row !== row || current.col !== col) return current;
+      return null;
+    });
   }, []);
 
   const focusCell = useCallback((row: number, col: number) => {

@@ -212,7 +212,8 @@ after_install = "next_pms.install.after_install"
 # ------------------------------
 #
 override_whitelisted_methods = {
-    "erpnext.projects.doctype.project.project.recalculate_project_total_purchase_cost": "next_pms.project_currency.overrides.project.recalculate_project_total_purchase_cost"
+    "erpnext.projects.doctype.project.project.recalculate_project_total_purchase_cost": "next_pms.project_currency.overrides.project.recalculate_project_total_purchase_cost",
+    "erpnext.projects.doctype.timesheet.timesheet.make_sales_invoice": "next_pms.timesheet.overrides.sales_invoice.make_sales_invoice",
 }
 
 doc_events = {

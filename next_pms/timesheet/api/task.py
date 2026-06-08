@@ -75,14 +75,27 @@ def get_task_list(
         return {"task": [], "total_count": 0, "has_more": False}
     doctype = DocType("Task")
     doctype_project = DocType("Project")
+    description_project_fields = [
+        "custom_require_timesheet_description",
+        "custom_show_description_in_approval",
+        "custom_include_description_on_invoice",
+    ]
+    available_description_fields = [
+        field for field in description_project_fields if frappe.db.has_column("Project", field)
+    ]
+    project_select_fields = [
+        doctype_project.name.as_("project"),
+        doctype_project.project_name,
+    ]
+    project_select_fields.extend(getattr(doctype_project, field) for field in available_description_fields)
+
     tasks = (
         frappe.qb.from_(doctype)
         .join(doctype_project)
         .on(doctype.project == doctype_project.name)
         .select(
             *field_list,
-            doctype_project.name.as_("project"),
-            doctype_project.project_name,
+            *project_select_fields,
             doctype.custom_is_billable,
             doctype.exp_end_date,
         )
@@ -140,6 +153,12 @@ def get_task_list(
         order=Order.desc,
     )
     tasks = tasks.run(as_dict=True)
+    from next_pms.timesheet.utils.billable import get_project_default_is_billable
+
+    for task in tasks:
+        task["project_default_is_billable"] = get_project_default_is_billable(task.get("project"))
+        for field in description_project_fields:
+            task.setdefault(field, 0)
 
     count = get_count(
         doctype="Task",

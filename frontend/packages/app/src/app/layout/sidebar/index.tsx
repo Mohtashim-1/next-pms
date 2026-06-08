@@ -22,7 +22,8 @@ import {
 /**
  * Internal dependencies.
  */
-import { HOME, PROJECT, RESOURCE_MANAGEMENT, ROLES, TASK, TEAM, TIMESHEET } from "@/lib/constant";
+import { HOME, PROJECT, RESOURCE_MANAGEMENT, ROLES, TASK, TEAM, TEAM_APPROVALS, TIMESHEET } from "@/lib/constant";
+import { useFrappeGetCall } from "frappe-react-sdk";
 import { setLocalStorage } from "@/lib/storage";
 import { checkIsMobile, mergeClassNames } from "@/lib/utils";
 import { setSidebarCollapsed } from "@/store/user";
@@ -43,6 +44,16 @@ const Sidebar = () => {
   });
 
   const hasPmRole = user.roles.some((role: string) => ROLES.includes(role));
+  const { data: approvalCountData } = useFrappeGetCall(
+    "next_pms.timesheet.api.approval_queue.get_approval_queue_count",
+    {},
+    hasPmRole ? "approval-queue-count" : null,
+    {
+      revalidateOnFocus: true,
+      refreshInterval: 60000,
+    }
+  );
+  const approvalQueueCount = approvalCountData?.message?.count ?? 0;
   const privateViews = viewInfo.views.filter(
     (view: ViewData) => view.user === user.user && !view.default && !view.public
   );
@@ -255,6 +266,11 @@ const Sidebar = () => {
                       >
                         {route.label}
                       </Typography>
+                      {route.key === "team" && approvalQueueCount > 0 && (
+                        <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 py-0.5 text-[0.65rem] font-semibold text-destructive-foreground">
+                          {approvalQueueCount > 99 ? "99+" : approvalQueueCount}
+                        </span>
+                      )}
                     </div>
                   )}
                 </NavLink>

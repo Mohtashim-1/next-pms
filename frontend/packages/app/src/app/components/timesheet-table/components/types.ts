@@ -5,6 +5,7 @@ import type { TaskData, WorkingFrequency } from "@/types";
 import type {
   HolidayProp,
   LeaveProps,
+  PeriodLockProp,
   TaskDataItemProps,
   TaskDataProps,
   TaskProps,
@@ -27,6 +28,7 @@ export type cellProps = {
 export type HeaderProps = {
   dates: string[];
   holidays: HolidayProp[];
+  periodLocks?: PeriodLockProp[];
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   onCellClick?: (data) => void;
@@ -42,6 +44,7 @@ export type submitButtonProps = {
   end_date: string;
   onApproval?: (start_date: string, end_date: string) => void;
   onRecall?: (start_date: string, end_date: string) => void;
+  onAbandonDraft?: (start_date: string, end_date: string) => void;
   status: string;
   expectedHours: number;
   totalHours: number;
@@ -86,4 +89,5 @@ export type timesheetTableProps = {
   employee?: string;
   onSaved?: () => void;
   enableInlineEdit?: boolean;
+  periodLocks?: PeriodLockProp[];
 };

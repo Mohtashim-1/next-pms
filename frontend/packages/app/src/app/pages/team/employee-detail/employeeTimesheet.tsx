@@ -173,6 +173,7 @@ export const EmployeeTimesheet = ({
                     hideLikeButton={true}
                     employee={id}
                     enableInlineEdit={!isWeekLocked}
+                    periodLocks={teamState.timesheetData.period_locks ?? []}
                   />
                 </AccordionContent>
               </AccordionItem>

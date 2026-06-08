@@ -11,6 +11,8 @@ const descriptionSchema = z
   .trim()
   .min(1, { message: "Please enter description." });
 
+const draftDescriptionSchema = z.string().optional().default("");
+
 const leaveReasonSchema = z
   .string({
     required_error: "Please enter a valid reason.",
@@ -51,6 +53,60 @@ export const hourSchema = z.preprocess(
 );
 
 const timesheetInputModeSchema = z.enum(["duration", "range"]).default("duration");
+
+const billableOverrideReasonSchema = z.string().trim().optional().default("");
+
+const validateBillableOverride = (
+  v: {
+    is_billable?: boolean | number;
+    project_default_is_billable?: boolean | number;
+    billable_override_reason?: string;
+  },
+  ctx: z.RefinementCtx
+) => {
+  if (v.is_billable === undefined || v.project_default_is_billable === undefined) {
+    return;
+  }
+
+  const isBillable = v.is_billable === true || v.is_billable === 1;
+  const projectDefault = v.project_default_is_billable === true || v.project_default_is_billable === 1;
+
+  if (isBillable !== projectDefault && !v.billable_override_reason?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["billable_override_reason"],
+      message: "Override reason is required when billable status differs from the project default.",
+    });
+  }
+};
+
+const validateDraftDurationOrRange = (
+  v: { input_mode?: "duration" | "range"; hours?: unknown; from_time?: string; to_time?: string },
+  ctx: z.RefinementCtx
+) => {
+  if (v.input_mode === "range") {
+    if (v.from_time && v.to_time && timeStringToFloat(v.to_time) <= timeStringToFloat(v.from_time)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["to_time"],
+        message: "End time must be after start time.",
+      });
+    }
+    return;
+  }
+
+  if (v.hours == null || v.hours === "" || v.hours === 0) {
+    return;
+  }
+
+  if (Number(v.hours) > 24) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["hours"],
+      message: "Hour should be less than 24",
+    });
+  }
+};
 
 const validateDurationOrRange = (
   v: { input_mode?: "duration" | "range"; hours?: unknown; from_time?: string; to_time?: string },
@@ -96,6 +152,36 @@ const validateDurationOrRange = (
     });
   }
 };
+
+export const TimesheetDraftSchema = z
+  .object({
+    task: z
+      .string({
+        required_error: "Please select a task.",
+      })
+      .trim()
+      .min(1, { message: "Please select a task." }),
+    description: draftDescriptionSchema,
+    hours: z.union([hourSchema, z.string().optional(), z.number().optional()]).optional(),
+    date: z.string({
+      required_error: "Please enter date.",
+    }),
+    employee: z.string({}),
+    input_mode: timesheetInputModeSchema,
+    from_time: z.string().optional(),
+    to_time: z.string().optional(),
+    is_billable: z
+      .union([z.boolean(), z.number()])
+      .transform((val) => (typeof val === "number" ? Boolean(val) : val))
+      .optional(),
+    project_default_is_billable: z
+      .union([z.boolean(), z.number()])
+      .transform((val) => (typeof val === "number" ? Boolean(val) : val))
+      .optional(),
+    billable_override_reason: billableOverrideReasonSchema,
+  })
+  .superRefine(validateDraftDurationOrRange)
+  .superRefine(validateBillableOverride);
 
 export const TimesheetSchema = z
   .object({
@@ -147,6 +233,35 @@ export const TimesheetRejectionSchema = z.object({
   }),
 });
 
+export const TimesheetDraftSingleRowSchema = z
+  .object({
+    name: z.string({}),
+    hours: z.union([hourSchema, z.string().optional(), z.number().optional()]).optional(),
+    description: draftDescriptionSchema,
+    date: z.string({}),
+    task: z.string({}),
+    parent: z.string({}),
+    input_mode: timesheetInputModeSchema,
+    from_time: z.string().optional(),
+    to_time: z.string().optional(),
+    is_billable: z
+      .union([z.boolean(), z.number()])
+      .transform((val) => {
+        if (typeof val === "number") {
+          return Boolean(val);
+        }
+        return val;
+      })
+      .optional(),
+    project_default_is_billable: z
+      .union([z.boolean(), z.number()])
+      .transform((val) => (typeof val === "number" ? Boolean(val) : val))
+      .optional(),
+    billable_override_reason: billableOverrideReasonSchema,
+  })
+  .superRefine(validateDraftDurationOrRange)
+  .superRefine(validateBillableOverride);
+
 export const TimesheetSingleRowSchema = z
   .object({
     name: z.string({}),
@@ -167,8 +282,18 @@ export const TimesheetSingleRowSchema = z
         return val;
       })
       .optional(),
+    project_default_is_billable: z
+      .union([z.boolean(), z.number()])
+      .transform((val) => (typeof val === "number" ? Boolean(val) : val))
+      .optional(),
+    billable_override_reason: billableOverrideReasonSchema,
   })
-  .superRefine(validateDurationOrRange);
+  .superRefine(validateDurationOrRange)
+  .superRefine(validateBillableOverride);
+
+export const TimesheetDraftUpdateSchema = z.object({
+  data: z.array(TimesheetDraftSingleRowSchema),
+});
 
 export const TimesheetUpdateSchema = z.object({
   data: z.array(TimesheetSingleRowSchema),

@@ -17,6 +17,10 @@ export interface TaskData {
   status: TaskStatusType;
   description: string | null;
   custom_is_billable: boolean;
+  project_default_is_billable?: boolean | number;
+  custom_require_timesheet_description?: boolean | number;
+  custom_show_description_in_approval?: boolean | number;
+  custom_include_description_on_invoice?: boolean | number;
   actual_time: number;
   due_date: string;
   expected_time: number;

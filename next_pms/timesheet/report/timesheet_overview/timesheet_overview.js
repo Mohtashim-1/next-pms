@@ -38,5 +38,11 @@ frappe.query_reports["Timesheet Overview"] = {
       options: "Task",
       ignore_user_permissions: frappe.user_roles.includes("Timesheet Manager"),
     },
+    {
+      fieldname: "rejected_only",
+      label: __("Rejected Entries Only"),
+      fieldtype: "Check",
+      default: 0,
+    },
   ],
 };

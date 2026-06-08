@@ -52,6 +52,7 @@ export const TimesheetTable = ({
   employee,
   onSaved,
   enableInlineEdit = true,
+  periodLocks = [],
 }: timesheetTableProps) => {
   const holidayList = getHolidayList(holidays);
   const [isTaskLogDialogBoxOpen, setIsTaskLogDialogBoxOpen] = useState(false);
@@ -192,6 +193,7 @@ export const TimesheetTable = ({
           dates={dates}
           importTasks={importTasks}
           holidays={holidays}
+          periodLocks={periodLocks}
           loadingLikedTasks={loadingLikedTasks}
           setTaskInLocalStorage={setTaskInLocalStorage}
         />
@@ -225,6 +227,7 @@ export const TimesheetTable = ({
               runningTimerDate={runningTimerDate}
               runningTimerElapsed={runningTimerElapsed}
               gridRow={nextGridRow++}
+              periodLocks={periodLocks}
               {...gridBindings}
             />
           )}
@@ -250,6 +253,7 @@ export const TimesheetTable = ({
                   runningTimerDate={runningTimerDate}
                   runningTimerElapsed={runningTimerElapsed}
                   gridRow={gridRow}
+                  periodLocks={periodLocks}
                   {...gridBindings}
                 />
               );
@@ -271,13 +275,14 @@ export const TimesheetTable = ({
             runningTimerDate={runningTimerDate}
             runningTimerElapsed={runningTimerElapsed}
             gridRow={nextGridRow}
+            periodLocks={periodLocks}
             {...gridBindings}
           />
         </TableBody>
       </Table>
       {gridBindings.enableInlineEdit && (
         <Typography variant="small" className="text-muted-foreground px-1 py-2">
-          Arrow keys move between cells · Enter or type a digit to edit · Tab / Shift+Tab next cell · Esc cancel
+          Draft auto-saves as you edit · Arrow keys move between cells · Enter or type a digit to edit · Tab / Shift+Tab next cell · Esc cancel
         </Typography>
       )}
       </div>

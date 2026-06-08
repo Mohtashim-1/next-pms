@@ -13,8 +13,16 @@ ROLES = {
 #  Doc Events for Timesheet DocType
 def validate(doc, method=None):
     set_date(doc)
+    validate_period_locked_dates(doc)
+    if getattr(doc.flags, "skip_submission_validation", False):
+        update_note(doc)
+        flush_cache(doc)
+        return
+
     validate_time(doc)
     validate_dates(doc)
+    validate_billable_overrides(doc)
+    validate_required_descriptions(doc)
     update_note(doc)
     flush_cache(doc)
 
@@ -99,6 +107,14 @@ def update_note(doc):
     doc.note = note
 
 
+def validate_period_locked_dates(doc):
+    from next_pms.timesheet.utils.period_lock import assert_date_not_period_locked
+
+    for log in doc.get("time_logs") or []:
+        if log.from_time:
+            assert_date_not_period_locked(getdate(log.from_time))
+
+
 def validate_time(doc):
     if not doc.employee:
         throw(_("Employee is required."))
@@ -108,6 +124,29 @@ def validate_time(doc):
 
     if doc.total_hours > 24:
         throw(_("You cannot log more than 24 hours in a single day."))
+
+
+def validate_required_descriptions(doc, method=None):
+    from next_pms.timesheet.utils.description import validate_entry_description
+
+    for log in doc.get("time_logs"):
+        if not log.task:
+            continue
+        validate_entry_description(log.task, log.project, log.description)
+
+
+def validate_billable_overrides(doc, method=None):
+    from next_pms.timesheet.utils.billable import resolve_entry_billable
+
+    for log in doc.get("time_logs"):
+        if not log.task:
+            continue
+        resolve_entry_billable(
+            log.task,
+            log.is_billable,
+            log.get("custom_billable_override_reason"),
+            require_override_reason=True,
+        )
 
 
 def validate_is_time_billable(doc, method=None):

@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -9,7 +9,6 @@ import {
   Spinner,
   Typography,
   Button,
-  Checkbox,
   Dialog,
   DialogContent,
   DialogFooter,
@@ -24,7 +23,6 @@ import {
   Input,
   Separator,
   useToast,
-  TextEditor,
 } from "@next-pms/design-system/components";
 import { getFormatedDate } from "@next-pms/design-system/date";
 import { floatToTime, mergeClassNames } from "@next-pms/design-system/utils";
@@ -35,25 +33,29 @@ import { z } from "zod";
  * Internal dependencies
  */
 import TimeSelector from "@/app/components/add-time/time-selector";
+import { BillableFields } from "@/app/components/timesheet-billable/billableFields";
+import { TimesheetDescriptionField } from "@/app/components/timesheet-description/descriptionField";
 import { InputModeToggle } from "@/app/components/timesheet-input/inputModeToggle";
+import { isBillableValue } from "@/lib/timesheetBillable";
 import { TimeRangeFields } from "@/app/components/timesheet-input/timeRangeFields";
 import { TIMESHEET_INPUT_MODE_KEY } from "@/lib/constant";
 import { getLocalStorage, setLocalStorage } from "@/lib/storage";
 import { extractTimeFromDatetime, isRangeEntry, type TimesheetInputMode } from "@/lib/timesheetTime";
 import { parseFrappeErrorMsg } from "@/lib/utils";
-import { TimesheetUpdateSchema } from "@/schema/timesheet";
+import { TimesheetDraftUpdateSchema } from "@/schema/timesheet";
 import type { EditTimeProps, TimesheetDetail } from "./types";
 
-export const EditTime = ({ employee, date, task, open, onClose, user }: EditTimeProps) => {
+export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const hasAccess = user.roles.includes("Projects Manager") || user.roles.includes("Timesheet Manager");
+  const [draftSaveStatus, setDraftSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const autoSaveRequestRef = useRef(0);
 
-  const form = useForm<z.infer<typeof TimesheetUpdateSchema>>({
-    resolver: zodResolver(TimesheetUpdateSchema),
+  const form = useForm<z.infer<typeof TimesheetDraftUpdateSchema>>({
+    resolver: zodResolver(TimesheetDraftUpdateSchema),
     defaultValues: {
       data: [],
     },
-    mode: "onSubmit",
+    mode: "onChange",
   });
 
   const { fields, append, remove } = useFieldArray({
@@ -72,6 +74,8 @@ export const EditTime = ({ employee, date, task, open, onClose, user }: EditTime
     date: date,
     task: task,
   });
+  const projectDefaultIsBillable = data?.message?.project_default_is_billable;
+  const descriptionRequired = Boolean(data?.message?.description_required);
 
   const updatedData = useMemo(() => {
     if (!data) return [];
@@ -83,6 +87,9 @@ export const EditTime = ({ employee, date, task, open, onClose, user }: EditTime
         input_mode: rangeMode ? "range" : "duration",
         from_time: extractTimeFromDatetime(item.from_time),
         to_time: extractTimeFromDatetime(item.to_time),
+        is_billable: isBillableValue(item.is_billable),
+        project_default_is_billable: data.message.project_default_is_billable,
+        billable_override_reason: item.billable_override_reason || "",
       };
     });
     return updatedData;
@@ -119,38 +126,90 @@ export const EditTime = ({ employee, date, task, open, onClose, user }: EditTime
       input_mode: inputMode,
       from_time: "",
       to_time: "",
+      is_billable: isBillableValue(projectDefaultIsBillable),
+      project_default_is_billable: projectDefaultIsBillable,
+      billable_override_reason: "",
     };
     append(newRow, { shouldFocus: true });
   };
 
-  const handleUpdate = (formData: z.infer<typeof TimesheetUpdateSchema>) => {
-    setIsSubmitting(true);
-    const data = {
-      data: formData.data.map((row) =>
+  const buildUpdatePayload = (formData: z.infer<typeof TimesheetDraftUpdateSchema>) => ({
+    data: formData.data
+      .filter((row) => row.name || row.hours || row.from_time || row.to_time)
+      .map((row) =>
         row.input_mode === "range"
-          ? { ...row, hours: 0 }
-          : row
+          ? { ...row, description: row.description || "-", hours: 0 }
+          : { ...row, description: row.description || "-" }
       ),
-    };
-    updateTimesheet(data)
-      .then((res) => {
+  });
+
+  const persistDraft = useCallback(
+    async (formData: z.infer<typeof TimesheetDraftUpdateSchema>, showToast = false) => {
+      const parsed = TimesheetDraftUpdateSchema.safeParse(formData);
+      if (!parsed.success || parsed.data.data.length === 0) {
+        return false;
+      }
+
+      const requestId = ++autoSaveRequestRef.current;
+      setDraftSaveStatus("saving");
+
+      try {
+        const res = await updateTimesheet(buildUpdatePayload(parsed.data));
+        if (requestId !== autoSaveRequestRef.current) {
+          return false;
+        }
+        setDraftSaveStatus("saved");
         mutate();
-        form.reset({ data: updatedData });
-        toast({
-          variant: "success",
-          description: res.message,
-        });
-        setIsSubmitting(false);
-      })
-      .catch((err) => {
-        const error = parseFrappeErrorMsg(err);
-        toast({
-          variant: "destructive",
-          description: error,
-        });
-        setIsSubmitting(false);
-      });
+        if (showToast) {
+          toast({
+            variant: "success",
+            description: res.message,
+          });
+        }
+        return true;
+      } catch (err) {
+        if (requestId === autoSaveRequestRef.current) {
+          setDraftSaveStatus("error");
+          if (showToast) {
+            const error = parseFrappeErrorMsg(err);
+            toast({
+              variant: "destructive",
+              description: error,
+            });
+          }
+        }
+        return false;
+      }
+    },
+    [mutate, toast, updateTimesheet]
+  );
+
+  const handleUpdate = async (formData: z.infer<typeof TimesheetDraftUpdateSchema>) => {
+    setIsSubmitting(true);
+    await persistDraft(formData, true);
+    setIsSubmitting(false);
   };
+
+  useEffect(() => {
+    if (!open) {
+      setDraftSaveStatus("idle");
+      return;
+    }
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const subscription = form.watch((values) => {
+      if (!values.data?.length) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void persistDraft(values as z.infer<typeof TimesheetDraftUpdateSchema>);
+      }, 800);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, [form, open, persistDraft]);
 
   const removeFormRow = (index: number) => {
     const currentData = form.getValues().data || [];
@@ -183,7 +242,19 @@ export const EditTime = ({ employee, date, task, open, onClose, user }: EditTime
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Edit Time</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            Edit Time
+            {draftSaveStatus === "saving" && (
+              <Typography variant="small" className="text-muted-foreground">
+                Saving draft...
+              </Typography>
+            )}
+            {draftSaveStatus === "saved" && (
+              <Typography variant="small" className="text-success">
+                Draft saved
+              </Typography>
+            )}
+          </DialogTitle>
           <Separator />
           <div className="flex justify-between w-full ">
             <span className="flex flex-col items-start">
@@ -213,8 +284,7 @@ export const EditTime = ({ employee, date, task, open, onClose, user }: EditTime
                           "w-full px-2 text-slate-600 dark:text-slate-200 font-medium ",
                           key != 2 && "max-w-16",
                           key == 0 && "max-w-28",
-                          key == 3 && "max-w-8",
-                          key == 3 && !hasAccess && "hidden"
+                          key == 3 && "max-w-24"
                         )}
                       >
                         {column}
@@ -314,50 +384,25 @@ export const EditTime = ({ employee, date, task, open, onClose, user }: EditTime
                         />
                       </div>
                     )}
-                    <FormField
-                      control={form.control}
-                      name={`data.${index}.description`}
-                      render={({ field }) => {
-                        return (
-                          <FormItem className="w-full md:px-2 ">
-                            <FormLabel className="flex gap-2 items-center md:hidden">
-                              <p title="subject" className="text-sm truncate">
-                                Description
-                              </p>
-                            </FormLabel>
-                            <FormControl>
-                              <TextEditor
-                                placeholder="Update your progress"
-                                value={field.value}
-                                onChange={field.onChange}
-                              />
-                            </FormControl>
-                            <FormMessage className="text-xs" />
-                          </FormItem>
-                        );
-                      }}
-                    />
-                    {hasAccess && (
-                      <FormField
+                    <div className="w-full md:px-2">
+                      <TimesheetDescriptionField
                         control={form.control}
-                        name={`data.${index}.is_billable`}
-                        render={({ field }) => {
-                          return (
-                            <FormItem className="w-full md:flex md:justify-center md:items-center md:min-h-10 md:max-w-12 md:px-2 md:text-center">
-                              <FormLabel className="flex gap-2 items-center md:hidden">
-                                <p title="subject" className="text-sm truncate">
-                                  Billable
-                                </p>
-                              </FormLabel>
-                              <FormControl>
-                                <Checkbox checked={Boolean(field.value)} onCheckedChange={field.onChange} />
-                              </FormControl>
-                              <FormMessage className="text-xs" />
-                            </FormItem>
-                          );
-                        }}
+                        name={`data.${index}.description`}
+                        required={descriptionRequired}
+                        label="Description"
+                        placeholder="Update your progress"
                       />
-                    )}
+                    </div>
+                    <div className="w-full md:max-w-40 md:px-2">
+                      <BillableFields
+                        control={form.control}
+                        isBillableName={`data.${index}.is_billable`}
+                        reasonName={`data.${index}.billable_override_reason`}
+                        projectDefault={projectDefaultIsBillable}
+                        watchedIsBillable={form.watch(`data.${index}.is_billable`)}
+                        showDefaultHint={index === 0}
+                      />
+                    </div>
                     <div className=" flex items-center min-h-10 gap-2 md:px-2 max-md:w-full">
                       <Button
                         variant="destructive"

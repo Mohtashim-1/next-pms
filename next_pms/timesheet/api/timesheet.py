@@ -16,6 +16,14 @@ from frappe.utils import (
 
 from next_pms.api.utils import error_logger
 from next_pms.resource_management.api.utils.query import get_employee_leaves
+from next_pms.timesheet.utils.billable import enrich_log_billable_fields, get_project_default_is_billable, resolve_entry_billable
+from next_pms.timesheet.utils.description import (
+    enrich_log_description_fields,
+    get_project_description_settings,
+    is_meaningful_description,
+    strip_description_content,
+    validate_entry_description,
+)
 from next_pms.timesheet.utils.constant import EMP_TIMESHEET
 from next_pms.timesheet.utils.time_log import (
     get_input_mode_from_description,
@@ -65,8 +73,28 @@ def _get_open_timesheet(employee: str, date, project: str):
     return frappe.get_doc({"doctype": "Timesheet", "employee": employee})
 
 
-def _append_time_log(employee: str, task: str, description: str, from_time, to_time, hours: float):
-    project, custom_is_billable = frappe.get_value("Task", task, ["project", "custom_is_billable"])
+def _mark_draft_save(timesheet):
+    timesheet.flags.skip_submission_validation = True
+
+
+def _append_time_log(
+    employee: str,
+    task: str,
+    description: str,
+    from_time,
+    to_time,
+    hours: float,
+    is_billable=None,
+    billable_override_reason: str | None = None,
+    require_override_reason: bool = False,
+):
+    project = frappe.get_value("Task", task, "project")
+    resolved_billable, override_reason, _default = resolve_entry_billable(
+        task,
+        is_billable,
+        billable_override_reason,
+        require_override_reason=require_override_reason,
+    )
     timesheet = _get_open_timesheet(employee, getdate(from_time), project)
     timesheet.update({"parent_project": project})
     timesheet.append(
@@ -78,9 +106,11 @@ def _append_time_log(employee: str, task: str, description: str, from_time, to_t
             "from_time": from_time,
             "to_time": to_time,
             "project": project,
-            "is_billable": custom_is_billable,
+            "is_billable": resolved_billable,
+            "custom_billable_override_reason": override_reason,
         },
     )
+    _mark_draft_save(timesheet)
     ignore_permissions = employee_has_higher_access(employee, ptype="write")
     return timesheet, ignore_permissions
 
@@ -127,6 +157,7 @@ def _get_timesheet_submission_summary(employee: str, start_date: str):
     entry_count = 0
     total_hours = 0
     day_totals = {}
+    approval_descriptions = []
 
     for timesheet in timesheets:
         total_hours += flt(timesheet.total_hours)
@@ -143,8 +174,28 @@ def _get_timesheet_submission_summary(employee: str, start_date: str):
                 violations.append(_("Time entry {0} is missing a task.").format(log.name))
             if not log.project:
                 violations.append(_("Time entry {0} is missing a project.").format(log.name))
-            if not log.description:
-                violations.append(_("Time entry {0} is missing a description.").format(log.name))
+            description_settings = get_project_description_settings(log.project)
+            if description_settings["required"] and not is_meaningful_description(log.description):
+                violations.append(
+                    _("Time entry {0} requires a description for project {1}.").format(
+                        log.name, log.project or _("Unknown")
+                    )
+                )
+            if description_settings["show_in_approval"] and is_meaningful_description(log.description):
+                task_subject = frappe.db.get_value("Task", log.task, "subject") if log.task else ""
+                project_name = frappe.db.get_value("Project", log.project, "project_name") if log.project else ""
+                approval_descriptions.append(
+                    {
+                        "entry": log.name,
+                        "task": log.task,
+                        "task_subject": task_subject,
+                        "project": log.project,
+                        "project_name": project_name,
+                        "date": str(getdate(log.from_time)),
+                        "hours": flt(log.hours, 2),
+                        "description": strip_description_content(log.description),
+                    }
+                )
             if flt(log.hours) <= 0:
                 violations.append(_("Time entry {0} must be greater than zero hours.").format(log.name))
 
@@ -190,10 +241,15 @@ def _get_timesheet_submission_summary(employee: str, start_date: str):
         "warnings": warnings,
         "violations": violations,
         "can_submit": not violations,
+        "approval_descriptions": approval_descriptions,
     }
 
 
 def _assert_week_editable(employee: str, date):
+    from next_pms.timesheet.utils.period_lock import assert_date_not_period_locked
+
+    assert_date_not_period_locked(date)
+
     locked_statuses = {"Approval Pending", "Processing Timesheet", "Approved", "Partially Approved"}
     start_date, end_date = _get_week_range(date)
     statuses = frappe.get_all(
@@ -242,14 +298,21 @@ def _has_overlap(start, end, intervals):
     return any(start < interval_end and end > interval_start for interval_start, interval_end in intervals)
 
 
-def _resolve_duration_time_slot(employee: str, date, hours: float, exclude_detail_name: str | None = None, preferred_from=None):
+def _resolve_duration_time_slot(
+    employee: str,
+    date,
+    hours: float,
+    exclude_detail_name: str | None = None,
+    preferred_from=None,
+    draft_mode: bool = False,
+):
     day_start = get_datetime(getdate(date)).replace(hour=0, minute=0, second=0, microsecond=0)
     duration = timedelta(hours=float(hours or 0))
     if duration.total_seconds() <= 0:
         return day_start, day_start, float(hours or 0)
 
     intervals = _get_day_intervals(employee, date, exclude_detail_name=exclude_detail_name)
-    day_end = day_start + timedelta(days=1)
+    day_end = day_start + timedelta(days=1, seconds=-1)
     if preferred_from:
         preferred_start = get_datetime(preferred_from)
         if preferred_start and getdate(preferred_start) == getdate(date):
@@ -267,6 +330,12 @@ def _resolve_duration_time_slot(employee: str, date, hours: float, exclude_detai
 
     candidate_end = candidate_start + duration
     if candidate_end > day_end:
+        if draft_mode:
+            clipped_end = min(candidate_end, day_end)
+            if clipped_end <= candidate_start:
+                clipped_end = min(day_start + timedelta(minutes=1), day_end)
+            clipped_hours = time_diff_in_hours(clipped_end, candidate_start)
+            return candidate_start, clipped_end, flt(clipped_hours, 3)
         throw(_("There is not enough free time on {0} to add {1} hours without overlap.").format(date, hours))
     return candidate_start, candidate_end, float(hours)
 
@@ -342,6 +411,11 @@ def get_timesheet_data(employee: str, start_date: str | None = None, max_week: i
         res["data"] = generate_week_data(start_date, max_week)
         res["holidays"] = []
         res["leaves"] = []
+        from next_pms.timesheet.utils.period_lock import get_active_locks_between
+
+        range_start = add_days(start_date, -max_week * 7)
+        range_end = add_days(start_date, max_week * 7)
+        res["period_locks"] = get_active_locks_between(range_start, range_end)
         return res
 
     holidays = get_holidays(
@@ -358,6 +432,12 @@ def get_timesheet_data(employee: str, start_date: str | None = None, max_week: i
     res["leaves"] = leaves
     res["holidays"] = holidays
     res["data"] = generate_week_data(start_date, max_week, employee, leaves, holidays)
+
+    from next_pms.timesheet.utils.period_lock import get_active_locks_between
+
+    range_start = add_days(start_date, -max_week * 7)
+    range_end = add_days(start_date, max_week * 7)
+    res["period_locks"] = get_active_locks_between(range_start, range_end)
     return res
 
 
@@ -372,6 +452,8 @@ def save(
     from_time: str = None,
     to_time: str = None,
     input_mode: str = "duration",
+    is_billable: bool | None = None,
+    billable_override_reason: str | None = None,
 ):
     """create time entry in Timesheet Detail child table."""
     if not employee:
@@ -379,9 +461,12 @@ def save(
     if not task:
         throw(_("Task is mandatory for creating time entry."), frappe.MandatoryError)
     _assert_week_editable(employee, date)
+    description = description or "-"
 
     if input_mode == "duration":
-        resolved_from, resolved_to, resolved_hours = _resolve_duration_time_slot(employee, date, hours)
+        resolved_from, resolved_to, resolved_hours = _resolve_duration_time_slot(
+            employee, date, hours, draft_mode=True
+        )
     else:
         resolved_from, resolved_to, resolved_hours = resolve_time_log_times(
             date=date,
@@ -397,6 +482,9 @@ def save(
         from_time=resolved_from,
         to_time=resolved_to,
         hours=resolved_hours,
+        is_billable=is_billable,
+        billable_override_reason=billable_override_reason,
+        require_override_reason=is_billable is not None,
     )
     timesheet.save(ignore_permissions=ignore_permissions)
     return _("New Timesheet created successfully.")
@@ -568,8 +656,14 @@ def submit_for_approval(start_date: str, notes: str = None, employee: str = None
     if not timesheets:
         throw(_("No timesheet found for the given week."), frappe.DoesNotExistError)
 
+    from next_pms.timesheet.utils.rejection import prepare_entries_for_resubmission
+
     draft_timesheets = [ts for ts in timesheets if ts.docstatus == 0]
     for timesheet in draft_timesheets:
+        doc = frappe.get_doc("Timesheet", timesheet.name)
+        prepare_entries_for_resubmission(doc)
+        for log in doc.time_logs:
+            log.save(ignore_permissions=True)
         frappe.db.set_value("Timesheet", timesheet.name, "custom_approval_status", "Approval Pending")
 
     for timesheet in timesheets:
@@ -588,6 +682,40 @@ def submit_for_approval(start_date: str, notes: str = None, employee: str = None
     send_approval_reminder(employee, reporting_manager, start_date, end_date, notes)
 
     return _("Timesheet has been sent for Approval to {0}.").format(reporting_manager_name)
+
+
+@frappe.whitelist()
+@error_logger
+def abandon_draft(start_date: str, employee: str = None):
+    """Discard all draft timesheet documents for the selected week."""
+    from next_pms.timesheet.doc_events.timesheet import flush_cache, publish_timesheet_update
+
+    if not employee:
+        employee = get_employee_from_user()
+    _assert_week_editable(employee, start_date)
+
+    ignore_permissions = employee_has_higher_access(employee, ptype="write")
+    if not ignore_permissions:
+        frappe.has_permission("Timesheet", "write", throw=True)
+
+    timesheets = _get_week_timesheets(employee, start_date)
+    if not timesheets:
+        return _("No draft timesheet found for the selected week.")
+
+    deleted = 0
+    for timesheet in timesheets:
+        if timesheet.docstatus != 0:
+            continue
+        frappe.delete_doc("Timesheet", timesheet.name, ignore_permissions=ignore_permissions)
+        deleted += 1
+
+    if not deleted:
+        throw(_("No draft timesheet found for the selected week."), frappe.DoesNotExistError)
+
+    week_start, _week_end = _get_week_range(start_date)
+    flush_cache(frappe._dict({"employee": employee, "start_date": week_start}))
+    publish_timesheet_update(employee=employee, start_date=week_start)
+    return _("Draft timesheet discarded.")
 
 
 @frappe.whitelist()
@@ -651,6 +779,7 @@ def update_timesheet_detail(
     task: str,
     date: str | None = None,
     is_billable: bool | None = None,
+    billable_override_reason: str | None = None,
     from_time: str | None = None,
     to_time: str | None = None,
     input_mode: str = "duration",
@@ -669,6 +798,7 @@ def update_timesheet_detail(
             hours=hours,
             exclude_detail_name=name,
             preferred_from=existing_log.from_time if existing_log else None,
+            draft_mode=True,
         )
     else:
         resolved_from, resolved_to, resolved_hours = resolve_time_log_times(
@@ -690,8 +820,9 @@ def update_timesheet_detail(
             "to_time": str(resolved_to),
             "input_mode": input_mode,
         }
-        if has_write_access() and is_billable is not None:
+        if is_billable is not None:
             payload["is_billable"] = is_billable
+            payload["billable_override_reason"] = billable_override_reason
         return payload
 
     for log in parent_doc.time_logs:
@@ -708,9 +839,15 @@ def update_timesheet_detail(
         log.task = task
         log.from_time = resolved_from
         log.to_time = resolved_to
-        # Only update value of billable if user has write access
-        if has_write_access() and is_billable is not None:
-            log.is_billable = is_billable
+        if is_billable is not None:
+            resolved_billable, override_reason, _default = resolve_entry_billable(
+                task,
+                is_billable,
+                billable_override_reason,
+                require_override_reason=True,
+            )
+            log.is_billable = resolved_billable
+            log.custom_billable_override_reason = override_reason
         if getdate(log.from_time) != getdate(date):
             logs_to_remove.append(log)
             new_logs.append(build_new_log_payload())
@@ -728,10 +865,18 @@ def update_timesheet_detail(
                 "to_time": resolved_to,
                 "project": task_project,
             }
-            if has_write_access() and is_billable is not None:
-                log["is_billable"] = is_billable
+            if is_billable is not None:
+                resolved_billable, override_reason, _default = resolve_entry_billable(
+                    task,
+                    is_billable,
+                    billable_override_reason,
+                    require_override_reason=True,
+                )
+                log["is_billable"] = resolved_billable
+                log["custom_billable_override_reason"] = override_reason
             else:
-                log["is_billable"] = frappe.get_value("Task", task, "custom_is_billable")
+                default_billable, _, _ = resolve_entry_billable(task)
+                log["is_billable"] = default_billable
 
             parent_doc.append("time_logs", log)
         else:
@@ -740,6 +885,7 @@ def update_timesheet_detail(
     if not parent_doc.time_logs:
         parent_doc.delete(ignore_permissions=ignore_permissions)
     else:
+        _mark_draft_save(parent_doc)
         parent_doc.save(ignore_permissions=ignore_permissions)
 
     if new_logs:
@@ -773,6 +919,9 @@ def get_timesheet(dates: list, employee: str):
     """
     data = {}
     total_hours = 0
+    from next_pms.timesheet.utils.period_lock import get_active_locks_between
+
+    locks = get_active_locks_between(min(dates), max(dates)) if dates else []
     timesheet_logs = frappe.get_list(
         "Timesheet",
         filters={
@@ -796,7 +945,6 @@ def get_timesheet(dates: list, employee: str):
             "subject",
             "project.project_name as project_name",
             "project",
-            "custom_is_billable",
             "expected_time",
             "actual_time",
             "status",
@@ -812,12 +960,18 @@ def get_timesheet(dates: list, employee: str):
         if not task:
             continue
         task_name = task["name"]
+        project_default = get_project_default_is_billable(task["project"])
+        description_settings = get_project_description_settings(task["project"])
         if task_name not in data:
             data[task_name] = {
                 "name": task_name,
                 "subject": task["subject"],
                 "data": [],
-                "is_billable": task["custom_is_billable"],
+                "is_billable": project_default,
+                "project_default_is_billable": project_default,
+                "description_required": description_settings["required"],
+                "show_description_in_approval": description_settings["show_in_approval"],
+                "include_description_on_invoice": description_settings["include_on_invoice"],
                 "project_name": task["project_name"],
                 "project": task["project"],
                 "expected_time": task["expected_time"],
@@ -830,6 +984,14 @@ def get_timesheet(dates: list, employee: str):
         marked_input_mode = get_input_mode_from_description(log.description)
         log_data["input_mode"] = marked_input_mode or "range"
         log_data["description"] = strip_input_mode_marker(log.description)
+        enrich_log_billable_fields(log_data, task_name)
+        enrich_log_description_fields(log_data, task.get("project"))
+        from next_pms.timesheet.utils.rejection import enrich_entry_rejection_fields
+
+        enrich_entry_rejection_fields(log_data)
+        from next_pms.timesheet.utils.period_lock import enrich_entry_period_lock_fields
+
+        enrich_entry_period_lock_fields(log_data, locks)
         data[task_name]["data"].append(log_data)
 
     return [data, total_hours]
@@ -906,6 +1068,7 @@ def get_timesheet_details(date: str, task: str, employee: str):
             "time_logs.from_time as date",
             "time_logs.parent",
             "time_logs.is_billable",
+            "time_logs.custom_billable_override_reason",
         ],
         filters={
             "start_date": ["=", getdate(date)],
@@ -919,11 +1082,21 @@ def get_timesheet_details(date: str, task: str, employee: str):
         marked_input_mode = get_input_mode_from_description(log.get("description"))
         log["input_mode"] = marked_input_mode or "range"
         log["description"] = strip_input_mode_marker(log.get("description"))
-    subject, project_name = frappe.get_value("Task", task, ["subject", "project.project_name"])
+    task_project = frappe.get_value("Task", task, ["subject", "project.project_name", "project"], as_dict=True)
+    project_default = get_project_default_is_billable(task_project.project if task_project else None)
+    description_settings = get_project_description_settings(task_project.project if task_project else None)
+    for log in logs:
+        enrich_log_billable_fields(log, task)
+        enrich_log_description_fields(log, task_project.project if task_project else None)
+        log["billable_override_reason"] = log.pop("custom_billable_override_reason", None)
 
     return {
-        "task": subject,
-        "project": project_name,
+        "task": task_project.subject if task_project else "",
+        "project": task_project.project_name if task_project else "",
+        "project_default_is_billable": project_default,
+        "description_required": description_settings["required"],
+        "show_description_in_approval": description_settings["show_in_approval"],
+        "include_description_on_invoice": description_settings["include_on_invoice"],
         "data": logs,
     }
 

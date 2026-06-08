@@ -43,6 +43,16 @@ def get_columns():
             "fieldtype": "data",
             "width": 300,
         },
+        {
+            "fieldname": "is_period_locked",
+            "label": _("Period Locked"),
+            "fieldtype": "Data",
+        },
+        {
+            "fieldname": "period_lock_reason",
+            "label": _("Period Lock Reason"),
+            "fieldtype": "Data",
+        },
     ]
 
 
@@ -58,6 +68,7 @@ def get_data(filters):
         .on(task.name == timesheet_details.task)
         .select(
             timesheet.start_date.as_("from_date"),
+            timesheet_details.from_time.as_("entry_date"),
             timesheet.employee_name,
             timesheet_details.project,
             task.subject.as_("task_subject"),
@@ -81,6 +92,8 @@ def get_data(filters):
 
 
 def execute(filters=None):
+    from next_pms.timesheet.utils.period_lock import annotate_report_rows
+
     columns = get_columns()
-    data = get_data(filters)
+    data = annotate_report_rows(get_data(filters), date_field="entry_date")
     return columns, data

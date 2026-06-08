@@ -2,6 +2,7 @@ export const BASE_ROUTE = "/next-pms";
 export const TIMESHEET = "timesheet";
 export const HOME = "home";
 export const TEAM = "/team";
+export const TEAM_APPROVALS = `${TEAM}/approvals`;
 export const DESK = "/desk";
 export const EMPLOYEE = "/employee";
 export const TASK = "task";

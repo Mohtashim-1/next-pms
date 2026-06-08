@@ -20,6 +20,7 @@ import {
   FormMessage,
   TextArea,
   Separator,
+  Typography,
 } from "@next-pms/design-system/components";
 import { prettyDate } from "@next-pms/design-system/date";
 import { useToast } from "@next-pms/design-system/hooks";
@@ -30,6 +31,7 @@ import { z } from "zod";
 /**
  * Internal dependencies.
  */
+import { MarkdownContent } from "@/app/components/timesheet-description/markdownContent";
 import { parseFrappeErrorMsg } from "@/lib/utils";
 import { TimesheetApprovalSchema } from "@/schema/timesheet";
 import type { ApprovalProps } from "./types";
@@ -47,6 +49,14 @@ type SubmissionSummary = {
   warnings: string[];
   violations: string[];
   can_submit: boolean;
+  approval_descriptions?: Array<{
+    entry: string;
+    task_subject: string;
+    project_name: string;
+    date: string;
+    hours: number;
+    description: string;
+  }>;
 };
 
 export const Approval = ({ onClose, user, timesheetState, dispatch }: ApprovalProps) => {
@@ -179,6 +189,21 @@ export const Approval = ({ onClose, user, timesheetState, dispatch }: ApprovalPr
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-destructive">
                   {summary.violations.map((violation) => (
                     <div key={violation}>{violation}</div>
+                  ))}
+                </div>
+              ) : null}
+              {summary?.approval_descriptions?.length ? (
+                <div className="space-y-2 rounded-md border border-border bg-background p-3">
+                  <Typography variant="p" className="font-medium">
+                    Work descriptions
+                  </Typography>
+                  {summary.approval_descriptions.map((entry) => (
+                    <div key={entry.entry} className="rounded border border-border/70 p-2">
+                      <Typography variant="small" className="font-medium">
+                        {entry.task_subject} · {entry.project_name} · {entry.date} · {entry.hours}h
+                      </Typography>
+                      <MarkdownContent value={entry.description} className="mt-1" />
+                    </div>
                   ))}
                 </div>
               ) : null}

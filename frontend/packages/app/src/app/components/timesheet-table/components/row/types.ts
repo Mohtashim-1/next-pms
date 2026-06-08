@@ -5,6 +5,7 @@ import type { WorkingFrequency } from "@/types";
 import type {
   HolidayProp,
   LeaveProps,
+  PeriodLockProp,
   RunningTimer,
   TaskDataProps,
   TaskProps,
@@ -16,7 +17,7 @@ export type GridCellBindings = {
   isEditing?: (row: number, col: number) => boolean;
   onFocusCell?: (row: number, col: number) => void;
   onStartEditing?: (row: number, col: number) => void;
-  onStopEditing?: () => void;
+  onStopEditing?: (row?: number, col?: number) => void;
   onMoveFocus?: (rowDelta: number, colDelta: number) => void;
   employee?: string;
   onSaved?: () => void;
@@ -44,6 +45,7 @@ export type emptyRowProps = GridCellBindings & {
   runningTimer?: RunningTimer | null;
   runningTimerDate?: string;
   runningTimerElapsed?: string;
+  periodLocks?: PeriodLockProp[];
 };
 
 export type RowProps = GridCellBindings & {
@@ -71,6 +73,7 @@ export type RowProps = GridCellBindings & {
   runningTimer?: RunningTimer | null;
   runningTimerDate?: string;
   runningTimerElapsed?: string;
+  periodLocks?: PeriodLockProp[];
 };
 
 export interface leaveRowProps {

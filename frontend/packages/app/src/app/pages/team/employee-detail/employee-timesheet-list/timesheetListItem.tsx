@@ -1,13 +1,14 @@
 /**
  * External dependencies
  */
-import { Button, Checkbox, TextEditor, Typography } from "@next-pms/design-system/components";
+import { Button, Checkbox, Typography } from "@next-pms/design-system/components";
 import { getDateFromDateAndTimeString, prettyDate } from "@next-pms/design-system/date";
 import { floatToTime, preProcessLink } from "@next-pms/design-system/utils";
 import { CircleDollarSign, PencilIcon } from "lucide-react";
 /**
  * Internal dependencies
  */
+import { MarkdownContent } from "@/app/components/timesheet-description/markdownContent";
 import { extractTextFromHTML, mergeClassNames } from "@/lib/utils";
 import type { TaskDataItemProps } from "@/types/timesheet";
 import { HourInput } from "../hourInput";
@@ -142,17 +143,16 @@ export const EmployeeTimesheetListItem = ({
                 </Button>
               </div>
             </div>
-            <p
-              className="text-sm font-normal max-md:text-wrap  col-span-2  my-1 p-0 hover-content"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <TextEditor
-                onChange={() => {}}
-                hideToolbar={true}
-                readOnly={true}
-                value={preProcessLink(task.description ?? "")}
-              />
-            </p>
+            {task.show_description_in_approval &&
+            task.description &&
+            task.description !== "-" && (
+              <div
+                className="text-sm font-normal max-md:text-wrap col-span-2 my-1 p-0 hover-content"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MarkdownContent value={preProcessLink(task.description ?? "")} />
+              </div>
+            )}
           </div>
         );
       })}

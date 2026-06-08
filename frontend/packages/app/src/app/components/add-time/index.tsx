@@ -1,7 +1,7 @@
 /**
  * External Dependencies
  */
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -23,7 +23,6 @@ import {
   ComboBox,
   DatePicker,
   Typography,
-  TextEditor,
 } from "@next-pms/design-system/components";
 import { getFormatedDate } from "@next-pms/design-system/date";
 import { floatToTime } from "@next-pms/design-system/utils";
@@ -35,13 +34,16 @@ import { z } from "zod";
  * Internal Dependencies
  */
 import EmployeeCombo from "@/app/components/employeeComboBox";
+import { BillableFields } from "@/app/components/timesheet-billable/billableFields";
+import { TimesheetDescriptionField } from "@/app/components/timesheet-description/descriptionField";
 import { InputModeToggle } from "@/app/components/timesheet-input/inputModeToggle";
+import { isBillableValue } from "@/lib/timesheetBillable";
 import { TimeRangeFields } from "@/app/components/timesheet-input/timeRangeFields";
 import { TIMESHEET_INPUT_MODE_KEY } from "@/lib/constant";
 import { getLocalStorage, setLocalStorage } from "@/lib/storage";
 import type { TimesheetInputMode } from "@/lib/timesheetTime";
 import { mergeClassNames, expectatedHours, parseFrappeErrorMsg } from "@/lib/utils";
-import { TimesheetSchema } from "@/schema/timesheet";
+import { TimesheetDraftSchema, timeStringToFloat } from "@/schema/timesheet";
 import type { TaskData } from "@/types";
 import TimeSelector from "./time-selector";
 import type { AddTimeProps } from "./type";
@@ -78,8 +80,10 @@ const AddTime = ({
   const { call: startTimer } = useFrappePostCall("next_pms.timesheet.api.timesheet.start_timer");
   const { call: stopTimer } = useFrappePostCall("next_pms.timesheet.api.timesheet.stop_timer");
   const [searchTask, setSearchTask] = useState(task);
-  const [tasks, setTask] = useState([]);
+  const [tasks, setTask] = useState<TaskData[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [draftSaveStatus, setDraftSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const autoSaveRequestRef = useRef(0);
   const [timerSubmitting, setTimerSubmitting] = useState(false);
   const [timerTick, setTimerTick] = useState(Date.now());
   const [isTaskLoading, setIsTaskLoading] = useState(false);
@@ -89,8 +93,8 @@ const AddTime = ({
   const expectedHours = expectatedHours(workingHours, workingFrequency);
   const { toast } = useToast();
   const savedInputMode = (getLocalStorage(TIMESHEET_INPUT_MODE_KEY) as TimesheetInputMode) || "duration";
-  const form = useForm<z.infer<typeof TimesheetSchema>>({
-    resolver: zodResolver(TimesheetSchema),
+  const form = useForm<z.infer<typeof TimesheetDraftSchema>>({
+    resolver: zodResolver(TimesheetDraftSchema),
     defaultValues: {
       task: task,
       hours: "",
@@ -100,10 +104,16 @@ const AddTime = ({
       input_mode: savedInputMode,
       from_time: "",
       to_time: "",
+      is_billable: false,
+      project_default_is_billable: undefined,
+      billable_override_reason: "",
     },
-    mode: "onSubmit",
+    mode: "onChange",
   });
   const inputMode = form.watch("input_mode");
+  const selectedTaskName = form.watch("task");
+  const selectedTask = tasks.find((item) => item.name === selectedTaskName);
+  const descriptionRequired = Boolean(selectedTask?.custom_require_timesheet_description);
   const handleOpen = () => {
     if (submitting) return;
     form.reset();
@@ -128,21 +138,40 @@ const AddTime = ({
       shouldTouch: true,
     });
   };
+  const applyTaskBillableDefaults = useCallback(
+    (taskName: string) => {
+      const selectedTask = tasks.find((item: TaskData) => item.name === taskName);
+      if (!selectedTask) return;
+
+      const projectDefault = isBillableValue(selectedTask.project_default_is_billable);
+      form.setValue("project_default_is_billable", projectDefault, {
+        shouldValidate: true,
+        shouldDirty: true,
+        shouldTouch: true,
+      });
+      form.setValue("is_billable", projectDefault, {
+        shouldValidate: true,
+        shouldDirty: true,
+        shouldTouch: true,
+      });
+      form.setValue("billable_override_reason", "", {
+        shouldValidate: true,
+        shouldDirty: true,
+        shouldTouch: true,
+      });
+    },
+    [form, tasks]
+  );
+
   const handleTaskChange = (value: string | string[]) => {
-    if (value instanceof Array) {
-      form.setValue("task", value[0], {
-        shouldValidate: true,
-        shouldDirty: true,
-        shouldTouch: true,
-      });
-    } else {
-      form.setValue("task", value, {
-        shouldValidate: true,
-        shouldDirty: true,
-        shouldTouch: true,
-      });
-    }
-    updateProject(value[0]);
+    const taskName = value instanceof Array ? value[0] : value;
+    form.setValue("task", taskName, {
+      shouldValidate: true,
+      shouldDirty: true,
+      shouldTouch: true,
+    });
+    applyTaskBillableDefaults(taskName);
+    updateProject(taskName);
   };
   const updateProject = useCallback(
     (value: string) => {
@@ -174,35 +203,76 @@ const AddTime = ({
     setLocalStorage(TIMESHEET_INPUT_MODE_KEY, mode);
   };
 
-  const handleSubmit = (data: z.infer<typeof TimesheetSchema>) => {
-    setSubmitting(true);
-    const payload =
-      data.input_mode === "range"
-        ? {
-            ...data,
-            hours: 0,
-            from_time: data.from_time,
-            to_time: data.to_time,
+  const buildSavePayload = (data: z.infer<typeof TimesheetDraftSchema>) =>
+    data.input_mode === "range"
+      ? {
+          ...data,
+          description: data.description || "-",
+          hours: 0,
+          from_time: data.from_time,
+          to_time: data.to_time,
+        }
+      : {
+          ...data,
+          description: data.description || "-",
+        };
+
+  const canAutoSaveDraft = (data: z.infer<typeof TimesheetDraftSchema>) => {
+    if (!data.task) return false;
+    if (data.input_mode === "range") {
+      return Boolean(data.from_time && data.to_time);
+    }
+    const parsedHours = timeStringToFloat(String(data.hours ?? ""));
+    return !Number.isNaN(parsedHours) && parsedHours > 0;
+  };
+
+  const persistDraft = useCallback(
+    async (data: z.infer<typeof TimesheetDraftSchema>, closeOnSuccess = false) => {
+      const parsed = TimesheetDraftSchema.safeParse(data);
+      if (!parsed.success || !canAutoSaveDraft(parsed.data)) {
+        return false;
+      }
+
+      const requestId = ++autoSaveRequestRef.current;
+      setDraftSaveStatus("saving");
+
+      try {
+        const res = await save(buildSavePayload(parsed.data));
+        if (requestId !== autoSaveRequestRef.current) {
+          return false;
+        }
+        setDraftSaveStatus("saved");
+        mutatePerDayHrs();
+        onSuccess?.(parsed.data);
+        if (closeOnSuccess) {
+          handleOpen();
+          toast({
+            variant: "success",
+            description: res.message,
+          });
+        }
+        return true;
+      } catch (err) {
+        if (requestId === autoSaveRequestRef.current) {
+          setDraftSaveStatus("error");
+          if (closeOnSuccess) {
+            const error = parseFrappeErrorMsg(err);
+            toast({
+              variant: "destructive",
+              description: error,
+            });
           }
-        : data;
-    save(payload)
-      .then((res) => {
-        toast({
-          variant: "success",
-          description: res.message,
-        });
-        onSuccess?.(form.getValues());
-        setSubmitting(false);
-        handleOpen();
-      })
-      .catch((err) => {
-        setSubmitting(false);
-        const error = parseFrappeErrorMsg(err);
-        toast({
-          variant: "destructive",
-          description: error,
-        });
-      });
+        }
+        return false;
+      }
+    },
+    [save, mutatePerDayHrs, onSuccess, toast]
+  );
+
+  const handleSubmit = async (data: z.infer<typeof TimesheetDraftSchema>) => {
+    setSubmitting(true);
+    await persistDraft(data, true);
+    setSubmitting(false);
   };
   const fetchTask = useCallback(() => {
     setIsTaskLoading(true);
@@ -345,6 +415,13 @@ const AddTime = ({
   }, [fetchTask, searchTask, selectedProject]);
 
   useEffect(() => {
+    const currentTask = form.getValues("task");
+    if (open && currentTask && tasks.length) {
+      applyTaskBillableDefaults(currentTask);
+    }
+  }, [open, tasks, applyTaskBillableDefaults, form]);
+
+  useEffect(() => {
     mutatePerDayHrs();
   }, [mutatePerDayHrs, selectedDate, selectedEmployee]);
   useEffect(() => {
@@ -356,16 +433,51 @@ const AddTime = ({
     return () => window.clearInterval(interval);
   }, [activeTimer]);
 
+  useEffect(() => {
+    if (!open) {
+      setDraftSaveStatus("idle");
+      return;
+    }
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const subscription = form.watch((values) => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void persistDraft(values as z.infer<typeof TimesheetDraftSchema>);
+      }, 800);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, [form, open, persistDraft]);
+
   const {
-    formState: { isDirty, isValid },
+    formState: { isDirty },
   } = form;
 
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
       <DialogContent className="max-w-xl" onPointerDownOutside={event?.preventDefault}>
         <DialogHeader>
-          <DialogTitle className="flex gap-x-2">
+          <DialogTitle className="flex gap-x-2 items-center">
             Add Time
+            {draftSaveStatus === "saving" && (
+              <Typography variant="small" className="text-muted-foreground">
+                Saving draft...
+              </Typography>
+            )}
+            {draftSaveStatus === "saved" && (
+              <Typography variant="small" className="text-success">
+                Draft saved
+              </Typography>
+            )}
+            {draftSaveStatus === "error" && (
+              <Typography variant="small" className="text-destructive">
+                Draft save failed
+              </Typography>
+            )}
             <Typography
               variant="p"
               className={mergeClassNames(
@@ -520,30 +632,26 @@ const AddTime = ({
                   )}
                 />
               </div>
-              <FormField
+              {form.watch("task") && (
+                <BillableFields
+                  control={form.control}
+                  isBillableName="is_billable"
+                  reasonName="billable_override_reason"
+                  projectDefault={form.watch("project_default_is_billable")}
+                  watchedIsBillable={form.watch("is_billable")}
+                />
+              )}
+              <TimesheetDescriptionField
                 control={form.control}
                 name="description"
-                render={({ field }) => (
-                  <FormItem className="space-y-1">
-                    <FormLabel>Comment</FormLabel>
-                    <FormControl>
-                      <TextEditor
-                        placeholder="Explain your progress"
-                        defaultValue={field.value}
-                        onChange={(value) => {
-                          field.onChange(value);
-                        }}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                required={descriptionRequired}
+                label="Work description"
               />
               <DialogFooter className="sm:justify-start w-full pt-3">
                 <div className="flex flex-wrap gap-3 w-full">
-                  <Button disabled={!isDirty || !isValid || submitting}>
+                  <Button disabled={!isDirty || submitting}>
                     {submitting ? <LoaderCircle className="animate-spin w-4 h-4" /> : <Save className="w-4 h-4" />}
-                    Add Time
+                    Save & Close
                   </Button>
                   {activeTimer ? (
                     <Button variant="destructive" type="button" onClick={handleStopTimer} disabled={timerSubmitting}>

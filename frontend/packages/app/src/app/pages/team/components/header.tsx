@@ -8,15 +8,25 @@ import { useQueryParam } from "@next-pms/hooks";
 import { addDays } from "date-fns";
 import { useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
 import _ from "lodash";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useFrappeGetCall } from "frappe-react-sdk";
+import { ChevronLeft, ChevronRight, ClipboardCheck } from "lucide-react";
 /**
  * Internal dependencies
  */
 import { Header as ListViewHeader } from "@/app/components/list-view/header";
+import { TEAM_APPROVALS } from "@/lib/constant";
 import { parseFrappeErrorMsg } from "@/lib/utils";
 import type { HeaderProps } from "./types";
 
 export const Header = ({ teamState, dispatch, viewData }: HeaderProps) => {
+  const navigate = useNavigate();
+  const { data: approvalCountData } = useFrappeGetCall(
+    "next_pms.timesheet.api.approval_queue.get_approval_queue_count",
+    { week_start: teamState.weekDate },
+    `approval-queue-count-${teamState.weekDate}`
+  );
+  const approvalQueueCount = approvalCountData?.message?.count ?? 0;
   const [projectSearch, setProjectSeach] = useState<string>("");
   const [userGroupSearch, setUserGroupSearch] = useState<string>("");
   const [projectParam] = useQueryParam<string[]>("project", []);
@@ -275,6 +285,13 @@ export const Header = ({ teamState, dispatch, viewData }: HeaderProps) => {
         },
       ]}
       buttons={[
+        {
+          title: "Approval Queue",
+          handleClick: () => navigate(TEAM_APPROVALS),
+          label: approvalQueueCount ? `Approvals (${approvalQueueCount})` : "Approvals",
+          icon: ClipboardCheck,
+          className: "h-10 px-3 py-2",
+        },
         {
           title: "Save changes",
           handleClick: () => {

@@ -149,6 +149,20 @@ class TestTimesheet(TestNextPms):
         self.assertTrue(range_entries)
         self.assertEqual(range_entries[-1].get("hours"), 2.5)
 
+    def test_g_abandon_draft(self):
+        method = self.method("next_pms.timesheet.api.timesheet.abandon_draft")
+        response = self.post(method, {"start_date": nowdate(), "employee": self.employee})
+        self.assertEqual(response.status_code, 200)
+
+        params = {"employee": self.employee, "start_date": nowdate(), "max_week": 1}
+        response = self.get(
+            self.method("next_pms.timesheet.api.timesheet.get_timesheet_data"),
+            params=params,
+        )
+        self.assertEqual(response.status_code, 200)
+        week = response.json.get("message").get("data").get("This Week")
+        self.assertEqual(week.get("total_hours"), 0)
+
     def test_e_timesheet_approval(self):
         employee = self.employee
         self.login_as_user("next-project-manager@example.com")

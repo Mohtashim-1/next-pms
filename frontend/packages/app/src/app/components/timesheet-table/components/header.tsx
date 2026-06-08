@@ -3,11 +3,12 @@
  */
 import { TableHead, TableHeader, TableRow, Typography } from "@next-pms/design-system/components";
 import { prettyDate } from "@next-pms/design-system/date";
-import { LoaderCircle, Import } from "lucide-react";
+import { LoaderCircle, Import, Lock } from "lucide-react";
 
 /**
  * Internal dependencies
  */
+import { getPeriodLockForDate } from "@/lib/timesheetPeriodLock";
 import { mergeClassNames, getBgCsssForToday } from "@/lib/utils";
 import type { HeaderProps } from "./types";
 
@@ -25,6 +26,7 @@ export const Header = ({
   setTaskInLocalStorage,
   dates,
   holidays,
+  periodLocks = [],
 }: HeaderProps) => {
   if (!showHeading) return <></>;
   return (
@@ -46,6 +48,7 @@ export const Header = ({
         </TableHead>
         {dates?.map((date: string) => {
           const { date: formattedDate, day } = prettyDate(date);
+          const periodLock = getPeriodLockForDate(date, periodLocks);
           const matchingHoliday = holidays.find((item) => item.holiday_date === date);
 
           const result = matchingHoliday
@@ -75,6 +78,11 @@ export const Header = ({
               >
                 {formattedDate}
               </Typography>
+              {periodLock && (
+                <span title={`Period locked: ${periodLock.lock_reason}`} className="inline-flex justify-center mt-1">
+                  <Lock className="h-3 w-3 text-amber-600" />
+                </span>
+              )}
             </TableHead>
           );
         })}

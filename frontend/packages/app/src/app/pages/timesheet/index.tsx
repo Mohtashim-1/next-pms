@@ -29,9 +29,11 @@ import { Calendar, CalendarArrowDown, EllipsisVertical, Paperclip, Plus } from "
 /**
  * Internal dependencies.
  */
+import { PeriodLockAdmin } from "@/app/components/timesheet-period-lock/periodLockAdmin";
 import { TimesheetTable } from "@/app/components/timesheet-table";
 import { SubmitButton } from "@/app/components/timesheet-table/components/submitButton";
 import { Header, Main } from "@/app/layout/root";
+import { isWeekLocked as isTimesheetWeekLocked } from "@/lib/timesheetStatus";
 import { parseFrappeErrorMsg, expectatedHours, copyToClipboard, isDateInRange, getTimesheetHours } from "@/lib/utils";
 import type { RootState } from "@/store";
 import type { WorkingFrequency } from "@/types";
@@ -61,6 +63,9 @@ function Timesheet() {
   });
   const { call: recallTimesheet, loading: isRecalling } = useFrappePostCall(
     "next_pms.timesheet.api.timesheet.recall_timesheet"
+  );
+  const { call: abandonDraft, loading: isAbandoningDraft } = useFrappePostCall(
+    "next_pms.timesheet.api.timesheet.abandon_draft"
   );
 
   useEffect(() => {
@@ -199,6 +204,32 @@ function Timesheet() {
       });
   };
 
+  const handleAbandonDraft = (start_date: string) => {
+    if (isAbandoningDraft) return;
+    if (!window.confirm("Discard all draft time entries for this week? This cannot be undone.")) {
+      return;
+    }
+
+    abandonDraft({
+      start_date,
+      employee: user.employee,
+    })
+      .then((res) => {
+        toast({
+          variant: "success",
+          description: res.message,
+        });
+        mutate();
+      })
+      .catch((err) => {
+        const error = parseFrappeErrorMsg(err);
+        toast({
+          variant: "destructive",
+          description: error,
+        });
+      });
+  };
+
   const handleImportTaskFromGoogleCalendar = () => {
     dispatch({ type: "SET_IMPORT_FROM_GOOGLE_CALENDAR_DIALOG_STATE", payload: true });
   };
@@ -215,6 +246,12 @@ function Timesheet() {
             Leave
           </Button>
         )}
+
+        <PeriodLockAdmin
+          roles={user.roles}
+          periodLocks={timesheet.data.period_locks ?? []}
+          onUpdated={mutate}
+        />
 
         <Button onClick={handleAddTime} title="Add Time">
           <Plus />
@@ -254,12 +291,7 @@ function Timesheet() {
                 {timesheet.data?.data &&
                   Object.keys(timesheet.data?.data).length > 0 &&
                   Object.entries(timesheet.data?.data).map(([key, value]: [string, timesheet]) => {
-                    const isWeekLocked = [
-                      "Approval Pending",
-                      "Processing Timesheet",
-                      "Approved",
-                      "Partially Approved",
-                    ].includes(value.status);
+                    const weekLocked = isTimesheetWeekLocked(value.status);
                     const data = getTimesheetHours(
                       value.dates,
                       value.total_hours,
@@ -299,6 +331,7 @@ function Timesheet() {
                                 end_date={value.end_date}
                                 onApproval={handleApproval}
                                 onRecall={handleRecall}
+                                onAbandonDraft={handleAbandonDraft}
                                 status={value.status}
                                 expectedHours={timesheet.data.working_hour}
                                 totalHours={data.totalHours}
@@ -324,14 +357,15 @@ function Timesheet() {
                               tasks={value.tasks}
                               onCellClick={onCellClick}
                               weeklyStatus={value.status}
-                              disabled={isWeekLocked}
+                              disabled={weekLocked}
                               importTasks={true}
                               loadingLikedTasks={loadingLikedTasks}
                               likedTaskData={likedTaskData}
                               getLikedTaskData={getLikedTaskData}
                               employee={user.employee}
                               onSaved={mutate}
-                              enableInlineEdit={!isWeekLocked}
+                              enableInlineEdit={!weekLocked}
+                              periodLocks={timesheet.data.period_locks ?? []}
                             />
                           </AccordionContent>
                         </AccordionItem>

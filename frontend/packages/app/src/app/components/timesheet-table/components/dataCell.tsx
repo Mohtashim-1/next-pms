@@ -8,13 +8,14 @@ import {
   HoverCardTrigger,
   Typography,
   HoverCardContent,
-  TextEditor,
 } from "@next-pms/design-system/components";
 import { floatToTime } from "@next-pms/design-system/utils";
-import { CircleDollarSign, CirclePlus, PencilLine, Timer } from "lucide-react";
+import { CirclePlus, PencilLine, Timer } from "lucide-react";
 /**
  * Internal dependencies
  */
+import { BillableIndicator } from "@/app/components/timesheet-billable/billableIndicator";
+import { MarkdownContent } from "@/app/components/timesheet-description/markdownContent";
 import { mergeClassNames, getBgCsssForToday } from "@/lib/utils";
 import type { cellProps } from "./types";
 
@@ -32,25 +33,28 @@ import type { cellProps } from "./types";
  */
 
 export const Cell = ({ date, data, isHoliday, onCellClick, disabled, className, runningTimerElapsed }: cellProps) => {
-  const { hours, description, isTimeBothBillableAndNonBillable, isTimeBillable } = useMemo(() => {
+  const { hours, description, rejectionNotes } = useMemo(() => {
     let hours = 0;
     let description = "";
-    let isTimeBothBillableAndNonBillable = false;
-    let isTimeBillable = false;
+    let rejectionNotes = "";
 
     if (data) {
       hours = data.reduce((sum, item) => sum + (item.hours || 0), 0);
       description = data.reduce((desc, item) => desc + (item.description ? item.description + "\n" : ""), "").trim();
-      isTimeBothBillableAndNonBillable =
-        data.some((item) => item.is_billable === false || item.is_billable === 0) &&
-        data.some((item) => item.is_billable === true || item.is_billable === 1);
-      isTimeBillable = data.every((item) => item.is_billable === true || item.is_billable === 1);
+      rejectionNotes = data
+        .filter((item) => item.rejection_comment)
+        .map((item) => item.rejection_comment)
+        .join("\n");
     }
 
-    return { hours, description, isTimeBothBillableAndNonBillable, isTimeBillable };
+    return { hours, description, rejectionNotes };
   }, [data]);
 
-  const isDisabled = useMemo(() => disabled || data?.[0]?.docstatus === 1, [disabled, data]);
+  const periodLockReason = data?.[0]?.period_lock_reason;
+  const isDisabled = useMemo(
+    () => disabled || data?.[0]?.docstatus === 1 || Boolean(data?.[0]?.is_period_locked),
+    [disabled, data]
+  );
 
   const handleClick = useCallback(() => {
     if (isDisabled) return;
@@ -96,10 +100,11 @@ export const Cell = ({ date, data, isHoliday, onCellClick, disabled, className, 
             >
               {hours > 0 ? floatToTime(hours) : "-"}
             </Typography>
-            {(isTimeBothBillableAndNonBillable || isTimeBillable) && (
-              <CircleDollarSign
-                className={mergeClassNames(!isDisabled && "group-hover:hidden", isTimeBillable && "stroke-success")}
-              />
+            {hours > 0 && <BillableIndicator entries={data} compact />}
+            {rejectionNotes && (
+              <Typography variant="small" className="text-[0.62rem] font-semibold text-destructive">
+                Rejected
+              </Typography>
             )}
             <PencilLine
               className={mergeClassNames("text-center hidden", hours > 0 && !isDisabled && "group-hover:block")}
@@ -111,12 +116,22 @@ export const Cell = ({ date, data, isHoliday, onCellClick, disabled, className, 
             />
           </span>
         </HoverCardTrigger>
-        {description && (
+        {(description || rejectionNotes || periodLockReason) && (
           <HoverCardContent
-            className="text-left whitespace-pre text-wrap w-full max-w-96 max-h-52 overflow-auto hover-content p-0"
+            className="text-left whitespace-pre text-wrap w-full max-w-96 max-h-52 overflow-auto hover-content p-3"
             onClick={(e) => e.stopPropagation()}
           >
-            <TextEditor onChange={() => {}} hideToolbar={true} readOnly={true} value={description} />
+            {periodLockReason && (
+              <Typography variant="small" className="mb-2 block font-medium text-amber-700">
+                Period locked: {periodLockReason}
+              </Typography>
+            )}
+            {rejectionNotes && (
+              <Typography variant="small" className="mb-2 block font-medium text-destructive">
+                Rejection: {rejectionNotes}
+              </Typography>
+            )}
+            {description && <MarkdownContent value={description} />}
           </HoverCardContent>
         )}
       </TableCell>

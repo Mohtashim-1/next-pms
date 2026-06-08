@@ -22,6 +22,7 @@ import { setViews } from "./store/view";
 const Timesheet = lazy(() => import("@/app/pages/timesheet"));
 const Home = lazy(() => import("@/app/pages/home"));
 const Team = lazy(() => import("@/app/pages/team"));
+const TeamApprovals = lazy(() => import("@/app/pages/team/approvals"));
 const ResourceTeam = lazy(() => import("@/app/pages/resource-management/team"));
 const ResourceProject = lazy(() => import("@/app/pages/resource-management/project"));
 const ResourceTimeLine = lazy(() => import("@/app/pages/resource-management/timeline"));
@@ -41,6 +42,7 @@ export function Router() {
           <Route path={HOME} element={<Home />} />
           <Route path={TEAM}>
             <Route path={`${TEAM}/`} element={<Team />} />
+            <Route path="approvals" element={<TeamApprovals />} />
             <Route path={`${TEAM}/employee/:id?`} element={<EmployeeDetail />} />
           </Route>
           <Route path={PROJECT}>

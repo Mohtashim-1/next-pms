@@ -174,6 +174,9 @@ def get_compact_view_data(
 @error_logger
 def approve_or_reject_timesheet(employee: str, status: str, dates: list[str] | None = None, note: str = ""):
     only_for(["Timesheet Manager", "Timesheet User", "Projects Manager"], message=True)
+    from next_pms.timesheet.utils.rejection import require_rejection_comment
+
+    require_rejection_comment(status, note)
     if not dates:
         return throw(_("Please select the dates to approve or reject the timesheet."))
     current_week = get_week_dates(dates[0])
@@ -329,9 +332,22 @@ def _approve_or_reject_timesheet(
         # Calculate permission once instead of per timesheet
         has_permission = employee_has_higher_access(employee, ptype="write")
 
+        from next_pms.timesheet.utils.rejection import apply_entry_rejection, return_timesheet_to_draft
+
         for timesheet in timesheets_to_process:
             doc = get_doc("Timesheet", timesheet.name)
-            doc.custom_approval_status = status
+            for log in doc.time_logs:
+                if status == "Rejected":
+                    apply_entry_rejection(log, note)
+                else:
+                    log.custom_entry_approval_status = status
+                    log.custom_rejection_comment = None
+                    log.custom_rejected_by = None
+                    log.custom_rejected_on = None
+            if status == "Rejected":
+                return_timesheet_to_draft(doc)
+            else:
+                doc.custom_approval_status = status
             doc.save(ignore_permissions=has_permission)
             if status == "Approved":
                 doc.submit()

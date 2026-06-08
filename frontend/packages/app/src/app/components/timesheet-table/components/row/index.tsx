@@ -4,10 +4,12 @@
 import { TableCell, TableRow, Typography } from "@next-pms/design-system/components";
 import { getDateFromDateAndTimeString } from "@next-pms/design-system/date";
 import { floatToTime } from "@next-pms/design-system/utils";
-import { CircleDollarSign, Clock } from "lucide-react";
+import { Clock } from "lucide-react";
 /**
  * Internal dependencies
  */
+import { BillableIndicator } from "@/app/components/timesheet-billable/billableIndicator";
+import { isDatePeriodLocked } from "@/lib/timesheetPeriodLock";
 import { mergeClassNames } from "@/lib/utils";
 import type { TaskDataItemProps, TaskDataProps } from "@/types/timesheet";
 import { GridCell } from "../gridCell";
@@ -43,6 +45,7 @@ const Row = ({
   onStartEditing,
   onStopEditing,
   onMoveFocus,
+  periodLocks = [],
 }: RowProps) => {
   return (
     <>
@@ -107,7 +110,7 @@ const Row = ({
                     data={data}
                     isHoliday={result.isHoliday && !result.weekly_off}
                     onCellClick={onCellClick}
-                    disabled={disabled}
+                    disabled={disabled || isDatePeriodLocked(date, periodLocks)}
                     runningTimerElapsed={
                       isRunningTask && runningTimerDate === date ? runningTimerElapsed : undefined
                     }
@@ -128,12 +131,12 @@ const Row = ({
               <TableCell className={mergeClassNames("text-center", totalCellClassName)}>
                 <Typography
                   variant="p"
-                  className={mergeClassNames(
-                    "font-medium text-right flex justify-between items-center",
-                    !taskData.is_billable && "justify-end"
-                  )}
+                  className="font-medium text-right flex justify-between items-center gap-1"
                 >
-                  {taskData.is_billable == true && <CircleDollarSign className="stroke-success " />}
+                  <BillableIndicator
+                    projectDefault={taskData.project_default_is_billable ?? taskData.is_billable}
+                    compact
+                  />
                   {floatToTime(totalHours)}
                 </Typography>
               </TableCell>

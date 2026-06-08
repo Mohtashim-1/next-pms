@@ -27,6 +27,7 @@ export const initialState: TimesheetState = {
     data: {},
     leaves: [],
     holidays: [],
+    period_locks: [],
   },
   isDialogOpen: false,
   isEditDialogOpen: false,
