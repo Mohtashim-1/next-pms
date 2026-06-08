@@ -237,6 +237,29 @@ const AddTime = ({
     return !Number.isNaN(parsedHours) && parsedHours > 0;
   };
 
+  const { data: perDayEmpHours, mutate: mutatePerDayHrs } = useFrappeGetCall(
+    "next_pms.timesheet.api.timesheet.get_remaining_hour_for_employee",
+    {
+      employee: selectedEmployee,
+      date: selectedDate,
+    },
+    undefined,
+    {
+      revalidateOnFocus: false,
+    }
+  );
+  const { data: runningTimer, mutate: mutateRunningTimer } = useFrappeGetCall(
+    "next_pms.timesheet.api.timesheet.get_running_timer",
+    {
+      employee: selectedEmployee,
+    },
+    undefined,
+    {
+      revalidateOnFocus: false,
+    }
+  );
+  const activeTimer = runningTimer?.message?.task ? runningTimer.message : null;
+
   const persistDraft = useCallback(
     async (data: z.infer<typeof TimesheetDraftSchema>, closeOnSuccess = false) => {
       const parsed = TimesheetDraftSchema.safeParse(data);
@@ -356,29 +379,6 @@ const AddTime = ({
     filters: window.frappe?.boot?.global_filters.project,
     limit_page_length: "null",
   });
-
-  const { data: perDayEmpHours, mutate: mutatePerDayHrs } = useFrappeGetCall(
-    "next_pms.timesheet.api.timesheet.get_remaining_hour_for_employee",
-    {
-      employee: selectedEmployee,
-      date: selectedDate,
-    },
-    undefined,
-    {
-      revalidateOnFocus: false,
-    }
-  );
-  const { data: runningTimer, mutate: mutateRunningTimer } = useFrappeGetCall(
-    "next_pms.timesheet.api.timesheet.get_running_timer",
-    {
-      employee: selectedEmployee,
-    },
-    undefined,
-    {
-      revalidateOnFocus: false,
-    }
-  );
-  const activeTimer = runningTimer?.message?.task ? runningTimer.message : null;
 
   const onEmployeeChange = (value: string) => {
     setSelectedEmployee(value);
