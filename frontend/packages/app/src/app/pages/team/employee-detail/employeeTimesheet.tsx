@@ -99,6 +99,9 @@ export const EmployeeTimesheet = ({
       {teamState.timesheetData.data &&
         Object.keys(teamState.timesheetData.data).length > 0 &&
         Object.entries(teamState.timesheetData.data).map(([key, value]: [string, timesheet]) => {
+          const isWeekLocked = ["Approval Pending", "Processing Timesheet", "Approved", "Partially Approved"].includes(
+            value.status
+          );
           const data = getTimesheetHours(
             value.dates,
             value.total_hours,
@@ -160,13 +163,16 @@ export const EmployeeTimesheet = ({
                     leaves={teamState.timesheetData.leaves}
                     tasks={value.tasks}
                     onCellClick={onCellClick}
-                    disabled={value.status === "Approved"}
+                    weeklyStatus={value.status}
+                    disabled={isWeekLocked}
                     workingFrequency={teamState.timesheetData.working_frequency}
                     workingHour={teamState.timesheetData.working_hour}
                     loadingLikedTasks={loadingLikedTasks}
                     likedTaskData={likedTaskData}
                     getLikedTaskData={getLikedTaskData}
                     hideLikeButton={true}
+                    employee={id}
+                    enableInlineEdit={!isWeekLocked}
                   />
                 </AccordionContent>
               </AccordionItem>

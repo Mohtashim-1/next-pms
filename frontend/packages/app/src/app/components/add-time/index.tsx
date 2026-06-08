@@ -28,13 +28,18 @@ import {
 import { getFormatedDate } from "@next-pms/design-system/date";
 import { floatToTime } from "@next-pms/design-system/utils";
 import { FrappeConfig, FrappeContext, useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
-import { LoaderCircle, Save, Search, X } from "lucide-react";
+import { LoaderCircle, Play, Save, Search, Square, X } from "lucide-react";
 import { z } from "zod";
 
 /**
  * Internal Dependencies
  */
 import EmployeeCombo from "@/app/components/employeeComboBox";
+import { InputModeToggle } from "@/app/components/timesheet-input/inputModeToggle";
+import { TimeRangeFields } from "@/app/components/timesheet-input/timeRangeFields";
+import { TIMESHEET_INPUT_MODE_KEY } from "@/lib/constant";
+import { getLocalStorage, setLocalStorage } from "@/lib/storage";
+import type { TimesheetInputMode } from "@/lib/timesheetTime";
 import { mergeClassNames, expectatedHours, parseFrappeErrorMsg } from "@/lib/utils";
 import { TimesheetSchema } from "@/schema/timesheet";
 import type { TaskData } from "@/types";
@@ -70,15 +75,20 @@ const AddTime = ({
 }: AddTimeProps) => {
   const { call } = useContext(FrappeContext) as FrappeConfig;
   const { call: save } = useFrappePostCall("next_pms.timesheet.api.timesheet.save");
+  const { call: startTimer } = useFrappePostCall("next_pms.timesheet.api.timesheet.start_timer");
+  const { call: stopTimer } = useFrappePostCall("next_pms.timesheet.api.timesheet.stop_timer");
   const [searchTask, setSearchTask] = useState(task);
   const [tasks, setTask] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  const [timerSubmitting, setTimerSubmitting] = useState(false);
+  const [timerTick, setTimerTick] = useState(Date.now());
   const [isTaskLoading, setIsTaskLoading] = useState(false);
   const [selectedProject, setSelectedProject] = useState<string[]>(project ? [project] : []);
   const [selectedDate, setSelectedDate] = useState(getFormatedDate(initialDate));
   const [selectedEmployee, setSelectedEmployee] = useState(employee);
   const expectedHours = expectatedHours(workingHours, workingFrequency);
   const { toast } = useToast();
+  const savedInputMode = (getLocalStorage(TIMESHEET_INPUT_MODE_KEY) as TimesheetInputMode) || "duration";
   const form = useForm<z.infer<typeof TimesheetSchema>>({
     resolver: zodResolver(TimesheetSchema),
     defaultValues: {
@@ -87,9 +97,13 @@ const AddTime = ({
       description: "",
       date: initialDate,
       employee: employee,
+      input_mode: savedInputMode,
+      from_time: "",
+      to_time: "",
     },
     mode: "onSubmit",
   });
+  const inputMode = form.watch("input_mode");
   const handleOpen = () => {
     if (submitting) return;
     form.reset();
@@ -155,9 +169,23 @@ const AddTime = ({
       shouldTouch: true,
     });
   };
+  const handleInputModeChange = (mode: TimesheetInputMode) => {
+    form.setValue("input_mode", mode, { shouldDirty: true, shouldValidate: true });
+    setLocalStorage(TIMESHEET_INPUT_MODE_KEY, mode);
+  };
+
   const handleSubmit = (data: z.infer<typeof TimesheetSchema>) => {
     setSubmitting(true);
-    save(data)
+    const payload =
+      data.input_mode === "range"
+        ? {
+            ...data,
+            hours: 0,
+            from_time: data.from_time,
+            to_time: data.to_time,
+          }
+        : data;
+    save(payload)
       .then((res) => {
         toast({
           variant: "success",
@@ -217,6 +245,18 @@ const AddTime = ({
       revalidateOnFocus: false,
     }
   );
+  const { data: runningTimer, mutate: mutateRunningTimer } = useFrappeGetCall(
+    "next_pms.timesheet.api.timesheet.get_running_timer",
+    {
+      employee: selectedEmployee,
+    },
+    undefined,
+    {
+      revalidateOnFocus: false,
+    }
+  );
+  const activeTimer = runningTimer?.message?.task ? runningTimer.message : null;
+
   const onEmployeeChange = (value: string) => {
     setSelectedEmployee(value);
     form.setValue("employee", value, {
@@ -224,6 +264,77 @@ const AddTime = ({
       shouldDirty: true,
       shouldTouch: true,
     });
+  };
+  const formatElapsedTime = (startedAt: string) => {
+    const startDate = new Date(startedAt.replace(" ", "T"));
+    if (Number.isNaN(startDate.getTime())) return "00:00:00";
+
+    const totalSeconds = Math.max(0, Math.floor((timerTick - startDate.getTime()) / 1000));
+    const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+    const seconds = String(totalSeconds % 60).padStart(2, "0");
+    return `${hours}:${minutes}:${seconds}`;
+  };
+  const handleStartTimer = () => {
+    const values = form.getValues();
+    if (!values.task) {
+      toast({
+        variant: "destructive",
+        description: "Please select a task before starting the timer.",
+      });
+      return;
+    }
+
+    setTimerSubmitting(true);
+    startTimer({
+      employee: selectedEmployee,
+      task: values.task,
+      description: values.description,
+    })
+      .then(() => {
+        toast({
+          variant: "success",
+          description: "Timer started.",
+        });
+        window.dispatchEvent(new Event("next-pms:timer-updated"));
+        mutateRunningTimer();
+      })
+      .catch((err) => {
+        const error = parseFrappeErrorMsg(err);
+        toast({
+          variant: "destructive",
+          description: error,
+        });
+      })
+      .finally(() => {
+        setTimerSubmitting(false);
+      });
+  };
+  const handleStopTimer = () => {
+    setTimerSubmitting(true);
+    stopTimer({
+      employee: selectedEmployee,
+    })
+      .then((res) => {
+        toast({
+          variant: "success",
+          description: res.message?.message ?? "Timer stopped.",
+        });
+        mutateRunningTimer();
+        mutatePerDayHrs();
+        window.dispatchEvent(new Event("next-pms:timer-updated"));
+        onSuccess?.(form.getValues());
+      })
+      .catch((err) => {
+        const error = parseFrappeErrorMsg(err);
+        toast({
+          variant: "destructive",
+          description: error,
+        });
+      })
+      .finally(() => {
+        setTimerSubmitting(false);
+      });
   };
 
   useEffect(() => {
@@ -236,6 +347,14 @@ const AddTime = ({
   useEffect(() => {
     mutatePerDayHrs();
   }, [mutatePerDayHrs, selectedDate, selectedEmployee]);
+  useEffect(() => {
+    mutateRunningTimer();
+  }, [mutateRunningTimer, selectedEmployee]);
+  useEffect(() => {
+    if (!activeTimer) return;
+    const interval = window.setInterval(() => setTimerTick(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [activeTimer]);
 
   const {
     formState: { isDirty, isValid },
@@ -262,11 +381,22 @@ const AddTime = ({
                 : ""}
             </Typography>
           </DialogTitle>
+          {activeTimer && (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+              <Typography variant="p" className="font-medium text-success">
+                Running {formatElapsedTime(activeTimer.started_at)}
+              </Typography>
+              <Typography variant="p" className="truncate text-muted-foreground max-w-96" title={activeTimer.task_subject}>
+                {activeTimer.task_subject}
+              </Typography>
+            </div>
+          )}
           <Separator />
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)}>
             <div className="flex flex-col gap-y-4">
+              <InputModeToggle value={inputMode} onChange={handleInputModeChange} />
               <div className="grid max-sm:gap-y-4 sm:gap-x-4 max-sm:grid-rows-2 sm:grid-cols-2">
                 <FormField
                   control={form.control}
@@ -285,17 +415,17 @@ const AddTime = ({
                     </FormItem>
                   )}
                 />
-                <div className="grid grid-cols-2 gap-x-4">
-                  <FormField
-                    control={form.control}
-                    name="hours"
-                    render={({ field }) => (
-                      <FormItem className="w-full space-y-1">
-                        <FormLabel className="flex gap-2 items-center">
-                          <p className="text-sm">Time</p>
-                        </FormLabel>
-                        <FormControl>
-                          <>
+                <div className={mergeClassNames("grid gap-x-4", inputMode === "range" ? "grid-cols-1" : "grid-cols-2")}>
+                  {inputMode === "duration" ? (
+                    <FormField
+                      control={form.control}
+                      name="hours"
+                      render={({ field }) => (
+                        <FormItem className="w-full space-y-1">
+                          <FormLabel className="flex gap-2 items-center">
+                            <p className="text-sm">Time</p>
+                          </FormLabel>
+                          <FormControl>
                             <div className=" flex w-full border rounded-md ">
                               <Input
                                 placeholder="00:00"
@@ -305,12 +435,25 @@ const AddTime = ({
                               />
                               <TimeSelector onClick={UpdateTime} />
                             </div>
-                          </>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  ) : (
+                    <TimeRangeFields
+                      fromTime={form.watch("from_time") || ""}
+                      toTime={form.watch("to_time") || ""}
+                      onFromTimeChange={(value) =>
+                        form.setValue("from_time", value, { shouldDirty: true, shouldValidate: true })
+                      }
+                      onToTimeChange={(value) =>
+                        form.setValue("to_time", value, { shouldDirty: true, shouldValidate: true })
+                      }
+                      fromError={form.formState.errors.from_time?.message}
+                      toError={form.formState.errors.to_time?.message}
+                    />
+                  )}
                   <FormField
                     control={form.control}
                     name="date"
@@ -397,11 +540,30 @@ const AddTime = ({
                 )}
               />
               <DialogFooter className="sm:justify-start w-full pt-3">
-                <div className="flex gap-x-4 w-full">
+                <div className="flex flex-wrap gap-3 w-full">
                   <Button disabled={!isDirty || !isValid || submitting}>
                     {submitting ? <LoaderCircle className="animate-spin w-4 h-4" /> : <Save className="w-4 h-4" />}
                     Add Time
                   </Button>
+                  {activeTimer ? (
+                    <Button variant="destructive" type="button" onClick={handleStopTimer} disabled={timerSubmitting}>
+                      {timerSubmitting ? (
+                        <LoaderCircle className="animate-spin w-4 h-4" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                      Stop Timer
+                    </Button>
+                  ) : (
+                    <Button variant="outline" type="button" onClick={handleStartTimer} disabled={timerSubmitting}>
+                      {timerSubmitting ? (
+                        <LoaderCircle className="animate-spin w-4 h-4" />
+                      ) : (
+                        <Play className="w-4 h-4" />
+                      )}
+                      Start Timer
+                    </Button>
+                  )}
                   <Button variant="secondary" type="button" onClick={handleOpen} disabled={submitting}>
                     <X className="w-4 h-4" />
                     Cancel

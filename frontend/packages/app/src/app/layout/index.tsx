@@ -10,6 +10,7 @@ import { useFrappeGetCall } from "frappe-react-sdk";
 /**
  * Internal dependencies.
  */
+import { RunningTimerBar } from "@/app/components/running-timer-bar";
 import Sidebar from "@/app/layout/sidebar";
 import { parseFrappeErrorMsg } from "@/lib/utils";
 import type { RootState } from "@/store";
@@ -55,6 +56,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         <div className="w-full overflow-hidden flex flex-col">
           {(user.employee || user.user == "Administrator") && (
             <>
+              <RunningTimerBar employee={user.employee} />
               <Suspense fallback={<></>}>
                 <ErrorFallback>{children}</ErrorFallback>
               </Suspense>

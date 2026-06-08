@@ -92,6 +92,11 @@ class TestTimesheet(TestNextPms):
     def test_d_timesheet_approval_request(self):
         """Test timesheet approval request"""
 
+        validate_method = self.method("next_pms.timesheet.api.timesheet.validate_submission")
+        response = self.get(validate_method, params={"start_date": nowdate(), "employee": self.employee})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json.get("message").get("can_submit"))
+
         method = self.method("next_pms.timesheet.api.timesheet.submit_for_approval")
         data = {"start_date": nowdate(), "employee": self.employee}
         response = self.post(method, data)
@@ -109,6 +114,40 @@ class TestTimesheet(TestNextPms):
         weekly_status = response.json.get("message").get("data").get("This Week").get("status")
         # Validate the status
         self.assertEqual(weekly_status, "Approval Pending")
+
+        recall_method = self.method("next_pms.timesheet.api.timesheet.recall_timesheet")
+        response = self.post(recall_method, {"start_date": nowdate(), "employee": self.employee})
+        self.assertEqual(response.status_code, 200)
+
+    def test_f_timesheet_range_entry(self):
+        method = self.method("next_pms.timesheet.api.timesheet.save")
+        data = {
+            "date": nowdate(),
+            "employee": self.employee,
+            "description": "Range entry test",
+            "task": self.task,
+            "hours": 0,
+            "from_time": "09:00",
+            "to_time": "11:30",
+            "input_mode": "range",
+        }
+        response = self.post(method, data)
+        self.assertEqual(response.status_code, 200)
+
+        detail_method = self.method("next_pms.timesheet.api.timesheet.get_timesheet_details")
+        detail_response = self.get(
+            detail_method,
+            {"employee": self.employee, "date": nowdate(), "task": self.task},
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        entries = detail_response.json.get("message", {}).get("data", [])
+        range_entries = [
+            entry
+            for entry in entries
+            if entry.get("from_time") and "09:00:00" in str(entry.get("from_time"))
+        ]
+        self.assertTrue(range_entries)
+        self.assertEqual(range_entries[-1].get("hours"), 2.5)
 
     def test_e_timesheet_approval(self):
         employee = self.employee

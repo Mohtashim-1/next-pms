@@ -40,9 +40,11 @@ const ResourceTimLineHeaderSection = ({ viewData }: { viewData: ViewData }) => {
 
   const { updatePermission, updateDialogState } = useContextSelector(ResourceFormContext, (value) => value.actions);
 
-  const { data: employee } = useFrappeGetCall("next_pms.timesheet.api.employee.get_employee", {
-    filters: { name: reportingNameParam || viewData.filters.reportingManager },
-  });
+  const reportingManagerId = reportingNameParam || viewData.filters.reportingManager;
+  const { data: employee } = useFrappeGetCall(
+    reportingManagerId ? "next_pms.timesheet.api.employee.get_employee" : null,
+    reportingManagerId ? { filters: { name: reportingManagerId } } : undefined
+  );
 
   const { filters, hasViewUpdated } = useContextSelector(TimeLineContext, (value) => value.state);
   const { updateFilters, setHasViewUpdated } = useContextSelector(TimeLineContext, (value) => value.actions);

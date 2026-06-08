@@ -10,7 +10,7 @@ import { CircleDollarSign } from "lucide-react";
  */
 import { mergeClassNames } from "@/lib/utils";
 import type { TaskDataItemProps, TaskDataProps } from "@/types/timesheet";
-import { Cell } from "../dataCell";
+import { GridCell } from "../gridCell";
 import { TaskHoverCard } from "../taskHoverCard";
 import type { RowProps } from "./types";
 
@@ -30,11 +30,22 @@ const Row = ({
   totalCellClassName,
   showEmptyCell,
   hideLikeButton,
+  gridRow: rowOffset = 0,
+  enableInlineEdit,
+  employee,
+  onSaved,
+  isFocused,
+  isEditing,
+  onFocusCell,
+  onStartEditing,
+  onStopEditing,
+  onMoveFocus,
 }: RowProps) => {
   return (
     <>
       {Object.keys(tasks).length > 0 &&
-        Object.entries(tasks).map(([task, taskData]: [string, TaskDataProps]) => {
+        Object.entries(tasks).map(([task, taskData]: [string, TaskDataProps], rowIndex: number) => {
+          const gridRow = rowOffset + rowIndex;
           let totalHours = 0;
           return (
             <TableRow key={task} className={mergeClassNames("border-b ", rowClassName)}>
@@ -49,7 +60,7 @@ const Row = ({
                   getLikedTaskData={getLikedTaskData ?? (() => {})}
                 />
               </TableCell>
-              {dates.map((date: string) => {
+              {dates.map((date: string, colIndex: number) => {
                 let data = taskData.data.filter(
                   (data: TaskDataItemProps) => getDateFromDateAndTimeString(data.from_time) === date
                 );
@@ -78,7 +89,7 @@ const Row = ({
                   ? { isHoliday: true, weekly_off: matchingHoliday.weekly_off }
                   : { isHoliday: false, weekly_off: false };
                 return (
-                  <Cell
+                  <GridCell
                     key={date}
                     className={cellClassName}
                     date={date}
@@ -86,6 +97,17 @@ const Row = ({
                     isHoliday={result.isHoliday && !result.weekly_off}
                     onCellClick={onCellClick}
                     disabled={disabled}
+                    gridRow={gridRow}
+                    gridCol={colIndex}
+                    enableInlineEdit={enableInlineEdit}
+                    employee={employee}
+                    onSaved={onSaved}
+                    isFocused={isFocused}
+                    isEditing={isEditing}
+                    onFocusCell={onFocusCell}
+                    onStartEditing={onStartEditing}
+                    onStopEditing={onStopEditing}
+                    onMoveFocus={onMoveFocus}
                   />
                 );
               })}

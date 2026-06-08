@@ -35,6 +35,11 @@ import { z } from "zod";
  * Internal dependencies
  */
 import TimeSelector from "@/app/components/add-time/time-selector";
+import { InputModeToggle } from "@/app/components/timesheet-input/inputModeToggle";
+import { TimeRangeFields } from "@/app/components/timesheet-input/timeRangeFields";
+import { TIMESHEET_INPUT_MODE_KEY } from "@/lib/constant";
+import { getLocalStorage, setLocalStorage } from "@/lib/storage";
+import { extractTimeFromDatetime, isRangeEntry, type TimesheetInputMode } from "@/lib/timesheetTime";
 import { parseFrappeErrorMsg } from "@/lib/utils";
 import { TimesheetUpdateSchema } from "@/schema/timesheet";
 import type { EditTimeProps, TimesheetDetail } from "./types";
@@ -56,7 +61,9 @@ export const EditTime = ({ employee, date, task, open, onClose, user }: EditTime
     name: "data",
   });
 
-  const columns = ["Date", "Hours", "Description", "Billable", ""];
+  const savedInputMode = (getLocalStorage(TIMESHEET_INPUT_MODE_KEY) as TimesheetInputMode) || "duration";
+  const [inputMode, setInputMode] = useState<TimesheetInputMode>(savedInputMode);
+  const columns = ["Date", inputMode === "range" ? "Start / End" : "Hours", "Description", "Billable", ""];
   const { toast } = useToast();
   const { call: updateTimesheet } = useFrappePostCall("next_pms.timesheet.api.timesheet.bulk_update_timesheet_detail");
   const { call: deleteTimesheet } = useFrappePostCall("next_pms.timesheet.api.timesheet.delete");
@@ -69,9 +76,13 @@ export const EditTime = ({ employee, date, task, open, onClose, user }: EditTime
   const updatedData = useMemo(() => {
     if (!data) return [];
     const updatedData = data.message.data.map((item: TimesheetDetail) => {
+      const rangeMode = isRangeEntry(item.from_time, item.to_time);
       return {
         ...item,
         hours: floatToTime(item.hours),
+        input_mode: rangeMode ? "range" : "duration",
+        from_time: extractTimeFromDatetime(item.from_time),
+        to_time: extractTimeFromDatetime(item.to_time),
       };
     });
     return updatedData;
@@ -80,9 +91,21 @@ export const EditTime = ({ employee, date, task, open, onClose, user }: EditTime
   useEffect(() => {
     if (data) {
       form.reset({ data: updatedData });
+      const firstRangeRow = updatedData.find((item) => item.input_mode === "range");
+      if (firstRangeRow) {
+        setInputMode("range");
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
+
+  const handleInputModeChange = (mode: TimesheetInputMode) => {
+    setInputMode(mode);
+    setLocalStorage(TIMESHEET_INPUT_MODE_KEY, mode);
+    fields.forEach((_, index) => {
+      form.setValue(`data.${index}.input_mode`, mode, { shouldDirty: true, shouldValidate: true });
+    });
+  };
 
   const addEmptyFormRow = () => {
     const parent = fields[0]?.parent || "";
@@ -93,6 +116,9 @@ export const EditTime = ({ employee, date, task, open, onClose, user }: EditTime
       parent: parent,
       task: task,
       date: date,
+      input_mode: inputMode,
+      from_time: "",
+      to_time: "",
     };
     append(newRow, { shouldFocus: true });
   };
@@ -100,7 +126,11 @@ export const EditTime = ({ employee, date, task, open, onClose, user }: EditTime
   const handleUpdate = (formData: z.infer<typeof TimesheetUpdateSchema>) => {
     setIsSubmitting(true);
     const data = {
-      data: formData.data,
+      data: formData.data.map((row) =>
+        row.input_mode === "range"
+          ? { ...row, hours: 0 }
+          : row
+      ),
     };
     updateTimesheet(data)
       .then((res) => {
@@ -172,6 +202,7 @@ export const EditTime = ({ employee, date, task, open, onClose, user }: EditTime
               <Spinner />
             ) : (
               <div className=" max-md:flex max-md:flex-col max-md:gap-y-3">
+                <InputModeToggle value={inputMode} onChange={handleInputModeChange} className="mb-4" />
                 <div className="flex flex-col max-md:hidden">
                   <div className="py-2 bg-muted rounded-lg flex items-center gap-2 h-10 mb-5">
                     {columns.map((column, key) => (
@@ -223,43 +254,66 @@ export const EditTime = ({ employee, date, task, open, onClose, user }: EditTime
                         </FormItem>
                       )}
                     />
-                    <FormField
-                      control={form.control}
-                      name={`data.${index}.hours`}
-                      render={({ field }) => {
-                        return (
-                          <FormItem className="w-full md:max-w-24 max-md:w-full md:px-2">
-                            <FormLabel className="flex gap-2 items-center md:hidden">
-                              <p title="subject" className="text-sm truncate">
-                                Hours
-                              </p>
-                            </FormLabel>
-                            <FormControl>
-                              <div className=" flex w-full border rounded-md ">
-                                <Input
-                                  placeholder="00:00"
-                                  type="text"
-                                  {...field}
-                                  className={mergeClassNames(
-                                    "p-1 border-0 border-r rounded-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                                  )}
-                                />
-                                <TimeSelector
-                                  onClick={(time: string) => {
-                                    form.setValue(`data.${index}.hours`, time, {
-                                      shouldValidate: true,
-                                      shouldDirty: true,
-                                      shouldTouch: true,
-                                    });
-                                  }}
-                                />
-                              </div>
-                            </FormControl>
-                            <FormMessage className="text-xs" />
-                          </FormItem>
-                        );
-                      }}
-                    />
+                    {inputMode === "duration" ? (
+                      <FormField
+                        control={form.control}
+                        name={`data.${index}.hours`}
+                        render={({ field }) => {
+                          return (
+                            <FormItem className="w-full md:max-w-24 max-md:w-full md:px-2">
+                              <FormLabel className="flex gap-2 items-center md:hidden">
+                                <p title="subject" className="text-sm truncate">
+                                  Hours
+                                </p>
+                              </FormLabel>
+                              <FormControl>
+                                <div className=" flex w-full border rounded-md ">
+                                  <Input
+                                    placeholder="00:00"
+                                    type="text"
+                                    {...field}
+                                    className={mergeClassNames(
+                                      "p-1 border-0 border-r rounded-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                                    )}
+                                  />
+                                  <TimeSelector
+                                    onClick={(time: string) => {
+                                      form.setValue(`data.${index}.hours`, time, {
+                                        shouldValidate: true,
+                                        shouldDirty: true,
+                                        shouldTouch: true,
+                                      });
+                                    }}
+                                  />
+                                </div>
+                              </FormControl>
+                              <FormMessage className="text-xs" />
+                            </FormItem>
+                          );
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full md:max-w-40 max-md:w-full md:px-2">
+                        <TimeRangeFields
+                          fromTime={form.watch(`data.${index}.from_time`) || ""}
+                          toTime={form.watch(`data.${index}.to_time`) || ""}
+                          onFromTimeChange={(value) =>
+                            form.setValue(`data.${index}.from_time`, value, {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            })
+                          }
+                          onToTimeChange={(value) =>
+                            form.setValue(`data.${index}.to_time`, value, {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            })
+                          }
+                          fromError={form.formState.errors.data?.[index]?.from_time?.message}
+                          toError={form.formState.errors.data?.[index]?.to_time?.message}
+                        />
+                      </div>
+                    )}
                     <FormField
                       control={form.control}
                       name={`data.${index}.description`}

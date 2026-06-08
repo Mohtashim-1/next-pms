@@ -1,8 +1,8 @@
 /**
  * External dependencies
  */
-import { useCallback, useEffect, useState } from "react";
-import { ErrorFallback, Table, TableBody } from "@next-pms/design-system/components";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ErrorFallback, Table, TableBody, Typography } from "@next-pms/design-system/components";
 /**
  * Internal dependencies
  */
@@ -17,6 +17,7 @@ import { EmptyRow } from "./components/row/emptyRow";
 import { LeaveRow } from "./components/row/leaveRow";
 import { TotalHourRow } from "./components/row/totalRow";
 import type { timesheetTableProps } from "./components/types";
+import { useGridNavigation } from "./hooks/useGridNavigation";
 
 export const TimesheetTable = ({
   dates,
@@ -34,12 +35,18 @@ export const TimesheetTable = ({
   likedTaskData,
   getLikedTaskData,
   hideLikeButton,
+  employee,
+  onSaved,
+  enableInlineEdit = true,
 }: timesheetTableProps) => {
   const holidayList = getHolidayList(holidays);
   const [isTaskLogDialogBoxOpen, setIsTaskLogDialogBoxOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<string>("");
   const task_date_range_key = dates[0] + "-" + dates[dates.length - 1];
   const has_liked_task = hasKeyInLocalStorage(LIKED_TASK_KEY);
+  const isWeekLocked = ["Approval Pending", "Processing Timesheet", "Approved", "Partially Approved"].includes(
+    weeklyStatus ?? ""
+  );
 
   const setTaskInLocalStorage = () => {
     setLikedTask(LIKED_TASK_KEY, task_date_range_key, likedTaskData!);
@@ -66,16 +73,79 @@ export const TimesheetTable = ({
   }, [task_date_range_key]);
 
   useEffect(() => {
-    if (weeklyStatus === "Approved") {
+    if (isWeekLocked) {
       deleteTaskFromLocalStorage();
     }
-  }, [deleteTaskFromLocalStorage, weeklyStatus]);
+  }, [deleteTaskFromLocalStorage, isWeekLocked]);
+
+  const editableRowCount = useMemo(() => {
+    let count = 0;
+    if (!isWeekLocked) {
+      count += 1;
+      count += filteredLikedTasks.length;
+    }
+    count += Object.keys(tasks).length;
+    return count;
+  }, [filteredLikedTasks.length, isWeekLocked, tasks]);
+
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  const {
+    focusedCell,
+    editingCell,
+    handleContainerKeyDown,
+    isFocused,
+    isEditing,
+    focusCell,
+    startEditing,
+    stopEditing,
+    moveFocus,
+  } = useGridNavigation({
+    rowCount: editableRowCount,
+    colCount: dates.length,
+  });
+
+  const gridBindings = {
+    enableInlineEdit: enableInlineEdit && Boolean(employee) && !disabled,
+    employee,
+    onSaved,
+    isFocused,
+    isEditing,
+    onFocusCell: focusCell,
+    onStartEditing: startEditing,
+    onStopEditing: stopEditing,
+    onMoveFocus: moveFocus,
+  };
+
+  useEffect(() => {
+    if (editingCell || !gridRef.current || editableRowCount === 0 || dates.length === 0) return;
+
+    const cell = gridRef.current.querySelector<HTMLElement>(
+      `[data-grid-row="${focusedCell.row}"][data-grid-col="${focusedCell.col}"]`
+    );
+    if (!cell || cell === document.activeElement) return;
+
+    cell.focus();
+  }, [focusedCell.row, focusedCell.col, editingCell, editableRowCount, dates.length]);
+
+  let nextGridRow = 0;
+
+  if (!dates?.length) {
+    return null;
+  }
 
   return (
     <ErrorFallback>
       {isTaskLogDialogBoxOpen && (
         <TaskLog task={selectedTask} isOpen={isTaskLogDialogBoxOpen} onOpenChange={setIsTaskLogDialogBoxOpen} />
       )}
+      <div
+        ref={gridRef}
+        data-timesheet-grid
+        tabIndex={-1}
+        onKeyDown={handleContainerKeyDown}
+        className="outline-none"
+      >
       <Table>
         <Header
           showHeading={showHeading}
@@ -101,7 +171,7 @@ export const TimesheetTable = ({
             expectedHours={expectatedHours(workingHour, workingFrequency)}
           />
 
-          {weeklyStatus != "Approved" && (
+          {!isWeekLocked && (
             <EmptyRow
               dates={dates}
               holidayList={holidayList}
@@ -111,12 +181,15 @@ export const TimesheetTable = ({
               setIsTaskLogDialogBoxOpen={setIsTaskLogDialogBoxOpen}
               likedTaskData={likedTaskData!}
               getLikedTaskData={getLikedTaskData}
+              gridRow={nextGridRow++}
+              {...gridBindings}
             />
           )}
-          {weeklyStatus != "Approved" &&
+          {!isWeekLocked &&
             filteredLikedTasks.length > 0 &&
             importTasks &&
             filteredLikedTasks.map((task: TaskDataProps) => {
+              const gridRow = nextGridRow++;
               return (
                 <EmptyRow
                   key={task.name}
@@ -130,6 +203,8 @@ export const TimesheetTable = ({
                   taskData={task}
                   likedTaskData={likedTaskData}
                   getLikedTaskData={getLikedTaskData}
+                  gridRow={gridRow}
+                  {...gridBindings}
                 />
               );
             })}
@@ -146,9 +221,17 @@ export const TimesheetTable = ({
             workingFrequency={workingFrequency}
             workingHour={workingHour}
             hideLikeButton={hideLikeButton}
+            gridRow={nextGridRow}
+            {...gridBindings}
           />
         </TableBody>
       </Table>
+      {gridBindings.enableInlineEdit && (
+        <Typography variant="small" className="text-muted-foreground px-1 py-2">
+          Arrow keys move between cells · Enter or type a digit to edit · Tab / Shift+Tab next cell · Esc cancel
+        </Typography>
+      )}
+      </div>
     </ErrorFallback>
   );
 };

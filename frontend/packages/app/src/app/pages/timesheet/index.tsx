@@ -55,6 +55,9 @@ function Timesheet() {
     start_date: timesheet.weekDate,
     max_week: 4,
   });
+  const { call: recallTimesheet, loading: isRecalling } = useFrappePostCall(
+    "next_pms.timesheet.api.timesheet.recall_timesheet"
+  );
 
   useEffect(() => {
     const scrollToElement = () => {
@@ -166,6 +169,28 @@ function Timesheet() {
     dispatch({ type: "SET_APPROVAL_DIALOG_STATE", payload: true });
   };
 
+  const handleRecall = (start_date: string) => {
+    if (isRecalling) return;
+    recallTimesheet({
+      start_date,
+      employee: user.employee,
+    })
+      .then((res) => {
+        toast({
+          variant: "success",
+          description: res.message,
+        });
+        mutate();
+      })
+      .catch((err) => {
+        const error = parseFrappeErrorMsg(err);
+        toast({
+          variant: "destructive",
+          description: error,
+        });
+      });
+  };
+
   const handleImportTaskFromGoogleCalendar = () => {
     dispatch({ type: "SET_IMPORT_FROM_GOOGLE_CALENDAR_DIALOG_STATE", payload: true });
   };
@@ -213,6 +238,12 @@ function Timesheet() {
                 {timesheet.data?.data &&
                   Object.keys(timesheet.data?.data).length > 0 &&
                   Object.entries(timesheet.data?.data).map(([key, value]: [string, timesheet]) => {
+                    const isWeekLocked = [
+                      "Approval Pending",
+                      "Processing Timesheet",
+                      "Approved",
+                      "Partially Approved",
+                    ].includes(value.status);
                     const data = getTimesheetHours(
                       value.dates,
                       value.total_hours,
@@ -251,6 +282,7 @@ function Timesheet() {
                                 start_date={value.start_date}
                                 end_date={value.end_date}
                                 onApproval={handleApproval}
+                                onRecall={handleRecall}
                                 status={value.status}
                                 expectedHours={timesheet.data.working_hour}
                                 totalHours={data.totalHours}
@@ -276,11 +308,14 @@ function Timesheet() {
                               tasks={value.tasks}
                               onCellClick={onCellClick}
                               weeklyStatus={value.status}
-                              disabled={value.status === "Approved"}
+                              disabled={isWeekLocked}
                               importTasks={true}
                               loadingLikedTasks={loadingLikedTasks}
                               likedTaskData={likedTaskData}
                               getLikedTaskData={getLikedTaskData}
+                              employee={user.employee}
+                              onSaved={mutate}
+                              enableInlineEdit={!isWeekLocked}
                             />
                           </AccordionContent>
                         </AccordionItem>

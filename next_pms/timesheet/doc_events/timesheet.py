@@ -25,16 +25,18 @@ def before_insert(doc, method=None):
 
 
 def before_save(doc, method=None):
-    from frappe.utils import get_datetime
+    from next_pms.timesheet.utils.time_log import normalize_time_log_entry
 
     if not doc.get("time_logs"):
         return
-    #  Update the from_time and to_time to have only date part and time part as 00:00:00
+    if doc.flags.keep_actual_times:
+        for key, data in enumerate(doc.get("time_logs")):
+            doc.time_logs[key].project = get_value("Task", {"name": doc.time_logs[key].task}, "project")
+        validate_start_date(doc)
+        return
+
     for key, data in enumerate(doc.get("time_logs")):
-        from_time = get_datetime(data.from_time).replace(hour=0, minute=0, second=0, microsecond=0)
-        to_time = get_datetime(data.to_time).replace(hour=0, minute=0, second=0, microsecond=0)
-        doc.time_logs[key].from_time = from_time
-        doc.time_logs[key].to_time = to_time
+        normalize_time_log_entry(doc.time_logs[key])
         doc.time_logs[key].project = get_value("Task", {"name": doc.time_logs[key].task}, "project")
     validate_start_date(doc)
 

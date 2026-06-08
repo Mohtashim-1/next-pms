@@ -1,8 +1,9 @@
 /**
  * External dependencies
  */
+import type { MouseEvent } from "react";
 import { Button } from "@next-pms/design-system/components";
-import { CircleCheck, CircleX, Clock3, LoaderCircle } from "lucide-react";
+import { CircleCheck, CircleX, Clock3, LoaderCircle, RotateCcw } from "lucide-react";
 /**
  * Internal dependencies
  */
@@ -22,6 +23,7 @@ export const SubmitButton = ({
   start_date,
   end_date,
   onApproval,
+  onRecall,
   status,
   expectedHours,
   totalHours,
@@ -30,39 +32,52 @@ export const SubmitButton = ({
   const handleClick = () => {
     onApproval?.(start_date, end_date);
   };
+  const handleRecall = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    onRecall?.(start_date, end_date);
+  };
   const expectedWeeklyHours = calculateWeeklyHour(expectedHours, workingFrequency);
+  const canRecall = ["Approval Pending", "Processing Timesheet", "Approved", "Partially Approved"].includes(status);
   return (
-    <Button
-      variant="ghost"
-      asChild
-      className={mergeClassNames(
-        (status == "Approved" || status == "Partially Approved") &&
-          "bg-success/20 text-success hover:bg-success/20 hover:text-success border border-success/30",
-        (status == "Rejected" || status == "Partially Rejected") &&
-          "bg-destructive/20 text-destructive hover:bg-destructive/20 hover:text-destructive border border-destructive/30",
-        status == "Approval Pending" &&
-          "bg-warning/20 text-warning hover:bg-warning/20 hover:text-warning  border border-warning/30",
-        status === "Processing Timesheet" &&
-          "bg-warning/20 text-warning hover:bg-warning/20 hover:text-warning  border border-warning/30",
-        status == "Not Submitted" &&
-          totalHours >= expectedWeeklyHours &&
-          "bg-yellow-50 text-yellow-600 hover:bg-yellow-50 hover:text-yellow-600 dark:bg-yellow-400/20 border border-yellow-600"
+    <div className="flex items-center gap-2 shrink-0">
+      <Button
+        variant="ghost"
+        asChild
+        className={mergeClassNames(
+          (status == "Approved" || status == "Partially Approved") &&
+            "bg-success/20 text-success hover:bg-success/20 hover:text-success border border-success/30",
+          (status == "Rejected" || status == "Partially Rejected") &&
+            "bg-destructive/20 text-destructive hover:bg-destructive/20 hover:text-destructive border border-destructive/30",
+          status == "Approval Pending" &&
+            "bg-warning/20 text-warning hover:bg-warning/20 hover:text-warning  border border-warning/30",
+          status === "Processing Timesheet" &&
+            "bg-warning/20 text-warning hover:bg-warning/20 hover:text-warning  border border-warning/30",
+          status == "Not Submitted" &&
+            totalHours >= expectedWeeklyHours &&
+            "bg-yellow-50 text-yellow-600 hover:bg-yellow-50 hover:text-yellow-600 dark:bg-yellow-400/20 border border-yellow-600"
+        )}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!canRecall) {
+            handleClick();
+          }
+        }}
+      >
+        <span>
+          {(status == "Approved" || status == "Partially Approved") && <CircleCheck className="stroke-success" />}
+          {(status == "Rejected" || status == "Partially Rejected") && <CircleX className="stroke-destructive" />}
+          {status == "Approval Pending" && <Clock3 className="stroke-warning" />}
+          {status == "Not Submitted" && <CircleCheck className="" />}
+          {status == "Processing Timesheet" && <LoaderCircle className="stroke-warning animate-spin" />}
+          {status}
+        </span>
+      </Button>
+      {canRecall && onRecall && (
+        <Button variant="outline" className="h-9 px-3" onClick={handleRecall}>
+          <RotateCcw className="w-4 h-4" />
+          Recall
+        </Button>
       )}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (status != "Approved" && status != "Processing Timesheet") {
-          handleClick();
-        }
-      }}
-    >
-      <span>
-        {(status == "Approved" || status == "Partially Approved") && <CircleCheck className="stroke-success" />}
-        {(status == "Rejected" || status == "Partially Rejected") && <CircleX className="stroke-destructive" />}
-        {status == "Approval Pending" && <Clock3 className="stroke-warning" />}
-        {status == "Not Submitted" && <CircleCheck className="" />}
-        {status == "Processing Timesheet" && <LoaderCircle className="stroke-warning animate-spin" />}
-        {status}
-      </span>
-    </Button>
+    </div>
   );
 };

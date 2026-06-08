@@ -15,9 +15,10 @@ export interface ApprovalProps {
 
 export type TimesheetDetail = Pick<
   TaskDataItemProps,
-  "parent" | "name" | "hours" | "description" | "task" | "is_billable"
+  "parent" | "name" | "hours" | "description" | "task" | "is_billable" | "from_time" | "to_time"
 > & {
   date: string;
+  input_mode?: "duration" | "range";
 };
 
 export interface EditTimeProps {

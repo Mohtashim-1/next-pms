@@ -9,6 +9,7 @@ export const PROJECT = "/project";
 export const LOCAL_STORAGE_TASK = "task_list";
 export const RESOURCE_MANAGEMENT = "/resource-management";
 export const LIKED_TASK_KEY = "next_pms_liked_task";
+export const TIMESHEET_INPUT_MODE_KEY = "next_pms_timesheet_input_mode";
 // user roles for timesheet
 export const ROLES = [
   "Projects Manager",

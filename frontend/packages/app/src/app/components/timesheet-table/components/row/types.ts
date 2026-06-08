@@ -9,7 +9,20 @@ import type {
   TaskProps,
 } from "@/types/timesheet";
 
-export type emptyRowProps = {
+export type GridCellBindings = {
+  gridRow?: number;
+  isFocused?: (row: number, col: number) => boolean;
+  isEditing?: (row: number, col: number) => boolean;
+  onFocusCell?: (row: number, col: number) => void;
+  onStartEditing?: (row: number, col: number) => void;
+  onStopEditing?: () => void;
+  onMoveFocus?: (rowDelta: number, colDelta: number) => void;
+  employee?: string;
+  onSaved?: () => void;
+  enableInlineEdit?: boolean;
+};
+
+export type emptyRowProps = GridCellBindings & {
   dates: string[];
   holidayList: Array<string>;
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -29,7 +42,7 @@ export type emptyRowProps = {
   getLikedTaskData?: () => void;
 };
 
-export interface RowProps {
+export type RowProps = GridCellBindings & {
   dates: string[];
   tasks: TaskProps;
   holidays: HolidayProp[];
@@ -51,7 +64,7 @@ export interface RowProps {
   totalCellClassName?: string;
   showEmptyCell?: boolean;
   hideLikeButton?: boolean;
-}
+};
 
 export interface leaveRowProps {
   leaves: Array<LeaveProps>;

@@ -19,7 +19,9 @@ import {
   FormControl,
   FormMessage,
   TextArea,
+  Separator,
 } from "@next-pms/design-system/components";
+import { floatToTime } from "@next-pms/design-system/utils";
 import { prettyDate } from "@next-pms/design-system/date";
 import { useToast } from "@next-pms/design-system/hooks";
 import { useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
@@ -32,6 +34,21 @@ import { parseFrappeErrorMsg } from "@/lib/utils";
 import { TimesheetApprovalSchema } from "@/schema/timesheet";
 import type { ApprovalProps } from "./types";
 
+type SubmissionSummary = {
+  period_type: string;
+  start_date: string;
+  end_date: string;
+  timesheet_count: number;
+  entry_count: number;
+  task_count: number;
+  project_count: number;
+  total_hours: number;
+  expected_hours: number;
+  warnings: string[];
+  violations: string[];
+  can_submit: boolean;
+};
+
 export const Approval = ({ onClose, user, timesheetState, dispatch }: ApprovalProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
@@ -39,6 +56,14 @@ export const Approval = ({ onClose, user, timesheetState, dispatch }: ApprovalPr
   const { data } = useFrappeGetCall("next_pms.timesheet.api.get_employee_with_role", {
     role: ["Projects Manager", "Projects User"],
   });
+  const { data: summaryData, isLoading: isValidating } = useFrappeGetCall(
+    "next_pms.timesheet.api.timesheet.validate_submission",
+    {
+      start_date: timesheetState.dateRange.start_date,
+      employee: user.employee,
+    }
+  );
+  const summary = summaryData?.message as SubmissionSummary | undefined;
   const form = useForm<z.infer<typeof TimesheetApprovalSchema>>({
     resolver: zodResolver(TimesheetApprovalSchema),
     defaultValues: {
@@ -108,6 +133,56 @@ export const Approval = ({ onClose, user, timesheetState, dispatch }: ApprovalPr
                 </FormItem>
               )}
             />
+            <Separator className="my-4" />
+            <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3 text-sm">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div>
+                  <div className="text-muted-foreground">Period</div>
+                  <div className="font-medium">{summary?.period_type ?? "Weekly"}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Total</div>
+                  <div className="font-medium">{summary ? floatToTime(summary.total_hours) : "-"}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Expected</div>
+                  <div className="font-medium">{summary ? floatToTime(summary.expected_hours) : "-"}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Entries</div>
+                  <div className="font-medium">{summary?.entry_count ?? "-"}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <div>
+                  <div className="text-muted-foreground">Timesheets</div>
+                  <div className="font-medium">{summary?.timesheet_count ?? "-"}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Tasks</div>
+                  <div className="font-medium">{summary?.task_count ?? "-"}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Projects</div>
+                  <div className="font-medium">{summary?.project_count ?? "-"}</div>
+                </div>
+              </div>
+              {isValidating && <div className="text-muted-foreground">Checking submission rules...</div>}
+              {summary?.warnings?.length ? (
+                <div className="rounded-md border border-warning/40 bg-warning/10 p-2 text-warning">
+                  {summary.warnings.map((warning) => (
+                    <div key={warning}>{warning}</div>
+                  ))}
+                </div>
+              ) : null}
+              {summary?.violations?.length ? (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-destructive">
+                  {summary.violations.map((violation) => (
+                    <div key={violation}>{violation}</div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <FormField
               control={form.control}
               name="approver"
@@ -137,7 +212,7 @@ export const Approval = ({ onClose, user, timesheetState, dispatch }: ApprovalPr
               )}
             />
             <DialogFooter className="sm:justify-start mt-6">
-              <Button disabled={isSubmitting}>
+              <Button disabled={isSubmitting || isValidating || !summary?.can_submit}>
                 {isSubmitting ? <LoaderCircle className="animate-spin" /> : <Send />}
                 Submit For Approval
               </Button>

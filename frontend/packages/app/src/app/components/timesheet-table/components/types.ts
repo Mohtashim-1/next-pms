@@ -19,6 +19,8 @@ export type cellProps = {
   onCellClick?: (val) => void;
   disabled?: boolean;
   className?: string;
+  gridRow?: number;
+  gridCol?: number;
 };
 
 export type HeaderProps = {
@@ -38,6 +40,7 @@ export type submitButtonProps = {
   start_date: string;
   end_date: string;
   onApproval?: (start_date: string, end_date: string) => void;
+  onRecall?: (start_date: string, end_date: string) => void;
   status: string;
   expectedHours: number;
   totalHours: number;
@@ -79,4 +82,7 @@ export type timesheetTableProps = {
   likedTaskData?: Array<object>;
   getLikedTaskData?: () => void;
   hideLikeButton?: boolean;
+  employee?: string;
+  onSaved?: () => void;
+  enableInlineEdit?: boolean;
 };

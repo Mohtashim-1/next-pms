@@ -8,7 +8,7 @@ import { TableCell, TableRow } from "@next-pms/design-system/components";
  */
 import { mergeClassNames } from "@/lib/utils";
 import type { TaskDataProps } from "@/types/timesheet";
-import { Cell } from "../dataCell";
+import { GridCell } from "../gridCell";
 import { TaskHoverCard } from "../taskHoverCard";
 import type { emptyRowProps } from "./types";
 
@@ -41,6 +41,16 @@ export const EmptyRow = ({
   name,
   likedTaskData,
   getLikedTaskData,
+  gridRow = 0,
+  enableInlineEdit,
+  employee,
+  onSaved,
+  isFocused = () => false,
+  isEditing = () => false,
+  onFocusCell = () => {},
+  onStartEditing = () => {},
+  onStopEditing = () => {},
+  onMoveFocus,
 }: emptyRowProps) => {
   return (
     <TableRow className={mergeClassNames(rowClassName)}>
@@ -56,7 +66,7 @@ export const EmptyRow = ({
           />
         )}
       </TableCell>
-      {dates.map((date: string) => {
+      {dates.map((date: string, colIndex: number) => {
         const isHoliday = holidayList.includes(date);
         const value = [
           {
@@ -72,7 +82,7 @@ export const EmptyRow = ({
           },
         ];
         return (
-          <Cell
+          <GridCell
             key={date}
             date={date}
             data={value}
@@ -80,6 +90,17 @@ export const EmptyRow = ({
             onCellClick={onCellClick}
             disabled={disabled}
             className={cellClassName}
+            gridRow={gridRow}
+            gridCol={colIndex}
+            enableInlineEdit={enableInlineEdit}
+            employee={employee}
+            onSaved={onSaved}
+            isFocused={isFocused}
+            isEditing={isEditing}
+            onFocusCell={onFocusCell}
+            onStartEditing={onStartEditing}
+            onStopEditing={onStopEditing}
+            onMoveFocus={onMoveFocus}
           />
         );
       })}

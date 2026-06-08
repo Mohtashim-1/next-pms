@@ -211,7 +211,7 @@ export const TaskLog = ({ task, isOpen, onOpenChange }: TaskLogProps) => {
                                 (emp: Employee) => emp.employee === log.employee
                               );
                               return (
-                                <div className="border-b border-dashed p-2 bg-gray-50 dark:bg-muted/30 ">
+                                <div className="border border-border rounded-md p-2 bg-muted/40 dark:bg-muted/30">
                                   <div className="flex justify-between w-full">
                                     <span className="flex gap-x-2 items-start">
                                       <Avatar className="w-6 h-6">
@@ -230,7 +230,7 @@ export const TaskLog = ({ task, isOpen, onOpenChange }: TaskLogProps) => {
                                   {log.description.map((description: string) => (
                                     <div
                                       key={description}
-                                      className="pl-8 py-1 rounded pb-0 w-full overflow-x-auto ql-editor min-h-0"
+                                      className="pl-8 py-1 rounded pb-0 w-full overflow-x-auto text-foreground/90 [&_p]:mb-0 [&_ol]:my-1 [&_ul]:my-1"
                                       dangerouslySetInnerHTML={{ __html: description }}
                                     ></div>
                                   ))}

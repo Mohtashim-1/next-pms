@@ -9,6 +9,14 @@ from next_pms.timesheet.utils.constant import EMP_WOKING_DETAILS
 @frappe.whitelist()
 def get_data():
     employee = get_employee_from_user()
+    if not employee:
+        return {
+            "employee": "",
+            "employee_name": frappe.get_value("User", frappe.session.user, "full_name") or frappe.session.user,
+            "employee_working_detail": {"working_hour": 8, "working_frequency": "Per Day"},
+            "employee_report_to": "",
+        }
+
     doc = frappe.get_cached_doc("Employee", employee)
     working_hour = doc.custom_working_hours
     working_frequency = doc.custom_work_schedule or "Per Day"
@@ -85,6 +93,9 @@ def get_employee(filters: dict | str | None = None, fieldname: list | str | None
 
     if filters and isinstance(filters, str):
         filters = json.loads(filters)
+
+    if not filters or not filters.get("name"):
+        return None
 
     return frappe.db.get_value("Employee", filters=filters, fieldname=fieldname, as_dict=True)
 

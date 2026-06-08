@@ -59,9 +59,11 @@ const ResourceTeamHeaderSection = ({ viewData }: { viewData: ViewData }) => {
     "next_pms.resource_management.api.permission.get_user_resources_permissions"
   );
 
-  const { data: employee } = useFrappeGetCall("next_pms.timesheet.api.employee.get_employee", {
-    filters: { name: reportingNameParam || viewData.filters.reportingManager },
-  });
+  const reportingManagerId = reportingNameParam || viewData.filters.reportingManager;
+  const { data: employee } = useFrappeGetCall(
+    reportingManagerId ? "next_pms.timesheet.api.employee.get_employee" : null,
+    reportingManagerId ? { filters: { name: reportingManagerId } } : undefined
+  );
 
   useEffect(() => {
     if (!resourceAllocationPermission.isNeedToSetPermission) {

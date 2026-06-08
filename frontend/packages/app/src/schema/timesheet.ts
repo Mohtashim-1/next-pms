@@ -18,6 +18,11 @@ const leaveReasonSchema = z
   .trim()
   .min(1, { message: "Please enter a valid reason." });
 
+export const timeOnlySchema = z
+  .string()
+  .trim()
+  .regex(timeFormatRegex, { message: "Time must be in HH:MM format." });
+
 export const hourSchema = z.preprocess(
   (val, ctx) => {
     const processedValue = timeStringToFloat(String(val));
@@ -45,6 +50,53 @@ export const hourSchema = z.preprocess(
     })
 );
 
+const timesheetInputModeSchema = z.enum(["duration", "range"]).default("duration");
+
+const validateDurationOrRange = (
+  v: { input_mode?: "duration" | "range"; hours?: unknown; from_time?: string; to_time?: string },
+  ctx: z.RefinementCtx
+) => {
+  if (v.input_mode === "range") {
+    if (!v.from_time) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["from_time"],
+        message: "Please enter a start time.",
+      });
+    }
+    if (!v.to_time) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["to_time"],
+        message: "Please enter an end time.",
+      });
+    }
+    if (v.from_time && v.to_time && timeStringToFloat(v.to_time) <= timeStringToFloat(v.from_time)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["to_time"],
+        message: "End time must be after start time.",
+      });
+    }
+    return;
+  }
+
+  if (v.hours == 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["hours"],
+      message: "Hour should be greater than 0",
+    });
+  }
+  if (Number(v.hours) > 24) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["hours"],
+      message: "Hour should be less than 24",
+    });
+  }
+};
+
 export const TimesheetSchema = z
   .object({
     task: z
@@ -54,28 +106,16 @@ export const TimesheetSchema = z
       .trim()
       .min(1, { message: "Please select a task." }),
     description: descriptionSchema,
-    hours: hourSchema,
+    hours: z.union([hourSchema, z.string().optional(), z.number().optional()]).optional(),
     date: z.string({
       required_error: "Please enter date.",
     }),
     employee: z.string({}),
+    input_mode: timesheetInputModeSchema,
+    from_time: z.string().optional(),
+    to_time: z.string().optional(),
   })
-  .superRefine((v, ctx) => {
-    if (v.hours == 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["hours"],
-        message: "Hour should be greater than 0",
-      });
-    }
-    if (Number(v.hours) > 24) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["hours"],
-        message: "Hour should be less than 24",
-      });
-    }
-  });
+  .superRefine(validateDurationOrRange);
 
 export const TimesheetApprovalSchema = z.object({
   start_date: z
@@ -110,11 +150,14 @@ export const TimesheetRejectionSchema = z.object({
 export const TimesheetSingleRowSchema = z
   .object({
     name: z.string({}),
-    hours: hourSchema,
+    hours: z.union([hourSchema, z.string().optional(), z.number().optional()]).optional(),
     description: descriptionSchema,
     date: z.string({}),
     task: z.string({}),
     parent: z.string({}),
+    input_mode: timesheetInputModeSchema,
+    from_time: z.string().optional(),
+    to_time: z.string().optional(),
     is_billable: z
       .union([z.boolean(), z.number()])
       .transform((val) => {
@@ -125,22 +168,7 @@ export const TimesheetSingleRowSchema = z
       })
       .optional(),
   })
-  .superRefine((v, ctx) => {
-    if (v.hours == 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["hours"],
-        message: "Hour should be greater than 0",
-      });
-    }
-    if (Number(v.hours) > 24) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["hours"],
-        message: "Hour should be less than 24",
-      });
-    }
-  });
+  .superRefine(validateDurationOrRange);
 
 export const TimesheetUpdateSchema = z.object({
   data: z.array(TimesheetSingleRowSchema),
@@ -228,26 +256,14 @@ export const EditTimesheetSchema = z
       .trim()
       .min(1, { message: "Please select a task." }),
     description: descriptionSchema,
-    hours: hourSchema,
+    hours: z.union([hourSchema, z.string().optional(), z.number().optional()]).optional(),
     date: z.string({
       required_error: "Please enter date.",
     }),
     employee: z.string({}),
     is_billable: z.boolean().default(false),
+    input_mode: timesheetInputModeSchema,
+    from_time: z.string().optional(),
+    to_time: z.string().optional(),
   })
-  .superRefine((v, ctx) => {
-    if (v.hours == 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["hours"],
-        message: "Hour should be greater than 0",
-      });
-    }
-    if (Number(v.hours) > 24) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["hours"],
-        message: "Hour should be less than 24",
-      });
-    }
-  });
+  .superRefine(validateDurationOrRange);

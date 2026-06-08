@@ -34,6 +34,9 @@ export const Footer = ({ timesheet, user, dispatch, callback }: FooterProps) => 
           task={timesheet.timesheet.task}
           project={timesheet.timesheet.project}
           employeeName={user.employeeName}
+          onSuccess={() => {
+            callback();
+          }}
         />
       )}
       {timesheet.isEditDialogOpen && (
@@ -46,7 +49,9 @@ export const Footer = ({ timesheet, user, dispatch, callback }: FooterProps) => 
           user={user}
         />
       )}
-      {timesheet.isAprrovalDialogOpen && <Approval user={user} dispatch={dispatch} timesheetState={timesheet} />}
+      {timesheet.isAprrovalDialogOpen && (
+        <Approval user={user} dispatch={dispatch} timesheetState={timesheet} onClose={callback} />
+      )}
       {timesheet.isLeaveDialogOpen && (
         <AddLeave
           employee={user.employee}

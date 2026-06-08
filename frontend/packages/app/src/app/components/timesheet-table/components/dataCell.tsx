@@ -73,7 +73,7 @@ export const Cell = ({ date, data, isHoliday, onCellClick, disabled, className }
         className={mergeClassNames(
           "text-center group px-2",
           isDisabled && "cursor-default",
-          "hover:h-full hover:bg-accent hover:cursor-pointer",
+          "hover:h-full hover:bg-muted/60 dark:hover:bg-muted/40 hover:cursor-pointer",
           getBgCsssForToday(date),
           className
         )}

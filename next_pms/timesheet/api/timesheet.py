@@ -2,15 +2,20 @@ import frappe
 from frappe import _, throw
 from frappe.utils import (
     add_days,
+    flt,
     get_first_day_of_week,
     get_last_day_of_week,
+    get_datetime,
     getdate,
+    now_datetime,
     nowdate,
+    time_diff_in_hours,
 )
 
 from next_pms.api.utils import error_logger
 from next_pms.resource_management.api.utils.query import get_employee_leaves
 from next_pms.timesheet.utils.constant import EMP_TIMESHEET
+from next_pms.timesheet.utils.time_log import resolve_time_log_times
 
 from .employee import (
     get_employee_daily_working_norm,
@@ -25,6 +30,178 @@ from .utils import (
     get_week_dates,
     has_write_access,
 )
+
+
+def _get_running_timer_key(employee: str):
+    return f"{EMP_TIMESHEET}::running_timer::{employee}"
+
+
+def _get_running_timer_user_key(user: str | None = None):
+    return f"{EMP_TIMESHEET}::running_timer_user::{user or frappe.session.user}"
+
+
+def _get_open_timesheet(employee: str, date, project: str):
+    parent = frappe.db.get_value(
+        "Timesheet",
+        {
+            "employee": employee,
+            "start_date": [">=", getdate(date)],
+            "end_date": ["<=", getdate(date)],
+            "parent_project": project,
+            "docstatus": ["!=", 2],
+        },
+        "name",
+    )
+    if parent:
+        return frappe.get_doc("Timesheet", parent)
+
+    return frappe.get_doc({"doctype": "Timesheet", "employee": employee})
+
+
+def _append_time_log(employee: str, task: str, description: str, from_time, to_time, hours: float):
+    project, custom_is_billable = frappe.get_value("Task", task, ["project", "custom_is_billable"])
+    timesheet = _get_open_timesheet(employee, getdate(from_time), project)
+    timesheet.update({"parent_project": project})
+    timesheet.append(
+        "time_logs",
+        {
+            "task": task,
+            "hours": hours,
+            "description": description,
+            "from_time": from_time,
+            "to_time": to_time,
+            "project": project,
+            "is_billable": custom_is_billable,
+        },
+    )
+    ignore_permissions = employee_has_higher_access(employee, ptype="write")
+    return timesheet, ignore_permissions
+
+
+def _get_week_range(start_date: str):
+    week_start = get_first_day_of_week(start_date)
+    return week_start, get_last_day_of_week(week_start)
+
+
+def _get_week_timesheets(employee: str, start_date: str, include_cancelled: bool = False):
+    week_start, week_end = _get_week_range(start_date)
+    filters = {
+        "employee": employee,
+        "start_date": [">=", week_start],
+        "end_date": ["<=", week_end],
+    }
+    if not include_cancelled:
+        filters["docstatus"] = ["!=", 2]
+
+    return frappe.get_all(
+        "Timesheet",
+        filters=filters,
+        fields=[
+            "name",
+            "docstatus",
+            "start_date",
+            "end_date",
+            "total_hours",
+            "custom_approval_status",
+            "custom_weekly_approval_status",
+        ],
+        order_by="start_date asc, creation asc",
+        ignore_permissions=employee_has_higher_access(employee, ptype="read"),
+    )
+
+
+def _get_timesheet_submission_summary(employee: str, start_date: str):
+    week_start, week_end = _get_week_range(start_date)
+    timesheets = _get_week_timesheets(employee, start_date)
+    violations = []
+    warnings = []
+    task_names = set()
+    project_names = set()
+    entry_count = 0
+    total_hours = 0
+    day_totals = {}
+
+    for timesheet in timesheets:
+        total_hours += flt(timesheet.total_hours)
+        doc = frappe.get_doc("Timesheet", timesheet.name)
+        for log in doc.time_logs:
+            entry_count += 1
+            day = getdate(log.from_time)
+            day_totals[day] = day_totals.get(day, 0) + flt(log.hours)
+            if log.task:
+                task_names.add(log.task)
+            if log.project:
+                project_names.add(log.project)
+            if not log.task:
+                violations.append(_("Time entry {0} is missing a task.").format(log.name))
+            if not log.project:
+                violations.append(_("Time entry {0} is missing a project.").format(log.name))
+            if not log.description:
+                violations.append(_("Time entry {0} is missing a description.").format(log.name))
+            if flt(log.hours) <= 0:
+                violations.append(_("Time entry {0} must be greater than zero hours.").format(log.name))
+
+    if not timesheets:
+        violations.append(_("No timesheet found for the selected week."))
+    if any(timesheet.docstatus == 2 for timesheet in timesheets):
+        violations.append(_("Cancelled timesheets cannot be submitted."))
+
+    timer = frappe.cache().get_value(_get_running_timer_user_key())
+    if not timer:
+        timer = frappe.cache().get_value(_get_running_timer_key(employee))
+    if timer and timer.get("employee") == employee:
+        violations.append(_("Stop the running timer before submitting this week."))
+
+    hour_detail = get_employee_working_hours(employee)
+    expected_hours = hour_detail.get("working_hour") or 0
+    if hour_detail.get("working_frequency") == "Per Day":
+        expected_hours = expected_hours * 5
+
+    if total_hours < expected_hours:
+        warnings.append(
+            _("Total hours are below the expected {0} hours for this week.").format(flt(expected_hours, 2))
+        )
+    for day, hours in day_totals.items():
+        if hours > 24:
+            violations.append(_("You cannot submit more than 24 hours on {0}.").format(day))
+
+    locked_statuses = {"Approval Pending", "Processing Timesheet", "Approved"}
+    if any(timesheet.custom_weekly_approval_status in locked_statuses for timesheet in timesheets):
+        violations.append(_("This week is already submitted or approved. Recall it before submitting again."))
+
+    return {
+        "employee": employee,
+        "start_date": week_start,
+        "end_date": week_end,
+        "period_type": "Weekly",
+        "timesheet_count": len(timesheets),
+        "entry_count": entry_count,
+        "task_count": len(task_names),
+        "project_count": len(project_names),
+        "total_hours": flt(total_hours, 2),
+        "expected_hours": flt(expected_hours, 2),
+        "warnings": warnings,
+        "violations": violations,
+        "can_submit": not violations,
+    }
+
+
+def _assert_week_editable(employee: str, date):
+    locked_statuses = {"Approval Pending", "Processing Timesheet", "Approved", "Partially Approved"}
+    start_date, end_date = _get_week_range(date)
+    statuses = frappe.get_all(
+        "Timesheet",
+        filters={
+            "employee": employee,
+            "start_date": [">=", start_date],
+            "end_date": ["<=", end_date],
+            "docstatus": ["!=", 2],
+        },
+        pluck="custom_weekly_approval_status",
+        ignore_permissions=employee_has_higher_access(employee, ptype="read"),
+    )
+    if any(status in locked_statuses for status in statuses):
+        throw(_("This week is submitted or approved. Recall it before editing time entries."))
 
 
 @frappe.whitelist()
@@ -119,49 +296,138 @@ def get_timesheet_data(employee: str, start_date: str | None = None, max_week: i
 
 @frappe.whitelist()
 @error_logger
-def save(date: str, description: str, task: str, hours: float = 0, employee: str = None):
+def save(
+    date: str,
+    description: str,
+    task: str,
+    hours: float = 0,
+    employee: str = None,
+    from_time: str = None,
+    to_time: str = None,
+    input_mode: str = "duration",
+):
     """create time entry in Timesheet Detail child table."""
     if not employee:
         employee = get_employee_from_user()
     if not task:
         throw(_("Task is mandatory for creating time entry."), frappe.MandatoryError)
+    _assert_week_editable(employee, date)
 
-    project = frappe.get_value("Task", task, "project")
-
-    parent = frappe.db.get_value(
-        "Timesheet",
-        {
-            "employee": employee,
-            "start_date": [">=", getdate(date)],
-            "end_date": ["<=", getdate(date)],
-            "parent_project": project,
-            "docstatus": ["!=", 2],
-        },
-        "name",
+    resolved_from, resolved_to, resolved_hours = resolve_time_log_times(
+        date=date,
+        hours=hours,
+        from_time=from_time,
+        to_time=to_time,
+        input_mode=input_mode,
     )
-    if parent:
-        timesheet = frappe.get_doc("Timesheet", parent)
-    else:
-        timesheet = frappe.get_doc({"doctype": "Timesheet", "employee": employee})
-
-    project, custom_is_billable = frappe.get_value("Task", task, ["project", "custom_is_billable"])
-
-    timesheet.update({"parent_project": project})
-    timesheet.append(
-        "time_logs",
-        {
-            "task": task,
-            "hours": hours,
-            "description": description,
-            "from_time": getdate(date),
-            "to_time": getdate(date),
-            "project": project,
-            "is_billable": custom_is_billable,
-        },
+    timesheet, ignore_permissions = _append_time_log(
+        employee=employee,
+        task=task,
+        description=description,
+        from_time=resolved_from,
+        to_time=resolved_to,
+        hours=resolved_hours,
     )
-    ignore_permissions = employee_has_higher_access(employee, ptype="write")
     timesheet.save(ignore_permissions=ignore_permissions)
     return _("New Timesheet created successfully.")
+
+
+@frappe.whitelist()
+@error_logger
+def get_running_timer(employee: str = None):
+    """Return the active timer for the employee, if one exists."""
+    timer = frappe.cache().get_value(_get_running_timer_user_key())
+    if timer:
+        return timer
+
+    if not employee:
+        employee = get_employee_from_user()
+    if not employee:
+        timer = frappe.cache().get_value(_get_running_timer_key(employee))
+        return timer or {}
+
+    timer = frappe.cache().get_value(_get_running_timer_key(employee))
+    return timer or {}
+
+
+@frappe.whitelist()
+@error_logger
+def start_timer(task: str, description: str = "", employee: str = None):
+    """Start one running timer for the employee."""
+    if not employee:
+        employee = get_employee_from_user()
+    if not task:
+        throw(_("Task is mandatory for starting timer."), frappe.MandatoryError)
+    _assert_week_editable(employee, nowdate())
+
+    timer_key = _get_running_timer_key(employee)
+    if frappe.cache().get_value(timer_key):
+        throw(_("A timer is already running. Stop it before starting another one."))
+
+    task_details = frappe.get_value("Task", task, ["subject", "project", "project.project_name"], as_dict=True)
+    if not task_details:
+        throw(_("Task does not exist."), frappe.DoesNotExistError)
+
+    timer = {
+        "employee": employee,
+        "user": frappe.session.user,
+        "task": task,
+        "task_subject": task_details.subject,
+        "project": task_details.project,
+        "project_name": task_details.project_name,
+        "description": description or "",
+        "started_at": now_datetime(),
+    }
+    frappe.cache().set_value(timer_key, timer)
+    frappe.cache().set_value(_get_running_timer_user_key(), timer)
+    return timer
+
+
+@frappe.whitelist()
+@error_logger
+def stop_timer(employee: str = None):
+    """Stop the active timer and write the elapsed time to Timesheet."""
+    if not employee:
+        employee = get_employee_from_user()
+    _assert_week_editable(employee, nowdate())
+
+    user_timer_key = _get_running_timer_user_key()
+    timer = frappe.cache().get_value(user_timer_key)
+    if timer and not employee:
+        employee = timer.get("employee")
+
+    timer_key = _get_running_timer_key(employee)
+    if not timer and timer_key:
+        timer = frappe.cache().get_value(timer_key)
+    if not timer:
+        throw(_("No timer is running."))
+
+    started_at = get_datetime(timer.get("started_at"))
+    stopped_at = now_datetime()
+    hours = time_diff_in_hours(stopped_at, started_at)
+    if hours <= 0:
+        throw(_("Timer duration must be greater than zero."))
+
+    timesheet, ignore_permissions = _append_time_log(
+        employee=employee,
+        task=timer.get("task"),
+        description=timer.get("description"),
+        from_time=started_at,
+        to_time=stopped_at,
+        hours=hours,
+    )
+    timesheet.flags.keep_actual_times = True
+    timesheet.save(ignore_permissions=ignore_permissions)
+    if timer_key:
+        frappe.cache().delete_value(timer_key)
+    frappe.cache().delete_value(_get_running_timer_user_key(timer.get("user")))
+
+    return {
+        "message": _("Timer stopped and time entry created successfully."),
+        "hours": hours,
+        "from_time": started_at,
+        "to_time": stopped_at,
+    }
 
 
 @frappe.whitelist()
@@ -171,6 +437,7 @@ def delete(parent: str, name: str):
     employee = get_employee_from_user()
     ignore_permissions = employee_has_higher_access(employee, ptype="write")
     parent_doc = frappe.get_doc("Timesheet", parent)
+    _assert_week_editable(parent_doc.employee, parent_doc.start_date)
     for log in parent_doc.time_logs:
         if log.name == name:
             parent_doc.remove(log)
@@ -183,6 +450,15 @@ def delete(parent: str, name: str):
 
 @frappe.whitelist()
 @error_logger
+def validate_submission(start_date: str, employee: str = None):
+    if not employee:
+        employee = get_employee_from_user()
+    apply_role_permission_for_doctype(["Timesheet User", "Timesheet Manager"], "Employee", "read", employee)
+    return _get_timesheet_submission_summary(employee=employee, start_date=start_date)
+
+
+@frappe.whitelist()
+@error_logger
 def submit_for_approval(start_date: str, notes: str = None, employee: str = None, approver: str = None):
     from next_pms.timesheet.doc_events.timesheet import flush_cache, publish_timesheet_update
     from next_pms.timesheet.tasks.reminder_on_approval_request import (
@@ -191,6 +467,10 @@ def submit_for_approval(start_date: str, notes: str = None, employee: str = None
 
     if not employee:
         employee = get_employee_from_user()
+    summary = _get_timesheet_submission_summary(employee=employee, start_date=start_date)
+    if summary.get("violations"):
+        throw("<br>".join(summary.get("violations")))
+
     if not approver:
         reporting_manager = frappe.get_value("Employee", employee, "reports_to")
         if not reporting_manager:
@@ -202,8 +482,7 @@ def submit_for_approval(start_date: str, notes: str = None, employee: str = None
         throw(_("Reporting Manager does not exist."), frappe.DoesNotExistError)
     reporting_manager_name = frappe.get_value("Employee", reporting_manager, "employee_name")
 
-    start_date = get_first_day_of_week(start_date)
-    end_date = get_last_day_of_week(start_date)
+    start_date, end_date = _get_week_range(start_date)
 
     timesheets = frappe.get_list(
         "Timesheet",
@@ -242,6 +521,58 @@ def submit_for_approval(start_date: str, notes: str = None, employee: str = None
 
 
 @frappe.whitelist()
+@error_logger
+def recall_timesheet(start_date: str, employee: str = None):
+    """Recall a submitted/approved week so the employee can amend time entries."""
+    from next_pms.timesheet.doc_events.timesheet import flush_cache, publish_timesheet_update
+
+    if not employee:
+        employee = get_employee_from_user()
+
+    ignore_permissions = employee_has_higher_access(employee, ptype="write")
+    if not ignore_permissions:
+        frappe.has_permission("Timesheet", "write", throw=True)
+
+    timesheets = _get_week_timesheets(employee, start_date)
+    if not timesheets:
+        throw(_("No timesheet found for the given week."), frappe.DoesNotExistError)
+
+    recalled = 0
+    amended = 0
+    for timesheet in timesheets:
+        doc = frappe.get_doc("Timesheet", timesheet.name)
+
+        if doc.docstatus == 1:
+            doc.flags.ignore_validate_update_after_submit = True
+            doc.cancel()
+            amended_doc = frappe.copy_doc(doc)
+            amended_doc.docstatus = 0
+            amended_doc.amended_from = doc.name
+            amended_doc.custom_approval_status = "Not Submitted"
+            amended_doc.custom_weekly_approval_status = "Not Submitted"
+            for child in amended_doc.get_all_children():
+                child.docstatus = 0
+            amended_doc.insert(ignore_permissions=ignore_permissions)
+            amended += 1
+            continue
+
+        if doc.docstatus == 0:
+            doc.custom_approval_status = "Not Submitted"
+            doc.custom_weekly_approval_status = "Not Submitted"
+            doc.save(ignore_permissions=ignore_permissions)
+            recalled += 1
+
+    frappe.db.commit()  # nosemgrep Need to publish status after recall.
+    week_start, _week_end = _get_week_range(start_date)
+    flush_cache(frappe._dict({"employee": employee, "start_date": week_start}))
+    publish_timesheet_update(employee=employee, start_date=week_start)
+
+    if amended:
+        return _("Timesheet recalled. {0} submitted document(s) were cancelled and amended.").format(amended)
+    return _("Timesheet recalled. {0} draft document(s) are editable again.").format(recalled)
+
+
+@frappe.whitelist()
 def update_timesheet_detail(
     name: str,
     parent: str,
@@ -250,12 +581,38 @@ def update_timesheet_detail(
     task: str,
     date: str | None = None,
     is_billable: bool | None = None,
+    from_time: str | None = None,
+    to_time: str | None = None,
+    input_mode: str = "duration",
 ):
     parent_doc = frappe.get_doc("Timesheet", parent)
+    _assert_week_editable(parent_doc.employee, parent_doc.start_date)
     ignore_permissions = employee_has_higher_access(parent_doc.employee, ptype="write")
     logs_to_remove = []
     new_logs = []
     task_project = frappe.get_value("Task", task, "project")
+    resolved_from, resolved_to, resolved_hours = resolve_time_log_times(
+        date=date,
+        hours=hours,
+        from_time=from_time,
+        to_time=to_time,
+        input_mode=input_mode,
+    )
+
+    def build_new_log_payload():
+        payload = {
+            "task": task,
+            "hours": resolved_hours,
+            "description": description,
+            "date": date,
+            "employee": parent_doc.employee,
+            "from_time": str(resolved_from),
+            "to_time": str(resolved_to),
+            "input_mode": input_mode,
+        }
+        if has_write_access() and is_billable is not None:
+            payload["is_billable"] = is_billable
+        return payload
 
     for log in parent_doc.time_logs:
         if not name or log.name != name:
@@ -263,34 +620,20 @@ def update_timesheet_detail(
 
         if task_project and task_project != parent_doc.parent_project:
             logs_to_remove.append(log)
-            new_logs.append(
-                {
-                    "task": task,
-                    "hours": hours,
-                    "description": description,
-                    "date": date,
-                    "employee": parent_doc.employee,
-                }
-            )
+            new_logs.append(build_new_log_payload())
             continue
 
-        log.hours = hours
+        log.hours = resolved_hours
         log.description = description
         log.task = task
+        log.from_time = resolved_from
+        log.to_time = resolved_to
         # Only update value of billable if user has write access
         if has_write_access() and is_billable is not None:
             log.is_billable = is_billable
         if getdate(log.from_time) != getdate(date):
             logs_to_remove.append(log)
-            new_logs.append(
-                {
-                    "task": task,
-                    "hours": hours,
-                    "description": description,
-                    "date": date,
-                    "employee": parent_doc.employee,
-                }
-            )
+            new_logs.append(build_new_log_payload())
 
     for log in logs_to_remove:
         parent_doc.time_logs.remove(log)
@@ -299,10 +642,10 @@ def update_timesheet_detail(
         if parent_doc.start_date <= getdate(date) <= parent_doc.end_date:
             log = {
                 "task": task,
-                "hours": hours,
+                "hours": resolved_hours,
                 "description": description,
-                "from_time": getdate(date),
-                "to_time": getdate(date),
+                "from_time": resolved_from,
+                "to_time": resolved_to,
                 "project": task_project,
             }
             if has_write_access() and is_billable is not None:
@@ -312,15 +655,7 @@ def update_timesheet_detail(
 
             parent_doc.append("time_logs", log)
         else:
-            new_logs.append(
-                {
-                    "task": task,
-                    "hours": hours,
-                    "description": description,
-                    "date": date,
-                    "employee": parent_doc.employee,
-                }
-            )
+            new_logs.append(build_new_log_payload())
 
     if not parent_doc.time_logs:
         parent_doc.delete(ignore_permissions=ignore_permissions)
@@ -482,6 +817,8 @@ def get_timesheet_details(date: str, task: str, employee: str):
             "time_logs.hours",
             "time_logs.description",
             "time_logs.task",
+            "time_logs.from_time",
+            "time_logs.to_time",
             "time_logs.from_time as date",
             "time_logs.parent",
             "time_logs.is_billable",

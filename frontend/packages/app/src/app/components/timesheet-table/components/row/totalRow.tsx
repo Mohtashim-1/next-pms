@@ -31,8 +31,12 @@ export const TotalHourRow = ({ leaves, dates, tasks, holidays, workingHour, work
   const dailyWorkingHours = expectatedHours(workingHour, workingFrequency);
 
   return (
-    <TableRow>
-      <TableCell></TableCell>
+    <TableRow className="bg-muted/40 font-medium">
+      <TableCell className="max-w-sm">
+        <Typography variant="p" className="text-slate-600 dark:text-muted-foreground font-medium">
+          Daily total
+        </Typography>
+      </TableCell>
       {dates.map((date) => {
         const holiday = holidays.find((holiday) => holiday.holiday_date === date);
         const totalHours =
