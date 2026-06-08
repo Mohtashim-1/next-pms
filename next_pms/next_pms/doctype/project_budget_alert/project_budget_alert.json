@@ -1,0 +1,195 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:PBALT-{project}-{#####}",
+ "creation": "2026-06-08 14:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "project",
+  "budget_allocation",
+  "scope_label",
+  "utilization_metric",
+  "threshold_pct",
+  "utilization_pct",
+  "column_break_status",
+  "status",
+  "recommended_action",
+  "section_break_snooze",
+  "snoozed_until",
+  "snooze_reason",
+  "section_break_action",
+  "action_taken",
+  "action_notes",
+  "action_by",
+  "action_on",
+  "section_break_delivery",
+  "channels_sent",
+  "message"
+ ],
+ "fields": [
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Project",
+   "options": "Project",
+   "reqd": 1
+  },
+  {
+   "fieldname": "budget_allocation",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Budget Allocation",
+   "options": "Project Budget Allocation",
+   "reqd": 1
+  },
+  {
+   "fieldname": "scope_label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Scope",
+   "read_only": 1
+  },
+  {
+   "fieldname": "utilization_metric",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Metric",
+   "options": "Hours\nAmount",
+   "reqd": 1
+  },
+  {
+   "fieldname": "threshold_pct",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Threshold (%)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "utilization_pct",
+   "fieldtype": "Float",
+   "label": "Utilization (%)",
+   "precision": "1",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Open",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Open\nSnoozed\nAcknowledged\nActioned\nClosed"
+  },
+  {
+   "fieldname": "recommended_action",
+   "fieldtype": "Select",
+   "label": "Recommended Action",
+   "options": "Notify Client\nRequest Change Order\nEscalate",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_snooze",
+   "fieldtype": "Section Break",
+   "label": "Snooze"
+  },
+  {
+   "fieldname": "snoozed_until",
+   "fieldtype": "Datetime",
+   "label": "Snoozed Until"
+  },
+  {
+   "fieldname": "snooze_reason",
+   "fieldtype": "Small Text",
+   "label": "Snooze Reason"
+  },
+  {
+   "fieldname": "section_break_action",
+   "fieldtype": "Section Break",
+   "label": "Action"
+  },
+  {
+   "fieldname": "action_taken",
+   "fieldtype": "Select",
+   "label": "Action Taken",
+   "options": "\nNotify Client\nRequest Change Order\nEscalate"
+  },
+  {
+   "fieldname": "action_notes",
+   "fieldtype": "Small Text",
+   "label": "Action Notes"
+  },
+  {
+   "fieldname": "action_by",
+   "fieldtype": "Link",
+   "label": "Action By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "action_on",
+   "fieldtype": "Datetime",
+   "label": "Action On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_delivery",
+   "fieldtype": "Section Break",
+   "label": "Delivery"
+  },
+  {
+   "fieldname": "channels_sent",
+   "fieldtype": "Small Text",
+   "label": "Channels Sent",
+   "read_only": 1
+  },
+  {
+   "fieldname": "message",
+   "fieldtype": "Text",
+   "label": "Message",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-08 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Next PMS",
+ "name": "Project Budget Alert",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Projects Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Projects User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

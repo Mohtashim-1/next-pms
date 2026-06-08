@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Budget Burn — {{ metrics.project_name }}</title>
+  <style>
+    body { font-family: Arial, sans-serif; color: #1f2937; margin: 0; padding: 24px; background: #f8fafc; }
+    .shell { max-width: 720px; margin: 0 auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
+    .header { background: #1f4b99; color: #fff; padding: 24px 28px; }
+    .body { padding: 28px; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+    .card { background: #f4f7fb; border-radius: 8px; padding: 14px; }
+    .label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; }
+    .value { font-size: 20px; font-weight: 700; margin-top: 6px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+    .muted { color: #64748b; font-size: 13px; }
+    .cta { margin-top: 20px; }
+    .cta a { color: #1f4b99; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="header">
+      <h1 style="margin:0;font-size:22px;">Budget Burn Report</h1>
+      <p style="margin:8px 0 0;opacity:0.9;">{{ metrics.project_name }} · as of {{ metrics.as_of_date }}</p>
+    </div>
+    <div class="body">
+      <div class="grid">
+        <div class="card">
+          <div class="label">Burn to Date</div>
+          <div class="value">{{ metrics.burn_to_date.amount }} {{ metrics.currency }}</div>
+          <div class="muted">{{ metrics.burn_to_date.hours }} hours</div>
+        </div>
+        <div class="card">
+          <div class="label">Burn Rate</div>
+          <div class="value">{{ metrics.burn_rate.weekly }} / wk</div>
+          <div class="muted">{{ metrics.burn_rate.daily }} daily</div>
+        </div>
+        <div class="card">
+          <div class="label">Projected Finish</div>
+          <div class="value">{{ metrics.projected_finish_date or "—" }}</div>
+          {% if metrics.schedule_variance_days is not none %}
+          <div class="muted">{{ metrics.schedule_variance_days }} days vs plan</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <h3 style="margin:0 0 8px;">Variance</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Comparison</th>
+            <th>Target</th>
+            <th>Actual</th>
+            <th>Variance</th>
+            <th>% Used</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>vs Budget</td>
+            <td>{{ metrics.vs_budget.target }} {{ metrics.currency }}</td>
+            <td>{{ metrics.vs_budget.actual }} {{ metrics.currency }}</td>
+            <td>{{ metrics.vs_budget.variance }} {{ metrics.currency }}</td>
+            <td>{{ metrics.vs_budget.utilization_pct }}%</td>
+          </tr>
+          <tr>
+            <td>vs Baseline</td>
+            <td>{{ metrics.vs_baseline.target }} {{ metrics.currency }}</td>
+            <td>{{ metrics.vs_baseline.actual }} {{ metrics.currency }}</td>
+            <td>{{ metrics.vs_baseline.variance }} {{ metrics.currency }}</td>
+            <td>{{ metrics.vs_baseline.utilization_pct }}%</td>
+          </tr>
+        </tbody>
+      </table>
+
+      {% if share_url %}
+      <div class="cta">
+        <p class="muted">View the live client dashboard:</p>
+        <a href="{{ share_url }}">{{ share_url }}</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

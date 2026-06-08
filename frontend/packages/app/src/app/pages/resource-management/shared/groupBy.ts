@@ -8,6 +8,7 @@ export type ResourceGroupByDimension =
   | "team"
   | "location"
   | "role"
+  | "skill"
   | "project";
 
 export type TimelineDisplayGroup = ResourceAllocationEmployeeProps & {
@@ -26,6 +27,7 @@ const GROUP_LABELS: Record<ResourceGroupByDimension, string> = {
   team: "Team",
   location: "Location",
   role: "Role",
+  skill: "Skill",
   project: "Project",
 };
 
@@ -45,6 +47,8 @@ const getGroupKey = (employee: ResourceAllocationEmployeeProps, dimension: Resou
       return employee.branch || "Unassigned";
     case "role":
       return employee.primary_role || "Unassigned";
+    case "skill":
+      return employee.primary_skill || "Unassigned";
     default:
       return employee.name;
   }

@@ -77,6 +77,27 @@ def _mark_draft_save(timesheet):
     timesheet.flags.skip_submission_validation = True
 
 
+def _get_effective_log_interval(log):
+    from_dt = get_datetime(log.from_time)
+    to_dt = get_datetime(log.to_time)
+    if from_dt and (not to_dt or to_dt <= from_dt) and flt(log.hours) > 0:
+        to_dt = from_dt + timedelta(hours=flt(log.hours))
+    return from_dt, to_dt
+
+
+def _normalize_invalid_duration_logs(timesheet, date):
+    changed = False
+    for log in timesheet.time_logs:
+        from_dt = get_datetime(log.from_time)
+        to_dt = get_datetime(log.to_time)
+        if not from_dt or getdate(from_dt) != getdate(date) or not flt(log.hours):
+            continue
+        if not to_dt or to_dt <= from_dt:
+            log.to_time = from_dt + timedelta(hours=flt(log.hours))
+            changed = True
+    return changed
+
+
 def _append_time_log(
     employee: str,
     task: str,
@@ -97,6 +118,31 @@ def _append_time_log(
     )
     timesheet = _get_open_timesheet(employee, getdate(from_time), project)
     timesheet.update({"parent_project": project})
+    _normalize_invalid_duration_logs(timesheet, from_time)
+    input_mode = get_input_mode_from_description(description)
+    existing_log = next(
+        (
+            log
+            for log in timesheet.time_logs
+            if log.task == task
+            and getdate(log.from_time) == getdate(from_time)
+            and get_input_mode_from_description(log.description) == input_mode
+        ),
+        None,
+    )
+
+    if existing_log:
+        existing_log.hours = hours
+        existing_log.description = description
+        existing_log.from_time = from_time
+        existing_log.to_time = to_time
+        existing_log.project = project
+        existing_log.is_billable = resolved_billable
+        existing_log.custom_billable_override_reason = override_reason
+        _mark_draft_save(timesheet)
+        ignore_permissions = employee_has_higher_access(employee, ptype="write")
+        return timesheet, ignore_permissions
+
     timesheet.append(
         "time_logs",
         {
@@ -299,8 +345,7 @@ def _get_day_intervals(employee: str, date, exclude_detail_name: str | None = No
         for log in timesheet.time_logs:
             if exclude_detail_name and log.name == exclude_detail_name:
                 continue
-            from_dt = get_datetime(log.from_time)
-            to_dt = get_datetime(log.to_time)
+            from_dt, to_dt = _get_effective_log_interval(log)
             if not from_dt or not to_dt or getdate(from_dt) != day or to_dt <= from_dt:
                 continue
             intervals.append((from_dt, to_dt))

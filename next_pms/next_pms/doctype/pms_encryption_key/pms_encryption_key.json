@@ -1,0 +1,94 @@
+{
+ "actions": [],
+ "autoname": "field:key_version",
+ "creation": "2026-06-08 22:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "key_version",
+  "is_active",
+  "tier",
+  "column_break_meta",
+  "key_fingerprint",
+  "activated_on",
+  "retired_on",
+  "rotation_notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "key_version",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Key Version",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Active"
+  },
+  {
+   "default": "Standard",
+   "fieldname": "tier",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Tier",
+   "options": "Standard\nEnterprise"
+  },
+  {
+   "fieldname": "column_break_meta",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "key_fingerprint",
+   "fieldtype": "Data",
+   "label": "Key Fingerprint (SHA-256)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "activated_on",
+   "fieldtype": "Datetime",
+   "label": "Activated On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "retired_on",
+   "fieldtype": "Datetime",
+   "label": "Retired On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rotation_notes",
+   "fieldtype": "Small Text",
+   "label": "Rotation Notes"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-08 22:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Next PMS",
+ "name": "PMS Encryption Key",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

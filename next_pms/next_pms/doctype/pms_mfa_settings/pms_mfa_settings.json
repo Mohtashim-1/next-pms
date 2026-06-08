@@ -1,0 +1,112 @@
+{
+ "actions": [],
+ "creation": "2026-06-08 21:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "general_section",
+  "enforcement_mode",
+  "enable_totp",
+  "enable_webauthn",
+  "column_break_general",
+  "allow_sms_fallback",
+  "recovery_code_count",
+  "enforced_roles_section",
+  "enforced_roles",
+  "help_section",
+  "mfa_help"
+ ],
+ "fields": [
+  {
+   "fieldname": "general_section",
+   "fieldtype": "Section Break",
+   "label": "General"
+  },
+  {
+   "default": "Off",
+   "fieldname": "enforcement_mode",
+   "fieldtype": "Select",
+   "label": "Enforcement Mode",
+   "options": "Off\nGlobal\nPer Role",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_totp",
+   "fieldtype": "Check",
+   "label": "Enable TOTP (Authenticator App)"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_webauthn",
+   "fieldtype": "Check",
+   "label": "Enable WebAuthn / Passkeys"
+  },
+  {
+   "fieldname": "column_break_general",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "SMS is only offered when the user has not enrolled TOTP or passkeys.",
+   "fieldname": "allow_sms_fallback",
+   "fieldtype": "Check",
+   "label": "Allow SMS Fallback Only"
+  },
+  {
+   "default": "10",
+   "fieldname": "recovery_code_count",
+   "fieldtype": "Int",
+   "label": "Recovery Codes Count"
+  },
+  {
+   "depends_on": "eval:doc.enforcement_mode===\"Per Role\"",
+   "fieldname": "enforced_roles_section",
+   "fieldtype": "Section Break",
+   "label": "Enforced Roles"
+  },
+  {
+   "depends_on": "eval:doc.enforcement_mode===\"Per Role\"",
+   "fieldname": "enforced_roles",
+   "fieldtype": "Table",
+   "label": "Roles",
+   "options": "PMS MFA Enforced Role"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "help_section",
+   "fieldtype": "Section Break",
+   "label": "Help"
+  },
+  {
+   "fieldname": "mfa_help",
+   "fieldtype": "HTML",
+   "label": "Help",
+   "options": "<p>Supported factors: TOTP authenticator apps and WebAuthn passkeys. Recovery codes are single-use backup codes. SMS is used only when no primary factor is enrolled.</p><p>System Managers can reset a user&apos;s MFA from Desk or via <code>next_pms.api.mfa.admin_reset_user_mfa</code>.</p>"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-06-08 21:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Next PMS",
+ "name": "PMS MFA Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

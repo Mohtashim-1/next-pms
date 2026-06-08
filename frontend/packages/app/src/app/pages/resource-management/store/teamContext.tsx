@@ -10,6 +10,7 @@ import { createContext } from "use-context-selector";
  */
 import type {
   APIController,
+  AssignmentDrilldownState,
   ContextProviderProps,
   DateProps,
   EmployeeDataProps,
@@ -17,6 +18,7 @@ import type {
   OptionalResourceTeamFilters,
   ResourceTeamDataProps,
   ResourceTeamFilters,
+  RollupPeriod,
   TableViewProps,
   TeamContextProps,
 } from "./types";
@@ -59,6 +61,7 @@ const defaultData: ResourceTeamDataProps = {
 };
 const defaultTableView: TableViewProps = {
   combineWeekHours: false,
+  rollupPeriod: "day",
   view: "planned-vs-capacity",
 };
 const defaultApiController: APIController = {
@@ -73,6 +76,7 @@ const defaulTeamState: TeamContextProps = {
     tableView: defaultTableView,
     apiController: defaultApiController,
     hasViewUpdated: false,
+    drilldown: null,
   },
   actions: {
     setStart: () => {},
@@ -89,6 +93,9 @@ const defaulTeamState: TeamContextProps = {
     setWeekDate: () => {},
     setHasViewUpdated: () => false,
     updateGroupBy: () => {},
+    setRollupPeriod: () => {},
+    openAssignmentDrilldown: () => {},
+    closeAssignmentDrilldown: () => {},
   },
 };
 
@@ -114,6 +121,8 @@ const TeamContextProvider = ({ children }: ContextProviderProps) => {
           customer: updatedTeamData.customer,
           total_count: updatedTeamData.total_count,
           has_more: updatedTeamData.has_more,
+          utilization_thresholds:
+            updatedTeamData.utilization_thresholds ?? prev.utilization_thresholds,
         };
       } else {
         return {
@@ -252,6 +261,23 @@ const TeamContextProvider = ({ children }: ContextProviderProps) => {
   };
 
   const [hasViewUpdated, setHasViewUpdated] = useState<boolean>(false);
+  const [drilldown, setDrilldown] = useState<AssignmentDrilldownState | null>(null);
+
+  const setRollupPeriod = (rollupPeriod: RollupPeriod) => {
+    setTableView((prev) => ({
+      ...prev,
+      rollupPeriod,
+      combineWeekHours: rollupPeriod === "week",
+    }));
+  };
+
+  const openAssignmentDrilldown = (value: AssignmentDrilldownState) => {
+    setDrilldown(value);
+  };
+
+  const closeAssignmentDrilldown = () => {
+    setDrilldown(null);
+  };
 
   return (
     <TeamContext.Provider
@@ -262,6 +288,7 @@ const TeamContextProvider = ({ children }: ContextProviderProps) => {
           apiController: apiController,
           tableView: tableView,
           hasViewUpdated,
+          drilldown,
         },
         actions: {
           setStart: setStart,
@@ -278,6 +305,9 @@ const TeamContextProvider = ({ children }: ContextProviderProps) => {
           setWeekDate: setWeekDate,
           setHasViewUpdated,
           updateGroupBy,
+          setRollupPeriod,
+          openAssignmentDrilldown,
+          closeAssignmentDrilldown,
         },
       }}
     >

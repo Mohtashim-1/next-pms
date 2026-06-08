@@ -1,62 +1,24 @@
-export const getAllocationUtilization = (allocatedHours: number, capacityHours: number) => {
-  if (capacityHours <= 0) {
-    return allocatedHours > 0 ? 2 : 0;
-  }
-  return allocatedHours / capacityHours;
-};
+import {
+  DEFAULT_UTILIZATION_THRESHOLDS,
+  getAllocationUtilization,
+  getUtilizationBandClass,
+  getUtilizationBand,
+  getUtilizationHeatClass,
+  type UtilizationThresholds,
+} from "./utilization";
 
-export const getAllocationHeatClass = (allocatedHours: number, capacityHours: number) => {
-  const utilization = getAllocationUtilization(allocatedHours, capacityHours);
+export { getAllocationUtilization, getUtilizationHeatClass };
 
-  if (capacityHours <= 0 && allocatedHours > 0) {
-    return "bg-destructive/35 ring-2 ring-destructive/50";
-  }
+export const getAllocationHeatClass = (
+  allocatedHours: number,
+  capacityHours: number,
+  thresholds: UtilizationThresholds = DEFAULT_UTILIZATION_THRESHOLDS
+) => getUtilizationHeatClass(allocatedHours, capacityHours, thresholds);
 
-  if (utilization > 1) {
-    return "bg-destructive/35 ring-2 ring-destructive/50";
-  }
-
-  if (utilization >= 0.85) {
-    return "bg-orange-400/30";
-  }
-
-  if (utilization >= 0.65) {
-    return "bg-customYellow";
-  }
-
-  if (utilization >= 0.35) {
-    return "bg-success/20";
-  }
-
-  if (utilization > 0) {
-    return "bg-success/10";
-  }
-
-  return "";
-};
-
-export const getRemainingCapacityClass = (remainingPercentage: number) => {
-  const utilization = 1 - remainingPercentage / 100;
-
-  if (remainingPercentage < 0) {
-    return "bg-destructive/35 ring-2 ring-destructive/50";
-  }
-
-  if (utilization >= 0.85) {
-    return "bg-orange-400/30";
-  }
-
-  if (utilization >= 0.65) {
-    return "bg-customYellow";
-  }
-
-  if (utilization >= 0.35) {
-    return "bg-success/20";
-  }
-
-  if (utilization > 0) {
-    return "bg-success/10";
-  }
-
-  return "bg-muted/40";
+export const getRemainingCapacityClass = (
+  remainingPercentage: number,
+  thresholds: UtilizationThresholds = DEFAULT_UTILIZATION_THRESHOLDS
+) => {
+  const utilization = remainingPercentage < 0 ? 2 : 1 - remainingPercentage / 100;
+  return getUtilizationBandClass(getUtilizationBand(utilization, thresholds));
 };

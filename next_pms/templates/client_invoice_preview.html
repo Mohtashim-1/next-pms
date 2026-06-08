@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>{{ draft.invoice_title or "Invoice" }}</title>
+  <style>
+    body {
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      color: #1f2937;
+      margin: 0;
+      padding: 32px;
+      background: #ffffff;
+    }
+    .invoice-shell {
+      max-width: 900px;
+      margin: 0 auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .invoice-header {
+      background: {{ branding.primary_color or "#1f4b99" }};
+      color: #ffffff;
+      padding: 28px 32px;
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: center;
+    }
+    .invoice-header img {
+      max-height: 56px;
+      max-width: 180px;
+      object-fit: contain;
+      background: #ffffff;
+      padding: 8px;
+      border-radius: 8px;
+    }
+    .invoice-body {
+      padding: 32px;
+      background: {{ branding.accent_color or "#f4f7fb" }};
+    }
+    .invoice-card {
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 28px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px 32px;
+      margin-bottom: 24px;
+    }
+    .meta-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #6b7280;
+      margin-bottom: 4px;
+    }
+    .meta-value {
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .cover-message, .notes, .terms {
+      margin: 18px 0;
+      line-height: 1.6;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 24px;
+      font-size: 14px;
+    }
+    th {
+      text-align: left;
+      background: {{ branding.primary_color or "#1f4b99" }};
+      color: #ffffff;
+      padding: 10px 12px;
+    }
+    td {
+      border-bottom: 1px solid #e5e7eb;
+      padding: 10px 12px;
+      vertical-align: top;
+    }
+    .amount, .hours {
+      text-align: right;
+      white-space: nowrap;
+    }
+    .totals {
+      margin-top: 20px;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .totals-box {
+      min-width: 260px;
+      background: #f9fafb;
+      border-radius: 8px;
+      padding: 16px 18px;
+    }
+    .totals-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .totals-row strong {
+      font-size: 18px;
+      color: {{ branding.primary_color or "#1f4b99" }};
+    }
+    .invoice-footer {
+      padding: 20px 32px 28px;
+      color: #6b7280;
+      font-size: 13px;
+      line-height: 1.6;
+      background: #ffffff;
+    }
+    {{ branding.custom_css or "" }}
+  </style>
+</head>
+<body>
+  <div class="invoice-shell">
+    <div class="invoice-header">
+      <div>
+        <div style="font-size: 28px; font-weight: 700;">{{ draft.invoice_title or "Invoice" }}</div>
+        <div style="margin-top: 8px; opacity: 0.9;">{{ branding.company_display_name or company.company_name }}</div>
+      </div>
+      {% if branding.logo_url %}
+      <img src="{{ branding.logo_url }}" alt="Client logo" />
+      {% endif %}
+    </div>
+
+    <div class="invoice-body">
+      <div class="invoice-card">
+        {% if branding.header_html %}
+        <div>{{ branding.header_html }}</div>
+        {% endif %}
+
+        <div class="meta-grid">
+          <div>
+            <div class="meta-label">Bill To</div>
+            <div class="meta-value">{{ draft.customer_name }}</div>
+          </div>
+          <div>
+            <div class="meta-label">Invoice Date</div>
+            <div class="meta-value">{{ draft.posting_date }}</div>
+          </div>
+          <div>
+            <div class="meta-label">Billing Period</div>
+            <div class="meta-value">{{ draft.period_start }} to {{ draft.period_end }}</div>
+          </div>
+          {% if draft.po_no %}
+          <div>
+            <div class="meta-label">PO Number</div>
+            <div class="meta-value">{{ draft.po_no }}</div>
+          </div>
+          {% endif %}
+          {% if draft.project %}
+          <div>
+            <div class="meta-label">Project</div>
+            <div class="meta-value">{{ draft.project_name or draft.project }}</div>
+          </div>
+          {% endif %}
+          {% if draft.due_date %}
+          <div>
+            <div class="meta-label">Due Date</div>
+            <div class="meta-value">{{ draft.due_date }}</div>
+          </div>
+          {% endif %}
+        </div>
+
+        {% if draft.cover_message %}
+        <div class="cover-message">{{ draft.cover_message }}</div>
+        {% endif %}
+
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Project</th>
+              <th>Resource</th>
+              <th>Task / Activity</th>
+              {% if branding.show_line_descriptions %}
+              <th>Description</th>
+              {% endif %}
+              <th class="hours">Hours</th>
+              <th class="amount">Rate</th>
+              <th class="amount">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for line in lines %}
+            <tr>
+              <td>{{ line.entry_date or "" }}</td>
+              <td>{{ line.project_name or line.project or "" }}</td>
+              <td>{{ line.employee_name or "" }}</td>
+              <td>{{ line.task_subject or line.activity_type or "" }}</td>
+              {% if branding.show_line_descriptions %}
+              <td>{{ line.description or "" }}</td>
+              {% endif %}
+              <td class="hours">{{ "%.2f"|format(line.hours or 0) }}</td>
+              <td class="amount">{{ line.rate or 0 }}</td>
+              <td class="amount">{{ line.amount or 0 }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <div class="totals">
+          <div class="totals-box">
+            <div class="totals-row">
+              <span>Total Hours</span>
+              <strong>{{ "%.2f"|format(draft.total_hours or 0) }}</strong>
+            </div>
+            <div class="totals-row">
+              <span>Subtotal ({{ draft.currency }})</span>
+              <strong>{{ draft.subtotal_amount or 0 }}</strong>
+            </div>
+          </div>
+        </div>
+
+        {% if draft.notes %}
+        <div class="notes">
+          <div class="meta-label">Notes</div>
+          {{ draft.notes }}
+        </div>
+        {% endif %}
+
+        {% if draft.terms %}
+        <div class="terms">
+          <div class="meta-label">Terms</div>
+          {{ draft.terms }}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="invoice-footer">
+      {% if branding.footer_html %}
+      {{ branding.footer_html }}
+      {% else %}
+      Thank you for your business.
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

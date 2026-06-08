@@ -51,18 +51,50 @@ export const getSiteName = () => {
   return window.frappe?.boot?.sitename ?? import.meta.env.VITE_SITE_NAME;
 };
 
+export function stringifyFrappeMessage(value: unknown): string {
+  if (value == null) {
+    return "";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (typeof record.message === "string") {
+      return record.message;
+    }
+    if (record.message != null) {
+      return stringifyFrappeMessage(record.message);
+    }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "Something went wrong. Please try again later.";
+    }
+  }
+  return String(value);
+}
+
+export function getFrappeCallMessage(result: unknown, fallback = "Success") {
+  const payload = (result as { message?: unknown } | null)?.message ?? result;
+  const message = stringifyFrappeMessage(payload).trim();
+  return message || fallback;
+}
+
 export function parseFrappeErrorMsg(error: FrappeError) {
   const messages = getErrorMessages(error);
   let message = "";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   messages.forEach((m: any) => {
-    message += `${m.message}\n`;
+    message += `${stringifyFrappeMessage(m?.message ?? m)}\n`;
   });
-  if (message) {
-    return removeHtmlString(message);
-  } else {
-    return "Something went wrong. Please try again later.";
+  if (message.trim()) {
+    return removeHtmlString(message.trim());
   }
+  return stringifyFrappeMessage(error?.message) || "Something went wrong. Please try again later.";
 }
 
 export function removeHtmlString(data: string) {
@@ -140,8 +172,8 @@ export const getErrorMessages = (error: FrappeError) => {
   eMessages = eMessages.map((m: any) => {
     try {
       return JSON.parse(m);
-    } catch (e) {
-      return e;
+    } catch {
+      return { message: stringifyFrappeMessage(m), title: "Error" };
     }
   });
 
@@ -351,19 +383,7 @@ export const extractTextFromHTML = (htmlContent: string) => {
   return tempElement?.textContent?.trim();
 };
 
-export const enableSocket = () => {
-  const enableSocket = import.meta.env.VITE_ENABLE_SOCKET;
-  if (typeof enableSocket !== "string") {
-    return enableSocket;
-  }
-  if (enableSocket === "true") {
-    return true;
-  } else if (enableSocket === "false") {
-    return false;
-  } else {
-    return true;
-  }
-};
+export const enableSocket = () => import.meta.env.VITE_ENABLE_SOCKET === "true";
 
 export const formatTime = (timeStr: string): string => {
   if (timeStr.startsWith(":")) {

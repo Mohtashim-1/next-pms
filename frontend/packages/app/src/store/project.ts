@@ -72,6 +72,7 @@ export interface ProjectState {
   action: "SET" | "UPDATE";
   tag: Array<string>;
   isAddProjectDialogOpen: boolean;
+  isBulkImportProjectDialogOpen: boolean;
   selectedIndustry: Array<string>;
 }
 
@@ -95,6 +96,7 @@ export const initialState: ProjectState = {
   action: "SET",
   tag: [],
   isAddProjectDialogOpen: false,
+  isBulkImportProjectDialogOpen: false,
   selectedIndustry: [],
 };
 
@@ -250,6 +252,9 @@ export const projectSlice = createSlice({
     setIsAddProjectDialogOpen: (state, action: PayloadAction<boolean>) => {
       state.isAddProjectDialogOpen = action.payload;
     },
+    setIsBulkImportProjectDialogOpen: (state, action: PayloadAction<boolean>) => {
+      state.isBulkImportProjectDialogOpen = action.payload;
+    },
   },
 });
 
@@ -270,6 +275,7 @@ export const {
   setReFetchData,
   setTag,
   setIsAddProjectDialogOpen,
+  setIsBulkImportProjectDialogOpen,
   setSelectedIndustry,
 } = projectSlice.actions;
 

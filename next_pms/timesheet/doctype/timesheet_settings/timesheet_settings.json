@@ -28,6 +28,22 @@
   "tab_break_34k6",
   "allocation_conflict_section",
   "allocation_conflict_action",
+  "capacity_utilization_section",
+  "under_utilized_threshold",
+  "column_break_capacity",
+  "over_capacity_threshold",
+  "budget_alert_section",
+  "enable_budget_alerts",
+  "budget_alert_thresholds",
+  "column_break_budget_alert",
+  "budget_alert_channel_email",
+  "budget_alert_channel_in_app",
+  "budget_alert_channel_slack",
+  "budget_alert_channel_teams",
+  "budget_alert_delivery_section",
+  "budget_alert_email_template",
+  "budget_alert_slack_webhook",
+  "budget_alert_teams_webhook",
   "notifications_section",
   "send_missing_allocation_reminder",
   "remind_on",
@@ -175,6 +191,96 @@
    "fieldtype": "Select",
    "label": "Conflict Action",
    "options": "Warn\nBlock"
+  },
+  {
+   "fieldname": "capacity_utilization_section",
+   "fieldtype": "Section Break",
+   "label": "Capacity Utilization Colors"
+  },
+  {
+   "default": "70",
+   "description": "Allocated hours below this percentage of capacity are shown as under-utilized.",
+   "fieldname": "under_utilized_threshold",
+   "fieldtype": "Percent",
+   "label": "Under-Utilized Below (%)"
+  },
+  {
+   "fieldname": "column_break_capacity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "100",
+   "description": "Allocated hours above this percentage of capacity are shown as over-capacity.",
+   "fieldname": "over_capacity_threshold",
+   "fieldtype": "Percent",
+   "label": "Over-Capacity Above (%)"
+  },
+  {
+   "fieldname": "budget_alert_section",
+   "fieldtype": "Section Break",
+   "label": "Budget Alerts"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_budget_alerts",
+   "fieldtype": "Check",
+   "label": "Enable Budget Alerts"
+  },
+  {
+   "default": "[50, 75, 90, 100, 110]",
+   "description": "JSON array of utilization percentages that trigger alerts, e.g. [50, 75, 90, 100, 110].",
+   "fieldname": "budget_alert_thresholds",
+   "fieldtype": "Small Text",
+   "label": "Alert Thresholds (%)"
+  },
+  {
+   "fieldname": "column_break_budget_alert",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "budget_alert_channel_email",
+   "fieldtype": "Check",
+   "label": "Email Alerts"
+  },
+  {
+   "default": "1",
+   "fieldname": "budget_alert_channel_in_app",
+   "fieldtype": "Check",
+   "label": "In-App Alerts"
+  },
+  {
+   "default": "0",
+   "fieldname": "budget_alert_channel_slack",
+   "fieldtype": "Check",
+   "label": "Slack Alerts"
+  },
+  {
+   "default": "0",
+   "fieldname": "budget_alert_channel_teams",
+   "fieldtype": "Check",
+   "label": "Microsoft Teams Alerts"
+  },
+  {
+   "fieldname": "budget_alert_delivery_section",
+   "fieldtype": "Section Break",
+   "label": "Budget Alert Delivery"
+  },
+  {
+   "fieldname": "budget_alert_email_template",
+   "fieldtype": "Link",
+   "label": "Email Template",
+   "options": "Email Template"
+  },
+  {
+   "fieldname": "budget_alert_slack_webhook",
+   "fieldtype": "Password",
+   "label": "Slack Incoming Webhook URL"
+  },
+  {
+   "fieldname": "budget_alert_teams_webhook",
+   "fieldtype": "Password",
+   "label": "Microsoft Teams Webhook URL"
   },
   {
    "fieldname": "notifications_section",

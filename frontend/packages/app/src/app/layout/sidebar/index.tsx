@@ -12,17 +12,33 @@ import {
   ChevronUp,
   ClipboardList,
   Clock3,
+  BarChart3,
+  FileText,
   FolderDot,
   FolderKanban,
   BookUser,
+  PieChart,
   GanttChartSquareIcon,
   Home,
+  LayoutDashboard,
+  Search,
+  UserCircle2,
   Users,
 } from "lucide-react";
 /**
  * Internal dependencies.
  */
-import { HOME, PROJECT, RESOURCE_MANAGEMENT, ROLES, TASK, TEAM, TEAM_APPROVALS, TIMESHEET } from "@/lib/constant";
+import {
+  DASHBOARD,
+  HOME,
+  PROJECT,
+  RESOURCE_MANAGEMENT,
+  ROLES,
+  TASK,
+  TEAM,
+  TEAM_APPROVALS,
+  TIMESHEET,
+} from "@/lib/constant";
 import { useFrappeGetCall } from "frappe-react-sdk";
 import { setLocalStorage } from "@/lib/storage";
 import { checkIsMobile, mergeClassNames } from "@/lib/utils";
@@ -60,6 +76,13 @@ const Sidebar = () => {
   const publicViews = viewInfo.views.filter((view: ViewData) => view.public && !view.default);
   const routes: Array<Route> = [
     {
+      to: DASHBOARD,
+      icon: LayoutDashboard,
+      label: "Dashboard",
+      key: "dashboard",
+      isPmRoute: true,
+    },
+    {
       to: HOME,
       icon: Home,
       label: "Home",
@@ -86,6 +109,26 @@ const Sidebar = () => {
       label: "Project",
       key: "project",
       isPmRoute: true,
+      children: [
+        {
+          to: PROJECT,
+          label: "Projects",
+          key: "project-list",
+          icon: FolderDot,
+        },
+        {
+          to: `${PROJECT}/invoicing`,
+          label: "Client Invoicing",
+          key: "client-invoicing",
+          icon: FileText,
+        },
+        {
+          to: `${PROJECT}/margins`,
+          label: "Portfolio Margin",
+          key: "portfolio-margin",
+          icon: BarChart3,
+        },
+      ],
     },
     {
       to: TASK,
@@ -102,6 +145,30 @@ const Sidebar = () => {
       key: "resource-management",
       isPmRoute: false,
       children: [
+        {
+          to: RESOURCE_MANAGEMENT + "/my-assignments",
+          label: "My Assignments",
+          key: "my-assignments",
+          icon: UserCircle2,
+        },
+        {
+          to: RESOURCE_MANAGEMENT + "/capacity",
+          label: "Capacity Planning",
+          key: "capacity-planning",
+          icon: BarChart3,
+        },
+        {
+          to: RESOURCE_MANAGEMENT + "/time-allocation",
+          label: "Time Allocation",
+          key: "time-allocation",
+          icon: PieChart,
+        },
+        {
+          to: RESOURCE_MANAGEMENT + "/talent-finder",
+          label: "Talent Finder",
+          key: "talent-finder",
+          icon: Search,
+        },
         {
           to: RESOURCE_MANAGEMENT + "/timeline",
           label: "Timeline",

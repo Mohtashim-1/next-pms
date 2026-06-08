@@ -6,6 +6,17 @@ import { useLocation } from "react-router-dom";
 
 type UseQueryParam<T> = [T, Dispatch<SetStateAction<T>>];
 
+function parseQueryParamValue<T>(raw: string | null, initialState: T): T {
+    if (raw === null || raw === "") {
+        return initialState;
+    }
+    try {
+        return JSON.parse(raw) as T;
+    } catch {
+        return raw as T;
+    }
+}
+
 export const useQueryParam = <T>(
     param: string,
     initialState: T,
@@ -16,22 +27,8 @@ export const useQueryParam = <T>(
     const [value, setValue] = useState<T>(() => {
         if (typeof window === "undefined") return initialState;
 
-        // Parse query parameter value from the URL
-        const { search } = window.location;
-        const searchParams = new URLSearchParams(search);
-        for (const [key, value] of searchParams.entries()) {
-            if (value === "null") searchParams.delete(key);
-            try {
-                JSON.parse(value);
-            } catch (error) {
-                searchParams.delete(key);
-            }
-        }
-
-        const paramValue = searchParams.get(param);
-        return paramValue !== null
-            ? (JSON.parse(paramValue || "[]") as T)
-            : initialState;
+        const searchParams = new URLSearchParams(window.location.search);
+        return parseQueryParamValue(searchParams.get(param), initialState);
     });
     useEffect(() => {
         const currentSearchParams = new URLSearchParams(window.location.search);

@@ -19,10 +19,14 @@ import { Header } from "@/app/components/list-view/header";
 import { parseFrappeErrorMsg } from "@/lib/utils";
 import { RootState } from "@/store";
 import { ViewData } from "@/store/view";
+import { ResourceViewActions } from "../../components/resourceViewActions";
+import { getGroupByLabel, type ResourceGroupByDimension } from "../../shared/groupBy";
 import SkillSearch from "./skillSearch";
 import { ResourceFormContext } from "../../store/resourceFormContext";
 import { TeamContext } from "../../store/teamContext";
-import type { PermissionProps, Skill } from "../../store/types";
+import type { PermissionProps, ResourceTeam, RollupPeriod, Skill } from "../../store/types";
+import { normalizeRollupPeriod } from "../../utils/rollup";
+import { createFilter } from "../utils";
 
 /**
  * This component is responsible for loading the team view header.
@@ -35,21 +39,25 @@ const ResourceTeamHeaderSection = ({ viewData }: { viewData: ViewData }) => {
   const [reportingNameParam] = useQueryParam<string>("reports-to", "");
   const [allocationTypeParam] = useQueryParam<string[]>("allocation-type", []);
   const [designationParam] = useQueryParam<string[]>("designation", []);
+  const [departmentParam] = useQueryParam<string[]>("department", []);
+  const [teamParam] = useQueryParam<string[]>("team", []);
+  const [locationParam] = useQueryParam<string[]>("location", []);
+  const [roleParam] = useQueryParam<string[]>("role", []);
+  const [groupByParam] = useQueryParam<ResourceGroupByDimension>("group-by", "employee");
   const [viewParam, setViewParam] = useQueryParam<string>("view-type", viewData.filters.view || "");
   const user = useSelector((state: RootState) => state.user);
-  const [combineWeekHoursParam, setCombineWeekHoursParam] = useQueryParam<boolean>(
-    "combine-week-hours",
-    viewData.filters.combineWeekHours || false
+  const [rollupPeriodParam, setRollupPeriodParam] = useQueryParam<RollupPeriod>(
+    "rollup-period",
+    (viewData.filters.rollupPeriod as RollupPeriod) ||
+      (viewData.filters.combineWeekHours ? "week" : "day")
   );
   const [skillSearchParam, setSkillSearchParam] = useQueryParam<Skill[]>("skill-search", []);
   const { toast } = useToast();
 
   const { teamData, filters, tableView, hasViewUpdated } = useContextSelector(TeamContext, (value) => value.state);
 
-  const { updateFilter, setWeekDate, setCombineWeekHours, updateTableView, setHasViewUpdated } = useContextSelector(
-    TeamContext,
-    (value) => value.actions
-  );
+  const { updateFilter, setWeekDate, updateTableView, setHasViewUpdated, updateGroupBy, setRollupPeriod } =
+    useContextSelector(TeamContext, (value) => value.actions);
 
   const { permission: resourceAllocationPermission } = useContextSelector(ResourceFormContext, (value) => value.state);
 
@@ -97,15 +105,27 @@ const ResourceTeamHeaderSection = ({ viewData }: { viewData: ViewData }) => {
       allocationType:
         allocationTypeParam && allocationTypeParam.length > 0 ? allocationTypeParam : viewData.filters.allocationType,
       skillSearch: skillSearchParam && skillSearchParam.length > 0 ? skillSearchParam : viewData.filters.skillSearch,
+      department:
+        departmentParam && departmentParam.length > 0 ? departmentParam : viewData.filters.department ?? [],
+      userGroup: teamParam && teamParam.length > 0 ? teamParam : viewData.filters.userGroup ?? [],
+      branch: locationParam && locationParam.length > 0 ? locationParam : viewData.filters.branch ?? [],
+      roles: roleParam && roleParam.length > 0 ? roleParam : viewData.filters.roles ?? [],
+      groupBy: groupByParam || (viewData.filters.groupBy as ResourceGroupByDimension) || "employee",
     });
 
-    updateTableView({ ...tableView, view: CurrentViewParam, combineWeekHours: combineWeekHoursParam });
+    const rollupPeriod = normalizeRollupPeriod(
+      rollupPeriodParam || (viewData.filters.rollupPeriod as RollupPeriod),
+      viewData.filters.combineWeekHours
+    );
+    updateTableView({
+      ...tableView,
+      view: CurrentViewParam,
+      rollupPeriod,
+      combineWeekHours: rollupPeriod === "week",
+    });
   };
 
-  const handleWeekViewChange = useCallback(() => {
-    setCombineWeekHoursParam(!tableView.combineWeekHours);
-    setCombineWeekHours(!tableView.combineWeekHours);
-  }, [setCombineWeekHours, setCombineWeekHoursParam, tableView.combineWeekHours]);
+  const activeRollupPeriod = normalizeRollupPeriod(tableView.rollupPeriod, tableView.combineWeekHours);
 
   const handlePrevWeek = useCallback(() => {
     const date = getFormatedDate(addDays(teamData.dates[0].start_date, -3));
@@ -129,6 +149,7 @@ const ResourceTeamHeaderSection = ({ viewData }: { viewData: ViewData }) => {
         ...viewFilters,
         view: tableView.view,
         combineWeekHours: tableView.combineWeekHours,
+        rollupPeriod: activeRollupPeriod,
       })
     ) {
       setHasViewUpdated(true);
@@ -136,7 +157,7 @@ const ResourceTeamHeaderSection = ({ viewData }: { viewData: ViewData }) => {
       setHasViewUpdated(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, viewData, tableView.view, tableView.combineWeekHours]);
+  }, [filters, viewData, tableView.view, tableView.combineWeekHours, tableView.rollupPeriod, activeRollupPeriod]);
 
   const handleSaveChanges = () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -144,7 +165,12 @@ const ResourceTeamHeaderSection = ({ viewData }: { viewData: ViewData }) => {
     updateView({
       view: {
         ...viewData,
-        filters: { ...viewFilters, view: tableView.view, combineWeekHours: tableView.combineWeekHours },
+        filters: {
+          ...viewFilters,
+          view: tableView.view,
+          combineWeekHours: tableView.combineWeekHours,
+          rollupPeriod: activeRollupPeriod,
+        },
       },
     })
       .then(() => {
@@ -224,6 +250,139 @@ const ResourceTeamHeaderSection = ({ viewData }: { viewData: ViewData }) => {
           skillSearch={filters?.skillSearch || []}
         />
       ),
+    },
+    {
+      queryParameterName: "group-by",
+      handleChange: (value: string | string[]) => {
+        updateGroupBy((value as ResourceGroupByDimension) || "employee");
+      },
+      handleDelete: () => {
+        updateGroupBy("employee");
+      },
+      type: "select-list",
+      value: [filters.groupBy ?? "employee"],
+      shouldFilterComboBox: false,
+      isMultiComboBox: false,
+      label: "Group By",
+      data: (["employee", "department", "designation", "business_unit", "team", "location", "role"] as ResourceGroupByDimension[]).map(
+        (dimension) => ({
+          label: getGroupByLabel(dimension),
+          value: dimension,
+        })
+      ),
+      queryParameterDefault: ["employee"],
+    },
+    {
+      queryParameterName: "department",
+      handleChange: (value: string | string[]) => {
+        updateFilter({ department: value as string[] });
+      },
+      handleDelete: (value: string[] | undefined) => {
+        updateFilter({ department: value });
+      },
+      type: "select-search",
+      value: filters.department,
+      label: "Department",
+      shouldFilterComboBox: true,
+      isMultiComboBox: true,
+      hide: !resourceAllocationPermission.write,
+      apiCall: {
+        url: "frappe.client.get_list",
+        filters: {
+          doctype: "Department",
+          fields: ["name"],
+          limit_page_length: 0,
+        },
+        options: {
+          revalidateOnFocus: false,
+          revalidateIfStale: false,
+        },
+      },
+      queryParameterDefault: filters.department,
+    },
+    {
+      queryParameterName: "team",
+      handleChange: (value: string | string[]) => {
+        updateFilter({ userGroup: value as string[] });
+      },
+      handleDelete: (value: string[] | undefined) => {
+        updateFilter({ userGroup: value });
+      },
+      type: "select-search",
+      value: filters.userGroup,
+      label: "Team",
+      shouldFilterComboBox: true,
+      isMultiComboBox: true,
+      hide: !resourceAllocationPermission.write,
+      apiCall: {
+        url: "frappe.client.get_list",
+        filters: {
+          doctype: "User Group",
+          fields: ["name"],
+          limit_page_length: 0,
+        },
+        options: {
+          revalidateOnFocus: false,
+          revalidateIfStale: false,
+        },
+      },
+      queryParameterDefault: filters.userGroup,
+    },
+    {
+      queryParameterName: "location",
+      handleChange: (value: string | string[]) => {
+        updateFilter({ branch: value as string[] });
+      },
+      handleDelete: (value: string[] | undefined) => {
+        updateFilter({ branch: value });
+      },
+      type: "select-search",
+      value: filters.branch,
+      label: "Location",
+      shouldFilterComboBox: true,
+      isMultiComboBox: true,
+      hide: !resourceAllocationPermission.write,
+      apiCall: {
+        url: "frappe.client.get_list",
+        filters: {
+          doctype: "Branch",
+          fields: ["name"],
+          limit_page_length: 0,
+        },
+        options: {
+          revalidateOnFocus: false,
+          revalidateIfStale: false,
+        },
+      },
+      queryParameterDefault: filters.branch,
+    },
+    {
+      queryParameterName: "role",
+      handleChange: (value: string | string[]) => {
+        updateFilter({ roles: value as string[] });
+      },
+      handleDelete: (value: string[] | undefined) => {
+        updateFilter({ roles: value });
+      },
+      type: "select-search",
+      value: filters.roles,
+      label: "Role",
+      shouldFilterComboBox: true,
+      isMultiComboBox: true,
+      hide: !resourceAllocationPermission.write,
+      apiCall: {
+        url: "frappe.client.get_list",
+        filters: {
+          doctype: "Role",
+          fields: ["name"],
+          limit_page_length: 0,
+        },
+        options: {
+          revalidateOnFocus: false,
+          revalidateIfStale: false,
+        },
+      },
+      queryParameterDefault: filters.roles,
     },
     {
       queryParameterName: "business-unit",
@@ -331,22 +490,52 @@ const ResourceTeamHeaderSection = ({ viewData }: { viewData: ViewData }) => {
       queryParameterDefault: "planned-vs-capacity",
     },
     {
-      queryParameterName: "combine-week-hours",
-      handleChange: handleWeekViewChange,
-      type: "checkbox",
-      value: tableView.combineWeekHours,
-      defaultValue: false,
-      label: "Combine Week Hours",
-      queryParameterDefault: false,
+      queryParameterName: "rollup-period",
+      handleChange: (value: string | string[]) => {
+        const rollupPeriod = (value as RollupPeriod) || "day";
+        setRollupPeriodParam(rollupPeriod);
+        setRollupPeriod(rollupPeriod);
+      },
+      type: "select-list",
+      value: [activeRollupPeriod],
+      shouldFilterComboBox: false,
+      isMultiComboBox: false,
+      label: "Rollup",
+      data: [
+        { label: "Day", value: "day" },
+        { label: "Week", value: "week" },
+        { label: "Month", value: "month" },
+      ],
+      queryParameterDefault: ["day"],
     },
   ];
 
   if (!user.hasBuField) {
     sectionFilters = sectionFilters.filter((filter) => filter.queryParameterName !== "business-unit");
   }
+  const viewFilters = createFilter({ filters, tableView } as ResourceTeam);
+
   return (
     <Header
       filters={sectionFilters}
+      customComponents={[
+        <ResourceViewActions
+          key="resource-view-actions"
+          viewData={viewData}
+          filters={{
+            ...viewFilters,
+            view: tableView.view,
+            combineWeekHours: tableView.combineWeekHours,
+            rollupPeriod: activeRollupPeriod,
+          }}
+          employees={teamData.data.map((employee) => ({
+            name: employee.name,
+            employee_name: employee.employee_name,
+            department: employee.department,
+            designation: employee.designation,
+          }))}
+        />,
+      ]}
       buttons={[
         {
           title: "Save changes",

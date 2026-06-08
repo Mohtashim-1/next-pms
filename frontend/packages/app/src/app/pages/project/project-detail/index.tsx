@@ -22,6 +22,8 @@ import { ProjectDetailHeader } from "./components/header";
 import PMReport from "./components/pm-report";
 import ProjectDashboard from "./components/project-dashboard";
 import ProjectLifecycle from "./components/project-lifecycle";
+import ProjectBudget from "./components/project-budget";
+import ProjectStructure from "./components/project-structure";
 import ProjectTasks from "./components/project-tasks";
 import ProjectUpdates from "./components/project-updates";
 import ProjectSidebar from "./components/sidebar";
@@ -116,6 +118,14 @@ const ProjectDetail = () => {
       },
       Tasks: {
         component: <ProjectTasks projectId={projectId} />,
+        isCustom: true,
+      },
+      Structure: {
+        component: <ProjectStructure projectId={projectId} />,
+        isCustom: true,
+      },
+      Budget: {
+        component: <ProjectBudget projectId={projectId} />,
         isCustom: true,
       },
       Lifecycle: {

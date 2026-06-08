@@ -41,6 +41,7 @@ import { setProjectData, setStart, setFilters, setReFetchData, updateProjectData
 import { ViewData } from "@/store/view";
 import type { sortOrder } from "@/types";
 import { AddProject } from "./components/addProject";
+import { BulkImportProjects } from "./components/bulkImportProjects";
 import { getColumnInfo } from "./components/columns";
 import { Header as ProjectHeader } from "./components/header";
 import { ProjectProps } from "./types";
@@ -357,6 +358,9 @@ const ProjectTable = ({ viewData, meta }: ProjectProps) => {
           </Table>
           {projectState.isAddProjectDialogOpen && (
             <AddProject meta={meta} project={projectState} dispatch={dispatch} mutate={mutate} />
+          )}
+          {projectState.isBulkImportProjectDialogOpen && (
+            <BulkImportProjects project={projectState} dispatch={dispatch} mutate={mutate} />
           )}
         </>
       )}

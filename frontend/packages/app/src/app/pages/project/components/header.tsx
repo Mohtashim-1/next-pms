@@ -9,7 +9,7 @@ import { useFrappeGetDocList, useFrappePostCall } from "frappe-react-sdk";
 /**
  * Internal dependencies
  */
-import { Plus } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import { Header as ListViewHeader } from "@/app/components/list-view/header";
 import { ButtonProps, FilterPops } from "@/app/components/list-view/types";
 import { parseFrappeErrorMsg } from "@/lib/utils";
@@ -17,6 +17,7 @@ import type { RootState } from "@/store";
 import {
   setCurrency,
   setIsAddProjectDialogOpen,
+  setIsBulkImportProjectDialogOpen,
   setOrderBy,
   setSearch,
   setSelectedBilingType,
@@ -374,6 +375,16 @@ export const Header = ({
       label: "Project",
       icon: Plus,
       variant: "default" as ButtonProps["variant"],
+      className: "h-10 px-2 py-2",
+    },
+    {
+      title: "Import CSV",
+      handleClick: () => {
+        dispatch(setIsBulkImportProjectDialogOpen(true));
+      },
+      label: "Import CSV",
+      icon: Upload,
+      variant: "outline" as ButtonProps["variant"],
       className: "h-10 px-2 py-2",
     },
   ];

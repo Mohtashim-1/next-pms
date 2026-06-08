@@ -42,8 +42,27 @@ export interface APIController {
   action: "SET" | "UPDATE";
 }
 
+export type RollupPeriod = "day" | "week" | "month";
+
+export type UtilizationThresholds = {
+  under_utilized_max: number;
+  over_capacity_min: number;
+};
+
+export type AssignmentDrilldownState = {
+  employee: string;
+  employee_name: string;
+  dateStart: string;
+  dateEnd: string;
+  allocatedHours: number;
+  capacityHours: number;
+  allocations: AllocationDataProps[];
+  employeeAllocations: ResourceAllocationObjectProps;
+};
+
 export interface TableViewProps {
   combineWeekHours: boolean;
+  rollupPeriod?: RollupPeriod;
   view: string;
   tableCell?: {
     width: number;
@@ -220,6 +239,7 @@ export type EmployeeDataProps = {
   employee_allocations: ResourceAllocationObjectProps;
   max_allocation_count_for_single_date: number;
   employee_daily_working_hours: number;
+  utilization_thresholds?: UtilizationThresholds;
 };
 
 export type EmployeeResourceProps = {
@@ -253,6 +273,7 @@ export interface ResourceTeamDataProps {
   customer: ResourceCustomerObjectProps;
   total_count: number;
   has_more: boolean;
+  utilization_thresholds?: UtilizationThresholds;
 }
 
 export interface ResourceTeamFilters {
@@ -299,6 +320,7 @@ export interface ResourceTeam {
   tableView: TableViewProps;
   apiController: APIController;
   hasViewUpdated: boolean;
+  drilldown: AssignmentDrilldownState | null;
 }
 export interface ResourceTeamState {
   state: ResourceTeam;
@@ -328,6 +350,9 @@ export interface TeamContextProps extends ResourceTeamState {
     setWeekDate: (value: string) => void;
     setHasViewUpdated: (value: boolean) => void;
     updateGroupBy: (groupBy: string) => void;
+    setRollupPeriod: (rollupPeriod: RollupPeriod) => void;
+    openAssignmentDrilldown: (value: AssignmentDrilldownState) => void;
+    closeAssignmentDrilldown: () => void;
   };
 }
 export interface TimeLineContextState {

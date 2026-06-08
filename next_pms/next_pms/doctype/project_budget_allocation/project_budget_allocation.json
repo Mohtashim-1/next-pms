@@ -1,0 +1,164 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:PBAL-{project}-{#####}",
+ "creation": "2026-06-08 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "project",
+  "scope_type",
+  "project_phase",
+  "task",
+  "allocation_type",
+  "metric_type",
+  "column_break_limits",
+  "budget_hours",
+  "budget_amount",
+  "section_break_usage",
+  "consumed_hours",
+  "consumed_amount",
+  "remaining_hours",
+  "remaining_amount",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Project",
+   "options": "Project",
+   "reqd": 1
+  },
+  {
+   "fieldname": "scope_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Scope",
+   "options": "Total\nPhase\nTask",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.scope_type==\"Phase\"",
+   "fieldname": "project_phase",
+   "fieldtype": "Link",
+   "label": "Phase",
+   "mandatory_depends_on": "eval:doc.scope_type==\"Phase\"",
+   "options": "Project Phase"
+  },
+  {
+   "depends_on": "eval:doc.scope_type==\"Task\"",
+   "fieldname": "task",
+   "fieldtype": "Link",
+   "label": "Task",
+   "mandatory_depends_on": "eval:doc.scope_type==\"Task\"",
+   "options": "Task"
+  },
+  {
+   "fieldname": "allocation_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Limit Type",
+   "options": "Billable\nNon-Billable",
+   "reqd": 1
+  },
+  {
+   "fieldname": "metric_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Metric",
+   "options": "Hours\nDollars\nBoth",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_limits",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "budget_hours",
+   "fieldtype": "Float",
+   "label": "Budget Hours",
+   "precision": "2"
+  },
+  {
+   "fieldname": "budget_amount",
+   "fieldtype": "Currency",
+   "label": "Budget Amount"
+  },
+  {
+   "fieldname": "section_break_usage",
+   "fieldtype": "Section Break",
+   "label": "Usage"
+  },
+  {
+   "fieldname": "consumed_hours",
+   "fieldtype": "Float",
+   "label": "Consumed Hours",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "consumed_amount",
+   "fieldtype": "Currency",
+   "label": "Consumed Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "remaining_hours",
+   "fieldtype": "Float",
+   "label": "Remaining Hours",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "remaining_amount",
+   "fieldtype": "Currency",
+   "label": "Remaining Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-08 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Next PMS",
+ "name": "Project Budget Allocation",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Projects Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Projects User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

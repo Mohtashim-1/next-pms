@@ -190,6 +190,12 @@ override_doctype_class = {
 # ---------------
 
 scheduler_events = {
+    "hourly": [
+        "next_pms.next_pms.tasks.budget_alerts.check_budget_alerts",
+    ],
+    "daily": [
+        "next_pms.next_pms.tasks.security.run_scheduled_key_rotation",
+    ],
     "daily_long": [
         "next_pms.timesheet.tasks.daily_reminder_for_time_entry.send_reminder",
         "next_pms.timesheet.tasks.send_weekly_reminder.send_reminder",
@@ -197,6 +203,7 @@ scheduler_events = {
     ],
     "weekly": [
         "next_pms.project_currency.tasks.reminde_project_threshold.send_reminder_mail",
+        "next_pms.next_pms.tasks.budget_burn.send_weekly_project_burn_reports",
     ],
 }
 
@@ -227,8 +234,12 @@ doc_events = {
         ],
         "before_validate": "next_pms.timesheet.doc_events.timesheet.before_validate",
         "before_submit": "next_pms.timesheet.doc_events.timesheet.before_submit",
+        "on_submit": "next_pms.next_pms.doc_events.budget_alerts.on_timesheet_change",
         "after_delete": "next_pms.timesheet.doc_events.timesheet.after_delete",
-        "on_cancel": "next_pms.timesheet.doc_events.timesheet.on_cancel",
+        "on_cancel": [
+            "next_pms.timesheet.doc_events.timesheet.on_cancel",
+            "next_pms.next_pms.doc_events.budget_alerts.on_timesheet_change",
+        ],
         "on_trash": [
             "next_pms.resource_management.doctype.resource_allocation.resource_allocation.clear_cache",
         ],
@@ -324,9 +335,17 @@ doc_events = {
 # Authentication and authorization
 # --------------------------------
 
-# auth_hooks = [
-# 	"next_pms.auth.validate"
-# ]
+auth_hooks = [
+	"next_pms.integrations.sso.enforcement.block_password_login_for_non_admin",
+]
+
+before_request = [
+	"next_pms.integrations.security.request_hooks.before_request",
+]
+
+after_request = [
+	"next_pms.integrations.security.request_hooks.after_request",
+]
 
 # Automatically update python controller files with type annotations for this app.
 # export_python_type_annotations = True
@@ -334,3 +353,9 @@ doc_events = {
 # default_log_clearing_doctypes = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
+
+from next_pms.integrations.sso import oidc_hooks
+from next_pms.integrations.mfa.hooks import install_mfa_hooks
+
+oidc_hooks.install()
+install_mfa_hooks()

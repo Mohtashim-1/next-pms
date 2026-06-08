@@ -8,6 +8,7 @@ interface EmptyTableCellProps {
   title?: string;
   textClassName?: string;
   onCellClick?: () => void;
+  style?: React.CSSProperties;
 }
 
 interface ResourceTableProps {

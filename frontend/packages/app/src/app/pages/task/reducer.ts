@@ -37,11 +37,11 @@ const actionHandlers = {
   }),
   UPDATE_TASK_DATA: (
     state: TaskState,
-    payload: { task: TaskData[] }
+    payload: { task?: TaskData[]; has_more?: boolean }
   ): TaskState => ({
     ...state,
-    task: [...state.task, ...payload.task],
-    hasMore: payload.has_more,
+    task: [...state.task, ...(payload.task ?? [])],
+    hasMore: payload.has_more ?? false,
     isLoading: false,
   }),
   SET_START: (state: TaskState, payload: number): TaskState => ({

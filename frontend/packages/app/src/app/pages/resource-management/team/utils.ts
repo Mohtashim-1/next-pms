@@ -2,7 +2,8 @@
  * Internal dependencies.
  */
 
-import { ResourceTeam } from "../store/types";
+import { ResourceTeam, RollupPeriod } from "../store/types";
+import { normalizeRollupPeriod } from "../utils/rollup";
 
 export const createFilter = (teamContextState: ResourceTeam) => {
   return {
@@ -19,5 +20,9 @@ export const createFilter = (teamContextState: ResourceTeam) => {
     groupBy: teamContextState?.filters?.groupBy ?? "employee",
     view: teamContextState?.tableView?.view ?? "planned-vs-capacity",
     combineWeekHours: teamContextState?.tableView?.combineWeekHours ?? false,
+    rollupPeriod: normalizeRollupPeriod(
+      teamContextState?.tableView?.rollupPeriod,
+      teamContextState?.tableView?.combineWeekHours
+    ) as RollupPeriod,
   };
 };

@@ -1,0 +1,104 @@
+{
+ "actions": [],
+ "autoname": "format:PBAUD-{#####}",
+ "creation": "2026-06-08 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "project",
+  "budget_allocation",
+  "action",
+  "column_break_audit",
+  "changed_by",
+  "changed_on",
+  "change_reason",
+  "section_break_values",
+  "previous_values",
+  "new_values"
+ ],
+ "fields": [
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Project",
+   "options": "Project",
+   "reqd": 1
+  },
+  {
+   "fieldname": "budget_allocation",
+   "fieldtype": "Link",
+   "label": "Budget Allocation",
+   "options": "Project Budget Allocation"
+  },
+  {
+   "fieldname": "action",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Action",
+   "options": "Create\nUpdate\nDelete",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_audit",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "changed_by",
+   "fieldtype": "Link",
+   "label": "Changed By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "changed_on",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Changed On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "change_reason",
+   "fieldtype": "Small Text",
+   "label": "Reason"
+  },
+  {
+   "fieldname": "section_break_values",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "previous_values",
+   "fieldtype": "Code",
+   "label": "Previous Values",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "new_values",
+   "fieldtype": "Code",
+   "label": "New Values",
+   "options": "JSON",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-08 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Next PMS",
+ "name": "Project Budget Audit Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "role": "Projects Manager"
+  },
+  {
+   "read": 1,
+   "role": "Projects User"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

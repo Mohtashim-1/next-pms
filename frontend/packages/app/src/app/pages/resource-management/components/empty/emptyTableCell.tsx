@@ -19,7 +19,7 @@ import { ResourceFormContext } from "../../store/resourceFormContext";
  * @param props.onCellClick on cell click event for cell based on this will decide where to show + icon on hover or not.
  * @returns React.FC
  */
-const EmptyTableCell = ({ cellClassName, title, textClassName, onCellClick }: EmptyTableCellProps) => {
+const EmptyTableCell = ({ cellClassName, title, textClassName, onCellClick, style }: EmptyTableCellProps) => {
   const resourceAllocationPermission = useContextSelector(ResourceFormContext, (value) => value.state.permission);
 
   if (!onCellClick || !resourceAllocationPermission.write) {
@@ -29,6 +29,7 @@ const EmptyTableCell = ({ cellClassName, title, textClassName, onCellClick }: Em
         cellClassName={cellClassName}
         cellTypographyClassName={textClassName}
         value="-"
+        style={style}
       />
     );
   }
@@ -40,6 +41,7 @@ const EmptyTableCell = ({ cellClassName, title, textClassName, onCellClick }: Em
         title={title}
         textClassName={textClassName}
         onCellClick={onCellClick}
+        style={style}
       />
     );
   }

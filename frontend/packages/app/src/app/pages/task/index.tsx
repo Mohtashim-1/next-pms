@@ -4,6 +4,7 @@
 import { useEffect, useReducer, useState } from "react";
 import React from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useSearchParams } from "react-router-dom";
 import { getUTCDateTime, getFormatedDate } from "@next-pms/design-system/date";
 import { useToast } from "@next-pms/design-system/hooks";
 import {
@@ -51,6 +52,7 @@ export default Task;
 const TaskTable = ({ viewData, meta }: TaskTableProps) => {
   const [task, taskDispatch] = useReducer(reducer, initialState);
   const [viewInfo, setViewInfo] = useState<ViewData>(viewData);
+  const [searchParams] = useSearchParams();
 
   const user = useSelector((state: RootState) => state.user);
   const [timesheet, timesheetDispatch] = useReducer(timesheetReducer, timesheetInitialState);
@@ -71,12 +73,29 @@ const TaskTable = ({ viewData, meta }: TaskTableProps) => {
   const { call: toggleLikeCall } = useFrappePostCall("frappe.desk.like.toggle_like");
 
   useEffect(() => {
+    const parseParam = <T,>(key: string, fallback: T): T => {
+      const raw = searchParams.get(key);
+      if (!raw) return fallback;
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        return raw as T;
+      }
+    };
+
+    const statusFilter = parseParam<string[] | string>("status", viewData.filters?.status);
+    const normalizedStatus = Array.isArray(statusFilter)
+      ? statusFilter
+      : statusFilter
+        ? [statusFilter]
+        : ["Open", "Working"];
+
     taskDispatch({
       type: "SET_FILTERS",
       payload: {
-        search: viewData.filters.search ?? "",
-        selectedProject: viewData.filters.projects ?? [],
-        selectedStatus: viewData.filters.status ?? ["Open", "Working"],
+        search: parseParam("search", viewData.filters?.search ?? ""),
+        selectedProject: parseParam<string[]>("project", viewData.filters?.projects ?? []),
+        selectedStatus: normalizedStatus,
       },
     });
     setViewInfo(viewData);
@@ -87,7 +106,7 @@ const TaskTable = ({ viewData, meta }: TaskTableProps) => {
       right: [],
     });
     setHasViewUpdated(false);
-  }, [dispatch, viewData, taskDispatch]);
+  }, [dispatch, viewData, taskDispatch, searchParams]);
 
   const handleColumnHide = (id: string) => {
     setColumnOrder((prev) => prev.filter((item) => item !== id));
@@ -243,9 +262,9 @@ const TaskTable = ({ viewData, meta }: TaskTableProps) => {
   ]);
 
   const columns: ColumnsType = getColumn(
-    meta.fields,
-    viewInfo?.rows,
-    viewInfo?.columns,
+    meta?.fields ?? [],
+    viewInfo?.rows ?? [],
+    viewInfo?.columns ?? {},
     meta.title_field,
     meta.doctype,
     openTaskLog,

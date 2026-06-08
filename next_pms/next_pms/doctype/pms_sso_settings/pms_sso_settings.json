@@ -1,0 +1,142 @@
+{
+ "actions": [],
+ "creation": "2026-06-08 20:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "general_section",
+  "enforce_sso_only",
+  "enable_jit_provisioning",
+  "create_employee_on_jit",
+  "column_break_general",
+  "default_user_type",
+  "default_role",
+  "providers_section",
+  "providers",
+  "saml_sp_section",
+  "saml_sp_entity_id",
+  "saml_sp_certificate",
+  "column_break_sp",
+  "saml_sp_private_key",
+  "help_section",
+  "provider_help"
+ ],
+ "fields": [
+  {
+   "fieldname": "general_section",
+   "fieldtype": "Section Break",
+   "label": "General"
+  },
+  {
+   "default": "0",
+   "description": "Disables username/password login for all users except Administrator.",
+   "fieldname": "enforce_sso_only",
+   "fieldtype": "Check",
+   "label": "Enforce SSO Only"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_jit_provisioning",
+   "fieldtype": "Check",
+   "label": "Enable JIT Provisioning"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_jit_provisioning",
+   "fieldname": "create_employee_on_jit",
+   "fieldtype": "Check",
+   "label": "Create Employee on JIT"
+  },
+  {
+   "fieldname": "column_break_general",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "System User",
+   "fieldname": "default_user_type",
+   "fieldtype": "Select",
+   "label": "Default User Type",
+   "options": "System User\nWebsite User"
+  },
+  {
+   "fieldname": "default_role",
+   "fieldtype": "Link",
+   "label": "Default Role",
+   "options": "Role"
+  },
+  {
+   "fieldname": "providers_section",
+   "fieldtype": "Section Break",
+   "label": "Identity Providers"
+  },
+  {
+   "fieldname": "providers",
+   "fieldtype": "Table",
+   "label": "Providers",
+   "options": "PMS SSO Provider"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "saml_sp_section",
+   "fieldtype": "Section Break",
+   "label": "SAML Service Provider"
+  },
+  {
+   "description": "Defaults to https://&lt;site&gt;/api/method/next_pms.api.sso.saml_metadata when empty.",
+   "fieldname": "saml_sp_entity_id",
+   "fieldtype": "Data",
+   "label": "SP Entity ID"
+  },
+  {
+   "description": "PEM certificate for SAML signing. Auto-generated when empty and SAML is enabled.",
+   "fieldname": "saml_sp_certificate",
+   "fieldtype": "Code",
+   "label": "SP Certificate (PEM)"
+  },
+  {
+   "fieldname": "column_break_sp",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "saml_sp_private_key",
+   "fieldtype": "Password",
+   "label": "SP Private Key (PEM)"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "help_section",
+   "fieldtype": "Section Break",
+   "label": "Supported Providers"
+  },
+  {
+   "fieldname": "provider_help",
+   "fieldtype": "HTML",
+   "label": "Provider Help",
+   "options": "<p>Tested identity providers:</p><ul><li><b>Okta</b> — OIDC and SAML 2.0</li><li><b>Azure AD</b> — OIDC and SAML 2.0</li><li><b>Google</b> — OIDC</li><li><b>OneLogin</b> — OIDC and SAML 2.0</li></ul><p>OIDC providers sync to Frappe Social Login Keys. SAML ACS URL: <code>/api/method/next_pms.api.sso.saml_acs?provider=&lt;label&gt;</code></p>"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-06-08 20:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Next PMS",
+ "name": "PMS SSO Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

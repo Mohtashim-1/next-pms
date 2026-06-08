@@ -15,6 +15,7 @@ import CustomViewWrapper from "@/app/components/customViewWrapper";
 import { parseFrappeErrorMsg } from "@/lib/utils";
 import { ViewData } from "@/store/view";
 import AddResourceAllocations from "../components/addAllocation";
+import { AssignmentDrilldownSheet } from "./components/assignmentDrilldownSheet";
 import { ResourceTeamHeaderSection } from "./components/header";
 import { ResourceTeamTable } from "./components/table";
 import { createFilter } from "./utils";
@@ -347,6 +348,7 @@ const ResourceTeamViewComponent = ({
       {resourceAllocationDialogState.isShowDialog && (
         <AddResourceAllocations onSubmit={onFormSubmit} />
       )}
+      <AssignmentDrilldownSheet onSubmit={onFormSubmit} />
     </>
   );
 };

@@ -3,6 +3,7 @@ interface EmptyTableCellProps {
   textClassName?: string;
   title?: string;
   onCellClick?: () => void;
+  style?: React.CSSProperties;
 }
 
 export type { EmptyTableCellProps };

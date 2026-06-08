@@ -1,0 +1,186 @@
+{
+ "actions": [],
+ "creation": "2026-06-08 22:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "tier_section",
+  "security_tier",
+  "column_break_tier",
+  "enable_aes256_at_rest",
+  "customer_managed_keys",
+  "customer_master_key",
+  "transit_section",
+  "require_tls_13",
+  "enforce_https",
+  "hsts_max_age_seconds",
+  "column_break_transit",
+  "last_tls_check_on",
+  "last_tls_version",
+  "rotation_section",
+  "key_rotation_enabled",
+  "key_rotation_interval_days",
+  "column_break_rotation",
+  "active_key_version",
+  "last_key_rotation_on",
+  "next_key_rotation_on",
+  "help_section",
+  "security_help"
+ ],
+ "fields": [
+  {
+   "fieldname": "tier_section",
+   "fieldtype": "Section Break",
+   "label": "Encryption Tier"
+  },
+  {
+   "default": "Standard",
+   "fieldname": "security_tier",
+   "fieldtype": "Select",
+   "label": "Security Tier",
+   "options": "Standard\nEnterprise",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_tier",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_aes256_at_rest",
+   "fieldtype": "Check",
+   "label": "Enable AES-256-GCM At Rest"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.security_tier===\"Enterprise\"",
+   "description": "Enterprise tier: supply your own 256-bit master key. Stored encrypted in site config.",
+   "fieldname": "customer_managed_keys",
+   "fieldtype": "Check",
+   "label": "Customer-Managed Keys (BYOK)"
+  },
+  {
+   "depends_on": "eval:doc.customer_managed_keys",
+   "fieldname": "customer_master_key",
+   "fieldtype": "Password",
+   "label": "Customer Master Key"
+  },
+  {
+   "fieldname": "transit_section",
+   "fieldtype": "Section Break",
+   "label": "In Transit"
+  },
+  {
+   "default": "1",
+   "description": "Reject requests when TLS version is below 1.3 (when detectable).",
+   "fieldname": "require_tls_13",
+   "fieldtype": "Check",
+   "label": "Require TLS 1.3"
+  },
+  {
+   "default": "1",
+   "fieldname": "enforce_https",
+   "fieldtype": "Check",
+   "label": "Enforce HTTPS"
+  },
+  {
+   "default": "31536000",
+   "depends_on": "eval:doc.enforce_https",
+   "fieldname": "hsts_max_age_seconds",
+   "fieldtype": "Int",
+   "label": "HSTS Max Age (seconds)"
+  },
+  {
+   "fieldname": "column_break_transit",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_tls_check_on",
+   "fieldtype": "Datetime",
+   "label": "Last TLS Check",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_tls_version",
+   "fieldtype": "Data",
+   "label": "Last TLS Version Detected",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rotation_section",
+   "fieldtype": "Section Break",
+   "label": "Key Rotation"
+  },
+  {
+   "default": "1",
+   "fieldname": "key_rotation_enabled",
+   "fieldtype": "Check",
+   "label": "Enable Annual Key Rotation"
+  },
+  {
+   "default": "365",
+   "depends_on": "eval:doc.key_rotation_enabled",
+   "fieldname": "key_rotation_interval_days",
+   "fieldtype": "Int",
+   "label": "Rotation Interval (days)"
+  },
+  {
+   "fieldname": "column_break_rotation",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "active_key_version",
+   "fieldtype": "Data",
+   "label": "Active Key Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_key_rotation_on",
+   "fieldtype": "Datetime",
+   "label": "Last Key Rotation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "next_key_rotation_on",
+   "fieldtype": "Datetime",
+   "label": "Next Scheduled Rotation",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "help_section",
+   "fieldtype": "Section Break",
+   "label": "Help"
+  },
+  {
+   "fieldname": "security_help",
+   "fieldtype": "HTML",
+   "label": "Help",
+   "options": "<ul><li><b>TLS 1.3</b> — enforced via reverse-proxy headers and HSTS.</li><li><b>AES-256-GCM</b> — encrypts PMS secrets at rest with authenticated encryption.</li><li><b>Enterprise BYOK</b> — customer-supplied master key wrapped by site encryption key.</li><li><b>Annual rotation</b> — re-encrypts registered secrets and retires old key versions.</li></ul>"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-06-08 22:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Next PMS",
+ "name": "PMS Security Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

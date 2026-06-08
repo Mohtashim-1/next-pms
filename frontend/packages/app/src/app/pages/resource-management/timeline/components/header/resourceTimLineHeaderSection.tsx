@@ -21,7 +21,7 @@ import { ResourceViewActions } from "../../../components/resourceViewActions";
 import { getGroupByLabel, type ResourceGroupByDimension } from "../../../shared/groupBy";
 import { ResourceFormContext } from "../../../store/resourceFormContext";
 import { TimeLineContext } from "../../../store/timeLineContext";
-import type { PermissionProps, Skill } from "../../../store/types";
+import type { PermissionProps, Skill, TimeLineContextState } from "../../../store/types";
 import SkillSearch from "../../../team/components/skillSearch";
 import { createFilter } from "../../utils";
 import type { TimelineColorMode, TimelineZoomLevel } from "../../timelineZoom";
@@ -470,7 +470,7 @@ const ResourceTimLineHeaderSection = ({ viewData }: { viewData: ViewData }) => {
   if (!user.hasBuField) {
     sectionFilters = sectionFilters.filter((filter) => filter.queryParameterName !== "business-unit");
   }
-  const viewFilters = createFilter({ filters } as import("../../../store/types").TimeLineContextState);
+  const viewFilters = createFilter({ filters } as TimeLineContextState);
 
   return (
     <Header

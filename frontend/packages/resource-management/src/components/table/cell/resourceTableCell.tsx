@@ -35,6 +35,7 @@ const ResourceTableCell = ({
   ref,
   value,
   style,
+  onCellClick,
 }: ResourceTableProps) => {
   const { tableProperties } = useContextSelector(TableContext, (value) => value.state);
   const { getCellWidthString } = useContextSelector(TableContext, (value) => value.actions);
@@ -65,7 +66,7 @@ const ResourceTableCell = ({
 
   if (type == "default") {
     return (
-      <TableCell ref={ref} className={mergeCellClassName} style={inlineStyle}>
+      <TableCell ref={ref} className={mergeCellClassName} style={inlineStyle} onClick={onCellClick}>
         {CellContent && <CellContent />}
         <TableCellContent title={title} className={cellTypographyClassName} value={value} />
       </TableCell>

@@ -2,7 +2,6 @@
  * External dependencies.
  */
 import { Table } from "@next-pms/design-system/components";
-import { ResourceTableHeader as ResourceTeamTableHeader } from "@next-pms/resource-management/components";
 import { TableContextProvider } from "@next-pms/resource-management/store";
 import { useContextSelector } from "use-context-selector";
 import { InfiniteScroll } from "@/app/components/infiniteScroll";
@@ -11,6 +10,7 @@ import { InfiniteScroll } from "@/app/components/infiniteScroll";
  * Internal dependencies.
  */
 import { ResourceTeamTableBody } from "./resourceTeamTableBody";
+import { ResourceTeamTableHeader } from "./resourceTeamTableHeader";
 import { EmptyTableBody } from "../../../components/empty";
 import { TeamContext } from "../../../store/teamContext";
 import type { AllocationDataProps, DateProps } from "../../../store/types";

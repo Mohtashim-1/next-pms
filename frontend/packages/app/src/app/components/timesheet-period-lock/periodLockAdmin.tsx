@@ -7,6 +7,7 @@ import {
   DatePicker,
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -28,7 +29,7 @@ import {
   canUnlockPeriodLocks,
   type PeriodLock,
 } from "@/lib/timesheetPeriodLock";
-import { parseFrappeErrorMsg } from "@/lib/utils";
+import { getFrappeCallMessage, parseFrappeErrorMsg } from "@/lib/utils";
 
 type PeriodLockAdminProps = {
   roles: string[];
@@ -68,7 +69,7 @@ export const PeriodLockAdmin = ({ roles, periodLocks, onUpdated }: PeriodLockAdm
         to_date: getFormatedDate(toDate),
         reason: lockReason.trim(),
       });
-      toast({ variant: "success", description: res.message });
+      toast({ variant: "success", description: getFrappeCallMessage(res, "Period locked.") });
       setLockReason("");
       setFromDate(undefined);
       setToDate(undefined);
@@ -89,7 +90,7 @@ export const PeriodLockAdmin = ({ roles, periodLocks, onUpdated }: PeriodLockAdm
         name: unlockTarget.name,
         reason: unlockReason.trim(),
       });
-      toast({ variant: "success", description: res.message });
+      toast({ variant: "success", description: getFrappeCallMessage(res, "Period locked.") });
       setUnlockTarget(null);
       setUnlockReason("");
       onUpdated();
@@ -109,13 +110,12 @@ export const PeriodLockAdmin = ({ roles, periodLocks, onUpdated }: PeriodLockAdm
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Timesheet Period Lock</DialogTitle>
+            <DialogDescription>
+              Lock a date range to make all timesheet entries read-only. Only administrators can unlock with a reason.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            <Typography variant="small" className="text-muted-foreground">
-              Lock a date range to make all timesheet entries read-only. Only administrators can unlock with a reason.
-            </Typography>
-
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>From Date</Label>

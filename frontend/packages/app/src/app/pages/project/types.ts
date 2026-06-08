@@ -27,8 +27,17 @@ export type ProjectProps = {
 export type AddProjectType = {
   naming_series: string;
   project_name: string;
-  project_template: string | null;
+  customer: string;
+  project_type: string;
+  expected_start_date: string;
+  expected_end_date: string;
+  custom_project_manager: string;
   company: string;
+  project_template?: string | null;
+  estimated_costing?: number;
+  custom_project_team?: string | null;
+  tags?: string[];
+  create_from_template?: boolean;
 };
 
 export interface ProjectUpdate {

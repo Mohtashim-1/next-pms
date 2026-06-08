@@ -9,7 +9,7 @@ import { useContextSelector } from "use-context-selector";
 /**
  * Internal dependencies.
  */
-import { TIMESHEET, HOME, TEAM, TASK, PROJECT, RESOURCE_MANAGEMENT, ROLES } from "@/lib/constant";
+import { TIMESHEET, HOME, DASHBOARD, TEAM, TASK, PROJECT, RESOURCE_MANAGEMENT, ROLES } from "@/lib/constant";
 import { UserContext } from "@/lib/UserProvider";
 import { default as Layout } from "./app/layout";
 import { RootState } from "./store";
@@ -26,19 +26,29 @@ const TeamApprovals = lazy(() => import("@/app/pages/team/approvals"));
 const ResourceTeam = lazy(() => import("@/app/pages/resource-management/team"));
 const ResourceProject = lazy(() => import("@/app/pages/resource-management/project"));
 const ResourceTimeLine = lazy(() => import("@/app/pages/resource-management/timeline"));
+const PersonalAssignments = lazy(() => import("@/app/pages/resource-management/personal"));
+const CapacityDemand = lazy(() => import("@/app/pages/resource-management/capacity"));
+const TimeAllocation = lazy(() => import("@/app/pages/resource-management/time-allocation"));
+const TalentFinder = lazy(() => import("@/app/pages/resource-management/talent-finder"));
 const EmployeeDetail = lazy(() => import("@/app/pages/team/employee-detail"));
 const Task = lazy(() => import("@/app/pages/task"));
 const Project = lazy(() => import("@/app/pages/project"));
 const ProjectDetail = lazy(() => import("@/app/pages/project/project-detail"));
+const ClientInvoicing = lazy(() => import("@/app/pages/project/invoicing"));
+const PortfolioMargins = lazy(() => import("@/app/pages/project/margins"));
+const BudgetBurnShare = lazy(() => import("@/app/pages/project/budget-burn-share"));
+const ExecutiveDashboard = lazy(() => import("@/app/pages/dashboard"));
 const NotFound = lazy(() => import("@/app/pages/404"));
 
 export function Router() {
   return (
     <Route>
+      <Route path="/share/budget-burn/:token" element={<BudgetBurnShare />} />
       <Route element={<AuthenticatedRoute />}>
         <Route path="/" element={<Navigate to={TIMESHEET} replace />} />
         <Route path={TIMESHEET} element={<Timesheet />} />
         <Route element={<PmRoute />}>
+          <Route path={DASHBOARD} element={<ExecutiveDashboard />} />
           <Route path={HOME} element={<Home />} />
           <Route path={TEAM}>
             <Route path={`${TEAM}/`} element={<Team />} />
@@ -47,10 +57,17 @@ export function Router() {
           </Route>
           <Route path={PROJECT}>
             <Route path={`${PROJECT}/`} element={<Project />} />
+            <Route path={`${PROJECT}/invoicing`} element={<ClientInvoicing />} />
+            <Route path={`${PROJECT}/invoicing/:draftId`} element={<ClientInvoicing />} />
+            <Route path={`${PROJECT}/margins`} element={<PortfolioMargins />} />
             <Route path={`${PROJECT}/:projectId`} element={<ProjectDetail />} />
           </Route>
         </Route>
         <Route path={TASK} element={<Task />} />
+        <Route path={`${RESOURCE_MANAGEMENT}/my-assignments`} element={<PersonalAssignments />} />
+        <Route path={`${RESOURCE_MANAGEMENT}/capacity`} element={<CapacityDemand />} />
+        <Route path={`${RESOURCE_MANAGEMENT}/time-allocation`} element={<TimeAllocation />} />
+        <Route path={`${RESOURCE_MANAGEMENT}/talent-finder`} element={<TalentFinder />} />
         <Route path={`${RESOURCE_MANAGEMENT}/timeline`} element={<ResourceTimeLine />} />
         <Route path={`${RESOURCE_MANAGEMENT}/team`} element={<ResourceTeam />} />
         <Route path={`${RESOURCE_MANAGEMENT}/project`} element={<ResourceProject />} />

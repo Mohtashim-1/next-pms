@@ -17,6 +17,10 @@ from next_pms.resource_management.api.utils.query import (
     get_allocation_list_for_employee_for_given_range,
     get_employee_leaves,
 )
+from next_pms.resource_management.utils.capacity_thresholds import (
+    get_employee_utilization_thresholds,
+    get_global_utilization_thresholds,
+)
 from next_pms.timesheet.api import filter_employees
 from next_pms.timesheet.api.employee import get_employee_working_hours
 from next_pms.timesheet.api.team import get_holidays
@@ -395,11 +399,15 @@ def get_resource_management_team_view_data(
             }
         )
 
+    for employee_row in data:
+        employee_row["utilization_thresholds"] = get_employee_utilization_thresholds(employee_row.get("name"))
+
     res["data"] = data
     res["customer"] = customer
     res["total_count"] = total_count
     res["has_more"] = int(start) + int(page_length) < total_count
     res["permissions"] = permissions
+    res["utilization_thresholds"] = get_global_utilization_thresholds()
 
     return res
 

@@ -30,9 +30,13 @@ export const getColumn = (
   handleLike: handleLikeType
 ): ColumnsType => {
   const columns: ColumnsType = [];
+  const columnSizes = columnInfo ?? {};
+  const fields = fieldMeta ?? [];
+  const visibleFields = Array.isArray(fieldInfo) ? fieldInfo : [];
+
   const ProjectNameColumn: ColumnDef<TaskData> = {
     accessorKey: "project_name",
-    size: columnInfo["project_name"] ?? 150,
+    size: columnSizes["project_name"] ?? 150,
     header: ({ column }) => {
       return (
         <div
@@ -56,12 +60,12 @@ export const getColumn = (
     },
   };
   columns.push(ProjectNameColumn);
-  fieldInfo.forEach((f) => {
-    const meta = fieldMeta.find((field) => field.fieldname === f);
+  visibleFields.forEach((f) => {
+    const meta = fields.find((field) => field.fieldname === f);
     if (!meta) return;
     const col = {
       accessorKey: meta.fieldname,
-      size: columnInfo[meta.fieldname] ?? 150,
+      size: columnSizes[meta.fieldname] ?? 150,
       header: ({ column }) => {
         return (
           <div
