@@ -11,7 +11,7 @@ import {
   TextEditor,
 } from "@next-pms/design-system/components";
 import { floatToTime } from "@next-pms/design-system/utils";
-import { CircleDollarSign, CirclePlus, PencilLine } from "lucide-react";
+import { CircleDollarSign, CirclePlus, PencilLine, Timer } from "lucide-react";
 /**
  * Internal dependencies
  */
@@ -31,7 +31,7 @@ import type { cellProps } from "./types";
  * @param {string} props.className - Class name for the cell
  */
 
-export const Cell = ({ date, data, isHoliday, onCellClick, disabled, className }: cellProps) => {
+export const Cell = ({ date, data, isHoliday, onCellClick, disabled, className, runningTimerElapsed }: cellProps) => {
   const { hours, description, isTimeBothBillableAndNonBillable, isTimeBillable } = useMemo(() => {
     let hours = 0;
     let description = "";
@@ -74,12 +74,19 @@ export const Cell = ({ date, data, isHoliday, onCellClick, disabled, className }
           "text-center group px-2",
           isDisabled && "cursor-default",
           "hover:h-full hover:bg-muted/60 dark:hover:bg-muted/40 hover:cursor-pointer",
+          runningTimerElapsed && "bg-success/10 text-success ring-1 ring-success/40 ring-inset",
           getBgCsssForToday(date),
           className
         )}
       >
         <HoverCardTrigger className={mergeClassNames(isDisabled && "cursor-default")}>
           <span className="flex flex-col items-center justify-center ">
+            {runningTimerElapsed && (
+              <span className="mb-0.5 flex items-center gap-1 text-[0.68rem] font-semibold text-success">
+                <Timer className="h-3 w-3" />
+                {runningTimerElapsed}
+              </span>
+            )}
             <Typography
               variant="p"
               className={mergeClassNames(

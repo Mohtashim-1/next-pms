@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 
 import frappe
@@ -15,6 +16,28 @@ def uses_time_range(from_time, to_time) -> bool:
 	if not from_dt or not to_dt:
 		return False
 	return not is_midnight(from_dt) or not is_midnight(to_dt) or from_dt != to_dt
+
+
+INPUT_MODE_MARKER_RE = re.compile(r"<!--\s*next_pms_input_mode:(duration|range)\s*-->")
+
+
+def set_input_mode_marker(description: str | None, input_mode: str = "duration") -> str:
+	description = description or ""
+	description = INPUT_MODE_MARKER_RE.sub("", description).strip()
+	return f"{description}\n<!-- next_pms_input_mode:{input_mode} -->".strip()
+
+
+def get_input_mode_from_description(description: str | None) -> str | None:
+	if not description:
+		return None
+	match = INPUT_MODE_MARKER_RE.search(description)
+	return match.group(1) if match else None
+
+
+def strip_input_mode_marker(description: str | None) -> str:
+	if not description:
+		return ""
+	return INPUT_MODE_MARKER_RE.sub("", description).strip()
 
 
 def combine_date_and_time(date_str, time_str):

@@ -28,6 +28,7 @@ export interface TaskDataItemProps {
   task: string;
   from_time: string;
   to_time?: string;
+  input_mode?: "duration" | "range";
   docstatus: 0 | 1 | 2;
   subject?: string;
   project?: string;
@@ -82,3 +83,13 @@ export interface NewTimesheetProps {
   hours: number;
   employee: string;
 }
+
+export type RunningTimer = {
+  employee: string;
+  task: string;
+  task_subject: string;
+  project?: string;
+  project_name?: string;
+  description?: string;
+  started_at: string;
+};

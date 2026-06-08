@@ -1,5 +1,7 @@
 import frappe
 from frappe import _, throw
+from datetime import timedelta
+
 from frappe.utils import (
     add_days,
     flt,
@@ -15,7 +17,12 @@ from frappe.utils import (
 from next_pms.api.utils import error_logger
 from next_pms.resource_management.api.utils.query import get_employee_leaves
 from next_pms.timesheet.utils.constant import EMP_TIMESHEET
-from next_pms.timesheet.utils.time_log import resolve_time_log_times
+from next_pms.timesheet.utils.time_log import (
+    get_input_mode_from_description,
+    resolve_time_log_times,
+    set_input_mode_marker,
+    strip_input_mode_marker,
+)
 
 from .employee import (
     get_employee_daily_working_norm,
@@ -204,6 +211,66 @@ def _assert_week_editable(employee: str, date):
         throw(_("This week is submitted or approved. Recall it before editing time entries."))
 
 
+def _get_day_intervals(employee: str, date, exclude_detail_name: str | None = None):
+    day = getdate(date)
+    timesheets = frappe.get_all(
+        "Timesheet",
+        filters={
+            "employee": employee,
+            "start_date": ["<=", day],
+            "end_date": [">=", day],
+            "docstatus": ["!=", 2],
+        },
+        pluck="name",
+        ignore_permissions=employee_has_higher_access(employee, ptype="read"),
+    )
+    intervals = []
+    for timesheet_name in timesheets:
+        timesheet = frappe.get_doc("Timesheet", timesheet_name)
+        for log in timesheet.time_logs:
+            if exclude_detail_name and log.name == exclude_detail_name:
+                continue
+            from_dt = get_datetime(log.from_time)
+            to_dt = get_datetime(log.to_time)
+            if not from_dt or not to_dt or getdate(from_dt) != day or to_dt <= from_dt:
+                continue
+            intervals.append((from_dt, to_dt))
+    return sorted(intervals, key=lambda item: item[0])
+
+
+def _has_overlap(start, end, intervals):
+    return any(start < interval_end and end > interval_start for interval_start, interval_end in intervals)
+
+
+def _resolve_duration_time_slot(employee: str, date, hours: float, exclude_detail_name: str | None = None, preferred_from=None):
+    day_start = get_datetime(getdate(date)).replace(hour=0, minute=0, second=0, microsecond=0)
+    duration = timedelta(hours=float(hours or 0))
+    if duration.total_seconds() <= 0:
+        return day_start, day_start, float(hours or 0)
+
+    intervals = _get_day_intervals(employee, date, exclude_detail_name=exclude_detail_name)
+    day_end = day_start + timedelta(days=1)
+    if preferred_from:
+        preferred_start = get_datetime(preferred_from)
+        if preferred_start and getdate(preferred_start) == getdate(date):
+            preferred_end = preferred_start + duration
+            if preferred_end <= day_end and not _has_overlap(preferred_start, preferred_end, intervals):
+                return preferred_start, preferred_end, float(hours)
+
+    candidate_start = day_start
+    for interval_start, interval_end in intervals:
+        candidate_end = candidate_start + duration
+        if candidate_end <= interval_start:
+            return candidate_start, candidate_end, float(hours)
+        if candidate_start < interval_end:
+            candidate_start = interval_end
+
+    candidate_end = candidate_start + duration
+    if candidate_end > day_end:
+        throw(_("There is not enough free time on {0} to add {1} hours without overlap.").format(date, hours))
+    return candidate_start, candidate_end, float(hours)
+
+
 @frappe.whitelist()
 @error_logger
 def get_timesheet_data(employee: str, start_date: str | None = None, max_week: int = 4):
@@ -313,17 +380,20 @@ def save(
         throw(_("Task is mandatory for creating time entry."), frappe.MandatoryError)
     _assert_week_editable(employee, date)
 
-    resolved_from, resolved_to, resolved_hours = resolve_time_log_times(
-        date=date,
-        hours=hours,
-        from_time=from_time,
-        to_time=to_time,
-        input_mode=input_mode,
-    )
+    if input_mode == "duration":
+        resolved_from, resolved_to, resolved_hours = _resolve_duration_time_slot(employee, date, hours)
+    else:
+        resolved_from, resolved_to, resolved_hours = resolve_time_log_times(
+            date=date,
+            hours=hours,
+            from_time=from_time,
+            to_time=to_time,
+            input_mode=input_mode,
+        )
     timesheet, ignore_permissions = _append_time_log(
         employee=employee,
         task=task,
-        description=description,
+        description=set_input_mode_marker(description, input_mode),
         from_time=resolved_from,
         to_time=resolved_to,
         hours=resolved_hours,
@@ -591,19 +661,29 @@ def update_timesheet_detail(
     logs_to_remove = []
     new_logs = []
     task_project = frappe.get_value("Task", task, "project")
-    resolved_from, resolved_to, resolved_hours = resolve_time_log_times(
-        date=date,
-        hours=hours,
-        from_time=from_time,
-        to_time=to_time,
-        input_mode=input_mode,
-    )
+    existing_log = next((log for log in parent_doc.time_logs if name and log.name == name), None)
+    if input_mode == "duration":
+        resolved_from, resolved_to, resolved_hours = _resolve_duration_time_slot(
+            employee=parent_doc.employee,
+            date=date,
+            hours=hours,
+            exclude_detail_name=name,
+            preferred_from=existing_log.from_time if existing_log else None,
+        )
+    else:
+        resolved_from, resolved_to, resolved_hours = resolve_time_log_times(
+            date=date,
+            hours=hours,
+            from_time=from_time,
+            to_time=to_time,
+            input_mode=input_mode,
+        )
 
     def build_new_log_payload():
         payload = {
             "task": task,
             "hours": resolved_hours,
-            "description": description,
+            "description": strip_input_mode_marker(description),
             "date": date,
             "employee": parent_doc.employee,
             "from_time": str(resolved_from),
@@ -624,7 +704,7 @@ def update_timesheet_detail(
             continue
 
         log.hours = resolved_hours
-        log.description = description
+        log.description = set_input_mode_marker(description, input_mode)
         log.task = task
         log.from_time = resolved_from
         log.to_time = resolved_to
@@ -643,7 +723,7 @@ def update_timesheet_detail(
             log = {
                 "task": task,
                 "hours": resolved_hours,
-                "description": description,
+                "description": set_input_mode_marker(description, input_mode),
                 "from_time": resolved_from,
                 "to_time": resolved_to,
                 "project": task_project,
@@ -746,7 +826,11 @@ def get_timesheet(dates: list, employee: str):
                 "_liked_by": task["_liked_by"],
             }
 
-        data[task_name]["data"].append({field: log.get(field) for field in ALLOWED_TIMESHET_DETAIL_FIELDS})
+        log_data = {field: log.get(field) for field in ALLOWED_TIMESHET_DETAIL_FIELDS}
+        marked_input_mode = get_input_mode_from_description(log.description)
+        log_data["input_mode"] = marked_input_mode or "range"
+        log_data["description"] = strip_input_mode_marker(log.description)
+        data[task_name]["data"].append(log_data)
 
     return [data, total_hours]
 
@@ -831,6 +915,10 @@ def get_timesheet_details(date: str, task: str, employee: str):
         ignore_permissions=employee_has_higher_access(employee, ptype="read"),
     )
     logs = [log for log in logs if log["task"] == task]
+    for log in logs:
+        marked_input_mode = get_input_mode_from_description(log.get("description"))
+        log["input_mode"] = marked_input_mode or "range"
+        log["description"] = strip_input_mode_marker(log.get("description"))
     subject, project_name = frappe.get_value("Task", task, ["subject", "project.project_name"])
 
     return {

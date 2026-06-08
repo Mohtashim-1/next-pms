@@ -4,7 +4,7 @@
 import { TableCell, TableRow, Typography } from "@next-pms/design-system/components";
 import { getDateFromDateAndTimeString } from "@next-pms/design-system/date";
 import { floatToTime } from "@next-pms/design-system/utils";
-import { CircleDollarSign } from "lucide-react";
+import { CircleDollarSign, Clock } from "lucide-react";
 /**
  * Internal dependencies
  */
@@ -30,6 +30,9 @@ const Row = ({
   totalCellClassName,
   showEmptyCell,
   hideLikeButton,
+  runningTimer,
+  runningTimerDate,
+  runningTimerElapsed,
   gridRow: rowOffset = 0,
   enableInlineEdit,
   employee,
@@ -46,6 +49,7 @@ const Row = ({
       {Object.keys(tasks).length > 0 &&
         Object.entries(tasks).map(([task, taskData]: [string, TaskDataProps], rowIndex: number) => {
           const gridRow = rowOffset + rowIndex;
+          const isRunningTask = runningTimer?.task === taskData.name;
           let totalHours = 0;
           return (
             <TableRow key={task} className={mergeClassNames("border-b ", rowClassName)}>
@@ -59,6 +63,12 @@ const Row = ({
                   likedTaskData={likedTaskData as TaskDataProps[]}
                   getLikedTaskData={getLikedTaskData ?? (() => {})}
                 />
+                {isRunningTask && (
+                  <div className="mt-1 flex items-center gap-1 text-xs font-medium text-success">
+                    <Clock className="h-3 w-3" />
+                    Running {runningTimerElapsed}
+                  </div>
+                )}
               </TableCell>
               {dates.map((date: string, colIndex: number) => {
                 let data = taskData.data.filter(
@@ -77,6 +87,7 @@ const Row = ({
                       parent: "",
                       task: taskData.name,
                       from_time: date,
+                      input_mode: "duration",
                       docstatus: 0,
                       project: taskData.project,
                       is_billable: false,
@@ -97,6 +108,9 @@ const Row = ({
                     isHoliday={result.isHoliday && !result.weekly_off}
                     onCellClick={onCellClick}
                     disabled={disabled}
+                    runningTimerElapsed={
+                      isRunningTask && runningTimerDate === date ? runningTimerElapsed : undefined
+                    }
                     gridRow={gridRow}
                     gridCol={colIndex}
                     enableInlineEdit={enableInlineEdit}

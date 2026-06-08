@@ -42,18 +42,22 @@ import { initialState, reducer } from "./reducer";
 import { validateDate } from "./utils";
 import { InfiniteScroll } from "../../components/infiniteScroll";
 
+const INITIAL_WEEK_COUNT = 4;
+const MAX_VISIBLE_WEEK_COUNT = 12;
+
 function Timesheet() {
   const targetRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   const [startDateParam, setStartDateParam] = useQueryParam<string>("date", "");
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const user = useSelector((state: RootState) => state.user);
   const [timesheet, dispatch] = useReducer(reducer, initialState);
   const dailyWorkingHour = expectatedHours(user.workingHours, user.workingFrequency);
   const { data, isLoading, error, mutate } = useFrappeGetCall("next_pms.timesheet.api.timesheet.get_timesheet_data", {
     employee: user.employee,
     start_date: timesheet.weekDate,
-    max_week: 4,
+    max_week: INITIAL_WEEK_COUNT,
   });
   const { call: recallTimesheet, loading: isRecalling } = useFrappePostCall(
     "next_pms.timesheet.api.timesheet.recall_timesheet"
@@ -77,9 +81,11 @@ function Timesheet() {
       } else {
         dispatch({ type: "SET_DATA", payload: data.message });
       }
+      setIsLoadingMore(false);
     }
     if (error) {
       const err = parseFrappeErrorMsg(error);
+      setIsLoadingMore(false);
       toast({
         variant: "destructive",
         description: err,
@@ -151,6 +157,7 @@ function Timesheet() {
     }
   };
   const loadData = () => {
+    if (isLoading || isLoadingMore) return;
     const data = timesheet.data.data;
     if (Object.keys(data).length === 0) return;
 
@@ -158,6 +165,7 @@ function Timesheet() {
     if (!lastKey) return;
     const obj = data[lastKey];
     setStartDateParam("");
+    setIsLoadingMore(true);
     dispatch({ type: "SET_WEEK_DATE", payload: getFormatedDate(addDays(obj.start_date, -1)) });
   };
   const handleApproval = (start_date: string, end_date: string) => {
@@ -194,6 +202,9 @@ function Timesheet() {
   const handleImportTaskFromGoogleCalendar = () => {
     dispatch({ type: "SET_IMPORT_FROM_GOOGLE_CALENDAR_DIALOG_STATE", payload: true });
   };
+
+  const visibleWeekCount = Object.keys(timesheet.data?.data ?? {}).length;
+  const hasMoreWeeks = visibleWeekCount > 0 && visibleWeekCount < MAX_VISIBLE_WEEK_COUNT;
 
   return (
     <>
@@ -234,7 +245,12 @@ function Timesheet() {
             <Typography className="flex items-center justify-center">No Data</Typography>
           ) : (
             <Main className="w-full h-full overflow-y-auto">
-              <InfiniteScroll isLoading={isLoading} hasMore={true} verticalLodMore={loadData} className="w-full">
+              <InfiniteScroll
+                isLoading={isLoading || isLoadingMore}
+                hasMore={hasMoreWeeks}
+                verticalLodMore={loadData}
+                className="w-full"
+              >
                 {timesheet.data?.data &&
                   Object.keys(timesheet.data?.data).length > 0 &&
                   Object.entries(timesheet.data?.data).map(([key, value]: [string, timesheet]) => {

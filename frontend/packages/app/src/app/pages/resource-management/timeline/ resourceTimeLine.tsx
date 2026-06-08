@@ -122,7 +122,12 @@ const ResourceTimeLineViewComponent = ({ viewData }: ResourceTimeLineViewCompone
 
   const filterApiData = useCallback(
     (data: ResourceTimeLineDataProps) => {
-      const updatedData = { ...data };
+      const updatedData = {
+        employees: data?.employees ?? [],
+        resource_allocations: data?.resource_allocations ?? [],
+        leaves: data?.leaves ?? [],
+        customer: data?.customer ?? {},
+      };
 
       updatedData.employees = updatedData.employees.map((employee: ResourceAllocationEmployeeProps) => ({
         ...employee,
@@ -141,7 +146,11 @@ const ResourceTimeLineViewComponent = ({ viewData }: ResourceTimeLineViewCompone
             getUTCDateTime(allocation.allocation_end_date).getDate() + 1
           ),
           customerData: {
-            ...updatedData.customer[allocation.customer],
+            ...(updatedData.customer[allocation.customer] ?? {
+              name: "",
+              abbr: "",
+              image: "",
+            }),
           },
           canDelete: resourceAllocationPermission.delete,
           onDelete: handleDelete,
@@ -230,10 +239,11 @@ const ResourceTimeLineViewComponent = ({ viewData }: ResourceTimeLineViewCompone
   );
 
   useEffect(() => {
-    if (apiControler.isNeedToFetchDataAfterUpdate) {
-      loadIntialData();
-      updateApiControler({ isNeedToFetchDataAfterUpdate: false });
-    }
+    if (!apiControler.isNeedToFetchDataAfterUpdate) return;
+
+    void loadIntialData().finally(() => {
+      updateApiControler({ isNeedToFetchDataAfterUpdate: false, isLoading: false });
+    });
   }, [loadIntialData, apiControler.isNeedToFetchDataAfterUpdate, updateApiControler]);
 
   useEffect(() => {

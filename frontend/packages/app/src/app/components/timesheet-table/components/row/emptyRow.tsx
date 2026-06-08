@@ -2,6 +2,7 @@
  * External dependencies
  */
 import { TableCell, TableRow } from "@next-pms/design-system/components";
+import { Clock } from "lucide-react";
 
 /**
  * Internal dependencies
@@ -41,6 +42,9 @@ export const EmptyRow = ({
   name,
   likedTaskData,
   getLikedTaskData,
+  runningTimer,
+  runningTimerDate,
+  runningTimerElapsed,
   gridRow = 0,
   enableInlineEdit,
   employee,
@@ -52,6 +56,8 @@ export const EmptyRow = ({
   onStopEditing = () => {},
   onMoveFocus,
 }: emptyRowProps) => {
+  const isRunningTask = Boolean(taskData?.name && runningTimer?.task === taskData.name);
+
   return (
     <TableRow className={mergeClassNames(rowClassName)}>
       <TableCell className={mergeClassNames("max-w-sm", headingCellClassName)}>
@@ -65,6 +71,12 @@ export const EmptyRow = ({
             getLikedTaskData={getLikedTaskData ?? (() => {})}
           />
         )}
+        {isRunningTask && (
+          <div className="mt-1 flex items-center gap-1 text-xs font-medium text-success">
+            <Clock className="h-3 w-3" />
+            Running {runningTimerElapsed}
+          </div>
+        )}
       </TableCell>
       {dates.map((date: string, colIndex: number) => {
         const isHoliday = holidayList.includes(date);
@@ -76,6 +88,7 @@ export const EmptyRow = ({
             docstatus: 0 as 0 | 1,
             is_billable: false,
             from_time: date,
+            input_mode: "duration" as const,
             task: taskData?.name ?? "",
             parent: "",
             project: taskData?.project ?? "",
@@ -90,6 +103,7 @@ export const EmptyRow = ({
             onCellClick={onCellClick}
             disabled={disabled}
             className={cellClassName}
+            runningTimerElapsed={isRunningTask && runningTimerDate === date ? runningTimerElapsed : undefined}
             gridRow={gridRow}
             gridCol={colIndex}
             enableInlineEdit={enableInlineEdit}

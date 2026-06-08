@@ -3,6 +3,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ErrorFallback, Table, TableBody, Typography } from "@next-pms/design-system/components";
+import { useFrappeGetCall } from "frappe-react-sdk";
 /**
  * Internal dependencies
  */
@@ -18,6 +19,19 @@ import { LeaveRow } from "./components/row/leaveRow";
 import { TotalHourRow } from "./components/row/totalRow";
 import type { timesheetTableProps } from "./components/types";
 import { useGridNavigation } from "./hooks/useGridNavigation";
+
+const formatElapsedTime = (startedAt: string, now: number) => {
+  const startDate = new Date(startedAt.replace(" ", "T"));
+  if (Number.isNaN(startDate.getTime())) return "00:00:00";
+
+  const totalSeconds = Math.max(0, Math.floor((now - startDate.getTime()) / 1000));
+  const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+  const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `${hours}:${minutes}:${seconds}`;
+};
+
+const getDateFromTimer = (startedAt: string) => startedAt.split(" ")[0] || startedAt.split("T")[0];
 
 export const TimesheetTable = ({
   dates,
@@ -42,6 +56,16 @@ export const TimesheetTable = ({
   const holidayList = getHolidayList(holidays);
   const [isTaskLogDialogBoxOpen, setIsTaskLogDialogBoxOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<string>("");
+  const [timerTick, setTimerTick] = useState(Date.now());
+  const { data: runningTimerData, mutate: mutateRunningTimer } = useFrappeGetCall(
+    "next_pms.timesheet.api.timesheet.get_running_timer",
+    employee ? { employee } : {},
+    undefined,
+    { revalidateOnFocus: false }
+  );
+  const runningTimer = runningTimerData?.message?.task ? runningTimerData.message : null;
+  const runningTimerDate = runningTimer ? getDateFromTimer(runningTimer.started_at) : undefined;
+  const runningTimerElapsed = runningTimer ? formatElapsedTime(runningTimer.started_at, timerTick) : undefined;
   const task_date_range_key = dates[0] + "-" + dates[dates.length - 1];
   const has_liked_task = hasKeyInLocalStorage(LIKED_TASK_KEY);
   const isWeekLocked = ["Approval Pending", "Processing Timesheet", "Approved", "Partially Approved"].includes(
@@ -71,6 +95,22 @@ export const TimesheetTable = ({
   const deleteTaskFromLocalStorage = useCallback(() => {
     removeFromLikedTask(LIKED_TASK_KEY, task_date_range_key);
   }, [task_date_range_key]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setTimerTick(Date.now());
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const refreshTimer = () => {
+      mutateRunningTimer();
+      onSaved?.();
+    };
+    window.addEventListener("next-pms:timer-updated", refreshTimer);
+    return () => window.removeEventListener("next-pms:timer-updated", refreshTimer);
+  }, [mutateRunningTimer, onSaved]);
 
   useEffect(() => {
     if (isWeekLocked) {
@@ -181,6 +221,9 @@ export const TimesheetTable = ({
               setIsTaskLogDialogBoxOpen={setIsTaskLogDialogBoxOpen}
               likedTaskData={likedTaskData!}
               getLikedTaskData={getLikedTaskData}
+              runningTimer={runningTimer}
+              runningTimerDate={runningTimerDate}
+              runningTimerElapsed={runningTimerElapsed}
               gridRow={nextGridRow++}
               {...gridBindings}
             />
@@ -203,6 +246,9 @@ export const TimesheetTable = ({
                   taskData={task}
                   likedTaskData={likedTaskData}
                   getLikedTaskData={getLikedTaskData}
+                  runningTimer={runningTimer}
+                  runningTimerDate={runningTimerDate}
+                  runningTimerElapsed={runningTimerElapsed}
                   gridRow={gridRow}
                   {...gridBindings}
                 />
@@ -221,6 +267,9 @@ export const TimesheetTable = ({
             workingFrequency={workingFrequency}
             workingHour={workingHour}
             hideLikeButton={hideLikeButton}
+            runningTimer={runningTimer}
+            runningTimerDate={runningTimerDate}
+            runningTimerElapsed={runningTimerElapsed}
             gridRow={nextGridRow}
             {...gridBindings}
           />

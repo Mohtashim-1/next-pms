@@ -202,6 +202,10 @@ const ResourceTimeLine = ({ handleFormSubmit }: ResourceTimeLineProps) => {
 
   const onCanvasClick = (groupId: string, time: number) => {
     const employee = getEmployeeWithID(groupId);
+    if (!employee) {
+      return;
+    }
+
     const date: string = getDayKeyOfMoment(moment(time));
 
     setResourceAllocationData({

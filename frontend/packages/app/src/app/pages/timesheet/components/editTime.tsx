@@ -76,7 +76,7 @@ export const EditTime = ({ employee, date, task, open, onClose, user }: EditTime
   const updatedData = useMemo(() => {
     if (!data) return [];
     const updatedData = data.message.data.map((item: TimesheetDetail) => {
-      const rangeMode = isRangeEntry(item.from_time, item.to_time);
+      const rangeMode = item.input_mode ? item.input_mode === "range" : isRangeEntry(item.from_time, item.to_time);
       return {
         ...item,
         hours: floatToTime(item.hours),

@@ -14,7 +14,7 @@ import {
 } from "@next-pms/design-system/components";
 import { floatToTime } from "@next-pms/design-system/utils";
 import { useFrappePostCall } from "frappe-react-sdk";
-import { CircleDollarSign, CirclePlus, PencilLine } from "lucide-react";
+import { CircleDollarSign, CirclePlus, PencilLine, Timer } from "lucide-react";
 
 /**
  * Internal dependencies
@@ -54,6 +54,7 @@ export const EditableCell = ({
   onStopEditing,
   onMoveFocus,
   onSaved,
+  runningTimerElapsed,
 }: EditableCellProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -79,7 +80,8 @@ export const EditableCell = ({
       billable = data.every((item) => item.is_billable === true || item.is_billable === 1);
     }
 
-    const label = primaryEntry ? formatRangeLabel(primaryEntry.from_time, primaryEntry.to_time) : "";
+    const label =
+      primaryEntry?.input_mode === "range" ? formatRangeLabel(primaryEntry.from_time, primaryEntry.to_time) : "";
 
     return {
       hours: totalHours,
@@ -211,7 +213,11 @@ export const EditableCell = ({
   const handleCellClick = () => {
     if (isDisabled) return;
     onFocusCell(gridRow, gridCol);
-    if (!taskName || hasMultipleEntries || isRangeEntry(primaryEntry?.from_time, primaryEntry?.to_time)) {
+    if (
+      !taskName ||
+      hasMultipleEntries ||
+      (primaryEntry?.input_mode !== "duration" && isRangeEntry(primaryEntry?.from_time, primaryEntry?.to_time))
+    ) {
       openDetailDialog();
       return;
     }
@@ -277,6 +283,7 @@ export const EditableCell = ({
           isDisabled && "cursor-default",
           !isDisabled && "hover:bg-muted/60 dark:hover:bg-muted/40 hover:cursor-pointer",
           isFocused && !isDisabled && "ring-2 ring-primary ring-inset",
+          runningTimerElapsed && "bg-success/10 text-success ring-1 ring-success/40 ring-inset",
           getBgCsssForToday(date),
           className
         )}
@@ -294,6 +301,12 @@ export const EditableCell = ({
             />
           ) : (
             <span className="flex flex-col items-center justify-center ">
+              {runningTimerElapsed && (
+                <span className="mb-0.5 flex items-center gap-1 text-[0.68rem] font-semibold text-success">
+                  <Timer className="h-3 w-3" />
+                  {runningTimerElapsed}
+                </span>
+              )}
               <Typography
                 variant="p"
                 className={mergeClassNames(

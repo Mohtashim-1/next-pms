@@ -5,6 +5,7 @@ import type { WorkingFrequency } from "@/types";
 import type {
   HolidayProp,
   LeaveProps,
+  RunningTimer,
   TaskDataProps,
   TaskProps,
 } from "@/types/timesheet";
@@ -40,6 +41,9 @@ export type emptyRowProps = GridCellBindings & {
   setTaskInLocalStorage?: () => void;
   likedTaskData?: Array<object>;
   getLikedTaskData?: () => void;
+  runningTimer?: RunningTimer | null;
+  runningTimerDate?: string;
+  runningTimerElapsed?: string;
 };
 
 export type RowProps = GridCellBindings & {
@@ -64,6 +68,9 @@ export type RowProps = GridCellBindings & {
   totalCellClassName?: string;
   showEmptyCell?: boolean;
   hideLikeButton?: boolean;
+  runningTimer?: RunningTimer | null;
+  runningTimerDate?: string;
+  runningTimerElapsed?: string;
 };
 
 export interface leaveRowProps {

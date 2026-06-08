@@ -22,6 +22,14 @@ def add_customer_data_if_not_exists(customer, customer_name):
         customer_data = frappe.db.get_value(
             "Customer", customer_name, ["customer_name", "image", "custom_abbr"], as_dict=1
         )
+        if not customer_data:
+            customer[customer_name] = {
+                "name": customer_name,
+                "abbr": "",
+                "image": "",
+            }
+            return customer
+
         customer[customer_name] = {
             "name": customer_data.get("customer_name"),
             "abbr": customer_data.get("custom_abbr"),

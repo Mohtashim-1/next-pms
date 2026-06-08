@@ -31,10 +31,7 @@ export const Header = ({
     <TableHeader>
       <TableRow>
         <TableHead className="max-w-sm w-2/6 ">
-          <Typography
-            variant="h6"
-            className="font-normal text-slate-600 flex gap-x-4 items-center dark:text-muted-foreground"
-          >
+          <Typography variant="h6" className="font-normal text-muted-foreground flex gap-x-4 items-center">
             Tasks
             {weeklyStatus != "Approved" && importTasks && (
               <span title="Import liked tasks">
@@ -63,8 +60,8 @@ export const Header = ({
               <Typography
                 variant="p"
                 className={mergeClassNames(
-                  "text-slate-600 font-medium dark:text-muted-foreground",
-                  result.isHoliday && !result.weekly_off && "text-slate-400 dark:text-muted-foreground/60"
+                  "font-medium text-muted-foreground",
+                  result.isHoliday && !result.weekly_off && "text-muted-foreground/50"
                 )}
               >
                 {day}
@@ -72,8 +69,8 @@ export const Header = ({
               <Typography
                 variant="small"
                 className={mergeClassNames(
-                  "text-slate-500 dark:text-muted-foreground",
-                  result.isHoliday && !result.weekly_off && "text-slate-300 dark:text-muted-foreground/60"
+                  "text-muted-foreground/80",
+                  result.isHoliday && !result.weekly_off && "text-muted-foreground/50"
                 )}
               >
                 {formattedDate}
@@ -82,7 +79,7 @@ export const Header = ({
           );
         })}
         <TableHead className="max-w-24 w-1/12">
-          <Typography variant="p" className="text-base text-slate-600 dark:text-muted-foreground font-medium text-right">
+          <Typography variant="p" className="text-base text-muted-foreground font-medium text-right">
             Total
           </Typography>
         </TableHead>

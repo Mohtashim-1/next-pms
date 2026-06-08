@@ -10,13 +10,13 @@ import { useContextSelector } from "use-context-selector";
  * Internal dependencies.
  */
 import { mergeClassNames } from "@/lib/utils";
-import { getDayKeyOfMoment } from "../../../utils/dates";
+import { getDayKeyOfMoment, toTimelineMoment } from "../../../utils/dates";
 import type { ResourceAllocationItemProps, TimeLineHeaderFunctionProps } from "../../types";
 
 const TimeLineDateHeader = ({ getIntervalProps, intervalContext }: TimeLineHeaderFunctionProps) => {
   const { interval } = intervalContext;
   const { startTime } = interval;
-  const { date: dateStr, day } = prettyDate(getDayKeyOfMoment(startTime));
+  const { date: dateStr, day } = prettyDate(getDayKeyOfMoment(toTimelineMoment(startTime)));
   const { date: toDayStr } = prettyDate(getTodayDate());
 
   const { tableProperties } = useContextSelector(TableContext, (value) => value.state);

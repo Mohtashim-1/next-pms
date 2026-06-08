@@ -113,7 +113,10 @@ const ResourceTimLineHeaderSection = ({ viewData }: { viewData: ViewData }) => {
       designation: designationParam && designationParam.length > 0 ? designationParam : viewData.filters.designation,
       allocationType:
         allocationTypeParam && allocationTypeParam.length > 0 ? allocationTypeParam : viewData.filters.allocationType,
-      skillSearch: skillSearchParam && skillSearchParam.length > 0 ? skillSearchParam : viewData.filters.skillSearch,
+      skillSearch:
+        skillSearchParam && skillSearchParam.length > 0
+          ? skillSearchParam
+          : viewData.filters.skillSearch ?? [],
       isShowMonth: viewData.filters.isShowMonth,
     });
   };
@@ -174,7 +177,7 @@ const ResourceTimLineHeaderSection = ({ viewData }: { viewData: ViewData }) => {
             updateFilters({ skillSearch: skills });
           }}
           setSkillSearchParam={setSkillSearchParam}
-          skillSearch={filters.skillSearch as Skill[]}
+          skillSearch={(filters.skillSearch ?? []) as Skill[]}
         />
       ),
     },

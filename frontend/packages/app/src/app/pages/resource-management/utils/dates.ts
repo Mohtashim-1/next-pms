@@ -8,7 +8,7 @@ import {
   getUTCDateTime,
 } from "@next-pms/design-system/date";
 import { startOfWeek } from "date-fns";
-import { Moment } from "moment";
+import moment, { Moment } from "moment";
 
 /**
  * Internal dependencies.
@@ -69,8 +69,16 @@ function getDatesArrays(
   return dates;
 }
 
-const getDayKeyOfMoment = (dateTime: Moment): string => {
+const getDayKeyOfMoment = (dateTime: Moment | number): string => {
+  if (typeof dateTime === "number") {
+    return moment(dateTime).format("YYYY-MM-DD");
+  }
+
   return dateTime.format("YYYY-MM-DD");
 };
 
-export { getDatesArrays, getDayKeyOfMoment };
+const toTimelineMoment = (dateTime: Moment | number): Moment => {
+  return typeof dateTime === "number" ? moment(dateTime) : dateTime;
+};
+
+export { getDatesArrays, getDayKeyOfMoment, toTimelineMoment };

@@ -4,8 +4,8 @@
 import type { TaskDataItemProps } from "@/types/timesheet";
 import { Cell } from "./dataCell";
 import { EditableCell } from "./editableCell";
-import type { cellProps } from "./types";
 import type { GridCellBindings } from "./row/types";
+import type { cellProps } from "./types";
 
 type GridCellProps = cellProps &
   GridCellBindings & {
@@ -19,6 +19,7 @@ export const GridCell = ({
   onCellClick,
   disabled,
   className,
+  runningTimerElapsed,
   gridRow,
   gridCol,
   enableInlineEdit,
@@ -40,6 +41,7 @@ export const GridCell = ({
         onCellClick={onCellClick}
         disabled={disabled}
         className={className}
+        runningTimerElapsed={runningTimerElapsed}
         employee={employee}
         gridRow={gridRow}
         gridCol={gridCol}
@@ -62,6 +64,7 @@ export const GridCell = ({
       onCellClick={onCellClick}
       disabled={disabled}
       className={className}
+      runningTimerElapsed={runningTimerElapsed}
     />
   );
 };

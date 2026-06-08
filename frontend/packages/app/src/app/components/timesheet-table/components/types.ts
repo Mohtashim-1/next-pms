@@ -21,6 +21,7 @@ export type cellProps = {
   className?: string;
   gridRow?: number;
   gridCol?: number;
+  runningTimerElapsed?: string;
 };
 
 export type HeaderProps = {

@@ -9,12 +9,14 @@ import { startOfWeek } from "date-fns";
  * Internal dependencies.
  */
 import { mergeClassNames } from "@/lib/utils";
-import { getDayKeyOfMoment } from "../../../utils/dates";
+import { getDayKeyOfMoment, toTimelineMoment } from "../../../utils/dates";
 import type { ResourceAllocationItemProps, TimeLineHeaderFunctionProps } from "../../types";
 
 const TimeLineIntervalHeader = ({ getIntervalProps, intervalContext, data }: TimeLineHeaderFunctionProps) => {
   const { interval } = intervalContext;
   const { startTime, endTime } = interval;
+  const startMoment = toTimelineMoment(startTime);
+  const endMoment = toTimelineMoment(endTime);
   const start = startOfWeek(getTodayDate(), {
     weekStartsOn: 1,
   });
@@ -22,17 +24,17 @@ const TimeLineIntervalHeader = ({ getIntervalProps, intervalContext, data }: Tim
   const getKey = () => {
     const keys = { week: "Week", month: "Month", year: "Year" };
 
-    if (start.getTime() >= startTime.toDate().getTime() && start.getTime() <= endTime.toDate().getTime()) {
+    if (start.getTime() >= startMoment.toDate().getTime() && start.getTime() <= endMoment.toDate().getTime()) {
       if (data.unit === "week") {
         return `This ${keys[data.unit]}`;
       }
     }
     if (data.unit === "month" && data.showYear) {
-      return getMonthYearKey(getDayKeyOfMoment(startTime));
+      return getMonthYearKey(getDayKeyOfMoment(startMoment));
     }
 
-    return `${getMonthKey(getDayKeyOfMoment(startTime))} - ${getMonthKey(
-      getDayKeyOfMoment(endTime.add("-1", "days"))
+    return `${getMonthKey(getDayKeyOfMoment(startMoment))} - ${getMonthKey(
+      getDayKeyOfMoment(endMoment.clone().add(-1, "days"))
     )}`;
   };
 
@@ -42,7 +44,7 @@ const TimeLineIntervalHeader = ({ getIntervalProps, intervalContext, data }: Tim
     ...headerProps,
     style: {
       ...headerProps.style,
-      left: headerProps.style.left + (data.unit === "week" ? 1 : -0.5),
+      left: (headerProps.style?.left ?? 0) + (data.unit === "week" ? 1 : -0.5),
     },
   };
 

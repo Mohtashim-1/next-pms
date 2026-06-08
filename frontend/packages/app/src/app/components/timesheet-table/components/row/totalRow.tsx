@@ -33,7 +33,7 @@ export const TotalHourRow = ({ leaves, dates, tasks, holidays, workingHour, work
   return (
     <TableRow className="bg-muted/40 font-medium">
       <TableCell className="max-w-sm">
-        <Typography variant="p" className="text-slate-600 dark:text-muted-foreground font-medium">
+        <Typography variant="p" className="text-muted-foreground font-medium">
           Daily total
         </Typography>
       </TableCell>

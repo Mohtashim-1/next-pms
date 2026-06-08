@@ -1,4 +1,4 @@
-p/**
+/**
  * External dependencies.
  */
 import { LegacyRef } from "react";
