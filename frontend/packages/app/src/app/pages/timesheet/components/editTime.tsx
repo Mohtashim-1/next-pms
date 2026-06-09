@@ -49,6 +49,8 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [draftSaveStatus, setDraftSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const autoSaveRequestRef = useRef(0);
+  const persistQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
+  const loadedDialogKeyRef = useRef<string | null>(null);
 
   const form = useForm<z.infer<typeof TimesheetDraftUpdateSchema>>({
     resolver: zodResolver(TimesheetDraftUpdateSchema),
@@ -96,15 +98,24 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
   }, [data]);
 
   useEffect(() => {
-    if (data) {
-      form.reset({ data: updatedData });
-      const firstRangeRow = updatedData.find((item) => item.input_mode === "range");
-      if (firstRangeRow) {
-        setInputMode("range");
-      }
+    if (!open) {
+      loadedDialogKeyRef.current = null;
+      return;
+    }
+    if (!data) return;
+
+    const dialogKey = `${employee}-${date}-${task}`;
+    if (loadedDialogKeyRef.current === dialogKey) return;
+
+    loadedDialogKeyRef.current = dialogKey;
+    form.reset({ data: updatedData });
+    setDraftSaveStatus("idle");
+    const firstRangeRow = updatedData.find((item) => item.input_mode === "range");
+    if (firstRangeRow) {
+      setInputMode("range");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
+  }, [open, data, employee, date, task]);
 
   const handleInputModeChange = (mode: TimesheetInputMode) => {
     setInputMode(mode);
@@ -146,44 +157,58 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
         return false;
       }
 
-      const requestId = ++autoSaveRequestRef.current;
-      setDraftSaveStatus("saving");
+      const runPersist = async () => {
+        const requestId = ++autoSaveRequestRef.current;
+        setDraftSaveStatus("saving");
 
-      try {
-        const res = await updateTimesheet(buildUpdatePayload(parsed.data));
-        if (requestId !== autoSaveRequestRef.current) {
-          return false;
-        }
-        setDraftSaveStatus("saved");
-        mutate();
-        if (showToast) {
-          toast({
-            variant: "success",
-            description: res.message,
-          });
-        }
-        return true;
-      } catch (err) {
-        if (requestId === autoSaveRequestRef.current) {
-          setDraftSaveStatus("error");
+        try {
+          const res = await updateTimesheet(buildUpdatePayload(parsed.data));
+          if (requestId !== autoSaveRequestRef.current) {
+            return false;
+          }
+          setDraftSaveStatus("saved");
+          form.reset(form.getValues());
           if (showToast) {
-            const error = parseFrappeErrorMsg(err);
             toast({
-              variant: "destructive",
-              description: error,
+              variant: "success",
+              description: res.message,
             });
           }
+          return true;
+        } catch (err) {
+          if (requestId === autoSaveRequestRef.current) {
+            setDraftSaveStatus("error");
+            if (showToast) {
+              const error = parseFrappeErrorMsg(err);
+              toast({
+                variant: "destructive",
+                description: error,
+              });
+            }
+          }
+          return false;
         }
-        return false;
-      }
+      };
+
+      const queued = persistQueueRef.current.then(runPersist, runPersist);
+      persistQueueRef.current = queued.catch(() => false);
+      return queued;
     },
-    [mutate, toast, updateTimesheet]
+    [form, toast, updateTimesheet]
   );
 
   const handleUpdate = async (formData: z.infer<typeof TimesheetDraftUpdateSchema>) => {
+    if (!form.formState.isDirty && draftSaveStatus === "saved") {
+      onClose();
+      return;
+    }
+
     setIsSubmitting(true);
-    await persistDraft(formData, true);
+    const saved = await persistDraft(formData, true);
     setIsSubmitting(false);
+    if (saved) {
+      onClose();
+    }
   };
 
   useEffect(() => {
@@ -247,7 +272,12 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
             )}
             {draftSaveStatus === "saved" && (
               <Typography variant="small" className="text-success">
-                Draft saved
+                Saved
+              </Typography>
+            )}
+            {draftSaveStatus === "error" && (
+              <Typography variant="small" className="text-destructive">
+                Save failed — retrying on next edit
               </Typography>
             )}
           </DialogTitle>
@@ -421,9 +451,16 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
                 <Plus />
                 Add Row
               </Button>
-              <Button variant="success" disabled={!form.formState.isValid || !form.formState.isDirty || isSubmitting}>
-                {isSubmitting ? <LoaderCircle className="animate-spin" /> : <Save />}
-                Save
+              <Button
+                variant="success"
+                disabled={!form.formState.isValid || isSubmitting}
+              >
+                {isSubmitting ? (
+                  <LoaderCircle className="animate-spin" />
+                ) : (
+                  <Save />
+                )}
+                {!form.formState.isDirty && draftSaveStatus === "saved" ? "Done" : "Save"}
               </Button>
             </DialogFooter>
           </form>

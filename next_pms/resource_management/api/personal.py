@@ -1,7 +1,7 @@
 import secrets
 
 import frappe
-from frappe.utils import add_days, get_url, today
+from frappe.utils import add_days, get_url, getdate, today
 
 from next_pms.api.utils import error_logger
 from next_pms.resource_management.api.utils.query import get_allocation_list_for_employee_for_given_range
@@ -73,12 +73,18 @@ def get_my_allocations(start_date: str | None = None, end_date: str | None = Non
     allocations = _fetch_personal_allocations(employee, start_date, end_date)
     employee_name = frappe.db.get_value("Employee", employee, "employee_name")
 
+    today_date = getdate(today())
     upcoming = [
         row
         for row in allocations
-        if row.get("allocation_end_date") and row.get("allocation_end_date") >= today()
+        if row.get("allocation_end_date") and getdate(row.get("allocation_end_date")) >= today_date
     ]
-    upcoming.sort(key=lambda row: (row.get("allocation_end_date"), row.get("allocation_start_date")))
+    upcoming.sort(
+        key=lambda row: (
+            getdate(row.get("allocation_end_date")),
+            getdate(row.get("allocation_start_date")),
+        )
+    )
 
     return {
         "employee": employee,

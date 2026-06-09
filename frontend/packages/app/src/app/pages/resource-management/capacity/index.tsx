@@ -31,15 +31,22 @@ const defaultFilters: CapacityDemandFilters = {
   roles: [],
 };
 
+const normalizeFilterValue = (value: string | string[] | undefined, fallback: string) => {
+  if (Array.isArray(value)) {
+    return value[0] || fallback;
+  }
+  return value || fallback;
+};
+
 const CapacityDemandView = () => {
   const [filters, setFilters] = useState<CapacityDemandFilters>(defaultFilters);
   const [drilldown, setDrilldown] = useState<CapacityDrilldownState | null>(null);
 
   const apiArgs = useMemo(
     () => ({
-      period: filters.period,
+      period: normalizeFilterValue(filters.period, "week"),
       horizon_months: 12,
-      group_by: filters.groupBy,
+      group_by: normalizeFilterValue(filters.groupBy, "employee"),
       department: JSON.stringify(filters.department ?? []),
       user_group: JSON.stringify(filters.userGroup ?? []),
       branch: JSON.stringify(filters.branch ?? []),

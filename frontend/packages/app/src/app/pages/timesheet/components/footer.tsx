@@ -19,7 +19,8 @@ export const Footer = ({ timesheet, user, dispatch, callback }: FooterProps) => 
 
   const onCloseEditDialog = useCallback(() => {
     dispatch({ type: "SET_EDIT_DIALOG_STATE", payload: false });
-  }, [dispatch]);
+    callback();
+  }, [dispatch, callback]);
 
   return (
     <>

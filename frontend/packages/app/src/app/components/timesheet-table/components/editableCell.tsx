@@ -357,6 +357,21 @@ export const EditableCell = ({
     onStartEditing(gridRow, gridCol);
   };
 
+  const handleOpenFullEditor = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (isDisabled || displayHours <= 0) return;
+    debugInlineEdit("open full editor", { date, gridRow, gridCol, displayHours });
+    onStopEditing(gridRow, gridCol);
+    openDetailDialog();
+  };
+
+  const handleCellDoubleClick = () => {
+    if (isDisabled || displayHours <= 0) return;
+    debugInlineEdit("cell double-clicked", { date, gridRow, gridCol, displayHours });
+    onStopEditing(gridRow, gridCol);
+    openDetailDialog();
+  };
+
   const handleCellKeyDown = (event: React.KeyboardEvent<HTMLTableCellElement>) => {
     if (isDisabled || isEditing) return;
 
@@ -406,6 +421,7 @@ export const EditableCell = ({
         data-grid-row={gridRow}
         data-grid-col={gridCol}
         onClick={handleCellClick}
+        onDoubleClick={handleCellDoubleClick}
         onFocus={() => {
           if (!isFocused) {
             onFocusCell(gridRow, gridCol);
@@ -468,13 +484,17 @@ export const EditableCell = ({
                 {displayValue}
               </Typography>
               {displayHours > 0 && <BillableIndicator entries={data} compact />}
-              <PencilLine
-                className={mergeClassNames(
-                  "text-center hidden",
-                  displayHours > 0 && !isDisabled && "group-hover:block"
-                )}
-                size={16}
-              />
+              {displayHours > 0 && !isDisabled && (
+                <button
+                  type="button"
+                  title="Edit date, description, billable, and more"
+                  aria-label="Open full time editor"
+                  onClick={handleOpenFullEditor}
+                  className="hidden group-hover:inline-flex items-center justify-center text-muted-foreground hover:text-foreground"
+                >
+                  <PencilLine size={16} />
+                </button>
+              )}
               <CirclePlus
                 className={mergeClassNames("text-center hidden", !displayHours && !isDisabled && "group-hover:block ")}
                 size={16}

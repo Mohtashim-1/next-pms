@@ -57,7 +57,7 @@ const PersonalAssignmentsView = () => {
       </RootHeader>
 
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 max-w-6xl mx-auto w-full">
-        {isLoading || feedLoading ? (
+        {isLoading ? (
           <Spinner isFull />
         ) : error ? (
           <Typography variant="p" className="text-destructive">
@@ -65,8 +65,14 @@ const PersonalAssignmentsView = () => {
           </Typography>
         ) : (
           <>
-            {feedSettings && (
-              <CalendarFeedCard settings={feedSettings} onRefresh={() => mutateFeed()} />
+            {feedLoading ? (
+              <Typography variant="small" className="text-muted-foreground">
+                Loading calendar sync settings...
+              </Typography>
+            ) : (
+              feedSettings && (
+                <CalendarFeedCard settings={feedSettings} onRefresh={() => mutateFeed()} />
+              )
             )}
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

@@ -11,12 +11,19 @@ type CapacityDemandHeaderProps = {
   onChange: (filters: Partial<CapacityDemandFilters>) => void;
 };
 
+const firstSelectValue = (value: string | string[], fallback: string) => {
+  if (Array.isArray(value)) {
+    return value[0] || fallback;
+  }
+  return value || fallback;
+};
+
 export const CapacityDemandHeader = ({ filters, onChange }: CapacityDemandHeaderProps) => {
   const sectionFilters = [
     {
       queryParameterName: "capacity-period",
       handleChange: (value: string | string[]) => {
-        onChange({ period: (value as CapacityPeriodType) || "week" });
+        onChange({ period: firstSelectValue(value, "week") as CapacityPeriodType });
       },
       handleDelete: () => onChange({ period: "week" }),
       type: "select-list",
@@ -33,7 +40,7 @@ export const CapacityDemandHeader = ({ filters, onChange }: CapacityDemandHeader
     {
       queryParameterName: "capacity-group-by",
       handleChange: (value: string | string[]) => {
-        onChange({ groupBy: (value as string) || "employee" });
+        onChange({ groupBy: firstSelectValue(value, "employee") });
       },
       handleDelete: () => onChange({ groupBy: "employee" }),
       type: "select-list",
