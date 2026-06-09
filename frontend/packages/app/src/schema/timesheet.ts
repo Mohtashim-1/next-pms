@@ -295,6 +295,45 @@ export const TimesheetDraftUpdateSchema = z.object({
   data: z.array(TimesheetDraftSingleRowSchema),
 });
 
+/** Strip UI-only fields before calling update_timesheet_detail / bulk_update_timesheet_detail. */
+export function serializeTimesheetUpdateRow(row: z.infer<typeof TimesheetDraftSingleRowSchema>) {
+  const entry: {
+    name: string;
+    parent: string;
+    task: string;
+    date: string;
+    description: string;
+    input_mode: "duration" | "range";
+    hours: number;
+    is_billable?: boolean;
+    billable_override_reason?: string;
+    from_time?: string;
+    to_time?: string;
+  } = {
+    name: row.name,
+    parent: row.parent,
+    task: row.task,
+    date: row.date,
+    description: row.description || "-",
+    input_mode: row.input_mode,
+    hours: 0,
+  };
+
+  if (row.is_billable !== undefined) {
+    entry.is_billable = row.is_billable;
+    entry.billable_override_reason = row.billable_override_reason || "";
+  }
+
+  if (row.input_mode === "range") {
+    entry.from_time = row.from_time;
+    entry.to_time = row.to_time;
+    return entry;
+  }
+
+  entry.hours = timeStringToFloat(String(row.hours ?? ""));
+  return entry;
+}
+
 export const TimesheetUpdateSchema = z.object({
   data: z.array(TimesheetSingleRowSchema),
 });

@@ -947,7 +947,7 @@ def update_timesheet_detail(
                 log["is_billable"] = resolved_billable
                 log["custom_billable_override_reason"] = override_reason
             else:
-                default_billable, _, _ = resolve_entry_billable(task)
+                default_billable, _billable_default, _override_reason = resolve_entry_billable(task)
                 log["is_billable"] = default_billable
 
             parent_doc.append("time_logs", log)

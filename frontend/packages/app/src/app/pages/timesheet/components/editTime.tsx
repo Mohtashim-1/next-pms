@@ -42,7 +42,7 @@ import { TIMESHEET_INPUT_MODE_KEY } from "@/lib/constant";
 import { getLocalStorage, setLocalStorage } from "@/lib/storage";
 import { extractTimeFromDatetime, isRangeEntry, type TimesheetInputMode } from "@/lib/timesheetTime";
 import { parseFrappeErrorMsg } from "@/lib/utils";
-import { TimesheetDraftUpdateSchema } from "@/schema/timesheet";
+import { TimesheetDraftUpdateSchema, serializeTimesheetUpdateRow } from "@/schema/timesheet";
 import type { EditTimeProps, TimesheetDetail } from "./types";
 
 export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps) => {
@@ -136,11 +136,7 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
   const buildUpdatePayload = (formData: z.infer<typeof TimesheetDraftUpdateSchema>) => ({
     data: formData.data
       .filter((row) => row.name || row.hours || row.from_time || row.to_time)
-      .map((row) =>
-        row.input_mode === "range"
-          ? { ...row, description: row.description || "-", hours: 0 }
-          : { ...row, description: row.description || "-" }
-      ),
+      .map(serializeTimesheetUpdateRow),
   });
 
   const persistDraft = useCallback(
