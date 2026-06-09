@@ -35,7 +35,7 @@ const TimeSelector = ({ onClick }: TimeSelectorProps) => {
   });
   return (
     <>
-      <AddCustomTime setOpen={setShouldOpen} isOpen={shouldOpen} />
+      <AddCustomTime setOpen={setShouldOpen} isOpen={shouldOpen} onSelect={onClick} />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className=" border-0 hover:bg-transparent group">
@@ -72,9 +72,11 @@ const TimeSelector = ({ onClick }: TimeSelectorProps) => {
 const AddCustomTime = ({
   isOpen,
   setOpen,
+  onSelect,
 }: {
   isOpen: boolean;
   setOpen: (value: React.SetStateAction<boolean>) => void;
+  onSelect?: (time: string) => void;
 }) => {
   const customTime = getLocalStorage("customTime") || [];
   const handleAddCustomTime = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -84,10 +86,12 @@ const AddCustomTime = ({
       time = floatToTime(Number(time), 2, 2);
     }
     time = formatTime(time);
-    if (time && !customTime.includes(time) && !CustomTime.includes(time)) {
+    if (!time) return;
+    if (!customTime.includes(time) && !CustomTime.includes(time)) {
       const updatedCustomTime = [...customTime, time];
       setLocalStorage("customTime", updatedCustomTime);
     }
+    onSelect?.(time);
     setOpen(false);
   };
   return (

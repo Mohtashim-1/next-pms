@@ -391,8 +391,16 @@ def _resolve_duration_time_slot(
         if draft_mode:
             clipped_end = min(candidate_end, day_end)
             if clipped_end <= candidate_start:
-                clipped_end = min(day_start + timedelta(minutes=1), day_end)
+                throw(
+                    _("There is not enough free time on {0} to add {1} hours. The day is already fully booked.").format(
+                        date, hours
+                    )
+                )
             clipped_hours = time_diff_in_hours(clipped_end, candidate_start)
+            if flt(clipped_hours, 3) <= 0:
+                throw(
+                    _("There is not enough free time on {0} to add {1} hours without overlap.").format(date, hours)
+                )
             return candidate_start, clipped_end, flt(clipped_hours, 3)
         throw(_("There is not enough free time on {0} to add {1} hours without overlap.").format(date, hours))
     return candidate_start, candidate_end, float(hours)

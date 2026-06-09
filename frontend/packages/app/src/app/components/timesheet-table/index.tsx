@@ -10,6 +10,7 @@ import { useFrappeGetCall } from "frappe-react-sdk";
 import { TaskLog } from "@/app/pages/task/components/taskLog";
 import { LIKED_TASK_KEY } from "@/lib/constant";
 import { getLocalStorage, hasKeyInLocalStorage, removeFromLikedTask, setLikedTask } from "@/lib/storage";
+import { getDayTotalsFromTasks } from "@/lib/timesheetDayCapacity";
 import { expectatedHours, getHolidayList } from "@/lib/utils";
 import { TaskDataProps } from "@/types/timesheet";
 import { Header } from "./components/header";
@@ -129,6 +130,8 @@ export const TimesheetTable = ({
     return count;
   }, [filteredLikedTasks.length, isWeekLocked, tasks]);
 
+  const dayTotals = useMemo(() => getDayTotalsFromTasks(tasks, dates), [tasks, dates]);
+
   const gridRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -228,6 +231,7 @@ export const TimesheetTable = ({
               runningTimerElapsed={runningTimerElapsed}
               gridRow={nextGridRow++}
               periodLocks={periodLocks}
+              dayTotals={dayTotals}
               {...gridBindings}
             />
           )}
@@ -254,6 +258,7 @@ export const TimesheetTable = ({
                   runningTimerElapsed={runningTimerElapsed}
                   gridRow={gridRow}
                   periodLocks={periodLocks}
+                  dayTotals={dayTotals}
                   {...gridBindings}
                 />
               );
@@ -276,6 +281,7 @@ export const TimesheetTable = ({
             runningTimerElapsed={runningTimerElapsed}
             gridRow={nextGridRow}
             periodLocks={periodLocks}
+            dayTotals={dayTotals}
             {...gridBindings}
           />
         </TableBody>

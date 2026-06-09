@@ -46,6 +46,7 @@ export type emptyRowProps = GridCellBindings & {
   runningTimerDate?: string;
   runningTimerElapsed?: string;
   periodLocks?: PeriodLockProp[];
+  dayTotals?: Record<string, number>;
 };
 
 export type RowProps = GridCellBindings & {
@@ -74,6 +75,7 @@ export type RowProps = GridCellBindings & {
   runningTimerDate?: string;
   runningTimerElapsed?: string;
   periodLocks?: PeriodLockProp[];
+  dayTotals?: Record<string, number>;
 };
 
 export interface leaveRowProps {

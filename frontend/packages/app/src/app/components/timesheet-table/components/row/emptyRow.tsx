@@ -7,6 +7,7 @@ import { Clock } from "lucide-react";
 /**
  * Internal dependencies
  */
+import { isDayFullyBooked } from "@/lib/timesheetDayCapacity";
 import { isDatePeriodLocked } from "@/lib/timesheetPeriodLock";
 import { mergeClassNames } from "@/lib/utils";
 import type { TaskDataProps } from "@/types/timesheet";
@@ -57,6 +58,7 @@ export const EmptyRow = ({
   onStopEditing = () => {},
   onMoveFocus,
   periodLocks = [],
+  dayTotals = {},
 }: emptyRowProps) => {
   const isRunningTask = Boolean(taskData?.name && runningTimer?.task === taskData.name);
 
@@ -104,6 +106,7 @@ export const EmptyRow = ({
             isHoliday={isHoliday}
             onCellClick={onCellClick}
             disabled={disabled || isDatePeriodLocked(date, periodLocks)}
+            dayFullyBooked={isDayFullyBooked(dayTotals[date] ?? 0)}
             className={cellClassName}
             runningTimerElapsed={isRunningTask && runningTimerDate === date ? runningTimerElapsed : undefined}
             gridRow={gridRow}

@@ -19,6 +19,7 @@ export type cellProps = {
   // @ts-ignore
   onCellClick?: (val) => void;
   disabled?: boolean;
+  dayFullyBooked?: boolean;
   className?: string;
   gridRow?: number;
   gridCol?: number;

@@ -229,12 +229,23 @@ const AddTime = ({
         };
 
   const canAutoSaveDraft = (data: z.infer<typeof TimesheetDraftSchema>) => {
-    if (!data.task) return false;
+    return getSaveBlockMessage(data) === null;
+  };
+
+  const getSaveBlockMessage = (data: z.infer<typeof TimesheetDraftSchema>): string | null => {
+    if (!data.task) return "Please select a task.";
     if (data.input_mode === "range") {
-      return Boolean(data.from_time && data.to_time);
+      if (!data.from_time) return "Please enter a start time.";
+      if (!data.to_time) return "Please enter an end time.";
+      if (timeStringToFloat(data.to_time) <= timeStringToFloat(data.from_time)) {
+        return "End time must be after start time.";
+      }
+      return null;
     }
     const parsedHours = timeStringToFloat(String(data.hours ?? ""));
-    return !Number.isNaN(parsedHours) && parsedHours > 0;
+    if (Number.isNaN(parsedHours)) return "Invalid hour format. Please enter time as HH:MM.";
+    if (parsedHours <= 0) return "Hour should be greater than 0.";
+    return null;
   };
 
   const { data: perDayEmpHours, mutate: mutatePerDayHrs } = useFrappeGetCall(
@@ -343,6 +354,25 @@ const AddTime = ({
   const handleSubmit = async (data: z.infer<typeof TimesheetDraftSchema>) => {
     debugAddTime("submit started", data);
     setSubmitting(true);
+    const blockMessage = getSaveBlockMessage(data);
+    if (blockMessage) {
+      if (data.input_mode === "duration") {
+        form.setError("hours", { message: blockMessage });
+      } else if (!data.from_time) {
+        form.setError("from_time", { message: blockMessage });
+      } else if (!data.to_time) {
+        form.setError("to_time", { message: blockMessage });
+      } else {
+        form.setError("to_time", { message: blockMessage });
+      }
+      toast({
+        variant: "destructive",
+        description: blockMessage,
+      });
+      debugAddTime("submit blocked", { blockMessage, data });
+      setSubmitting(false);
+      return;
+    }
     const saved = await persistDraft(data, true);
     debugAddTime("submit finished", {
       saved,
@@ -459,6 +489,40 @@ const AddTime = ({
         setTimerSubmitting(false);
       });
   };
+
+  useEffect(() => {
+    if (!open) return;
+    form.reset({
+      task: task || "",
+      hours: "",
+      description: "",
+      date: initialDate,
+      employee: employee,
+      input_mode: savedInputMode,
+      from_time: "",
+      to_time: "",
+      is_billable: false,
+      project_default_is_billable: undefined,
+      billable_override_reason: "",
+    });
+    setSelectedDate(getFormatedDate(initialDate));
+    setSelectedEmployee(employee);
+    setSelectedProject(project ? [project] : []);
+    setSearchTask(task || "");
+  }, [open, initialDate, task, project, employee, form, savedInputMode]);
+
+  useEffect(() => {
+    if (!open || form.getValues("hours")) return;
+    const remaining = Number(perDayEmpHours?.message);
+    if (Number.isNaN(remaining)) return;
+    const defaultHours = remaining > 0 ? remaining : expectedHours;
+    if (defaultHours > 0) {
+      form.setValue("hours", floatToTime(defaultHours), {
+        shouldDirty: false,
+        shouldValidate: true,
+      });
+    }
+  }, [open, perDayEmpHours, expectedHours, form]);
 
   useEffect(() => {
     updateProject(task);
@@ -588,7 +652,9 @@ const AddTime = ({
                       render={({ field }) => (
                         <FormItem className="w-full space-y-1">
                           <FormLabel className="flex gap-2 items-center">
-                            <p className="text-sm">Time</p>
+                            <p className="text-sm">
+                              Time <span className="text-destructive">*</span>
+                            </p>
                           </FormLabel>
                           <FormControl>
                             <div className=" flex w-full border rounded-md ">

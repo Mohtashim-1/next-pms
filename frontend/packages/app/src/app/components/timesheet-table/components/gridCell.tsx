@@ -18,6 +18,7 @@ export const GridCell = ({
   isHoliday,
   onCellClick,
   disabled,
+  dayFullyBooked,
   className,
   runningTimerElapsed,
   gridRow,
@@ -40,6 +41,7 @@ export const GridCell = ({
         isHoliday={isHoliday}
         onCellClick={onCellClick}
         disabled={disabled}
+        dayFullyBooked={dayFullyBooked}
         className={className}
         runningTimerElapsed={runningTimerElapsed}
         employee={employee}
@@ -63,6 +65,7 @@ export const GridCell = ({
       isHoliday={isHoliday}
       onCellClick={onCellClick}
       disabled={disabled}
+      dayFullyBooked={dayFullyBooked}
       className={className}
       runningTimerElapsed={runningTimerElapsed}
     />

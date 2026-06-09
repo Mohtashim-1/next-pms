@@ -20,6 +20,7 @@ import { CirclePlus, PencilLine, Timer } from "lucide-react";
  */
 import { BillableIndicator } from "@/app/components/timesheet-billable/billableIndicator";
 import { MarkdownContent } from "@/app/components/timesheet-description/markdownContent";
+import { DAY_FULLY_BOOKED_MESSAGE } from "@/lib/timesheetDayCapacity";
 import { DEFAULT_INLINE_DESCRIPTION, formatRangeLabel, isRangeEntry } from "@/lib/timesheetTime";
 import { mergeClassNames, getBgCsssForToday, parseFrappeErrorMsg } from "@/lib/utils";
 import { timeStringToFloat } from "@/schema/timesheet";
@@ -48,6 +49,7 @@ export const EditableCell = ({
   isHoliday,
   onCellClick,
   disabled,
+  dayFullyBooked = false,
   className,
   employee,
   gridRow,
@@ -91,9 +93,14 @@ export const EditableCell = ({
 
   const [draftHours, setDraftHours] = useState(floatToTime(hours));
   const [optimisticHours, setOptimisticHours] = useState<number | null>(null);
+  const isDayFullyBookedEmpty = dayFullyBooked && hours === 0;
   const isDisabled = useMemo(
-    () => disabled || data?.[0]?.docstatus === 1 || Boolean(data?.[0]?.is_period_locked),
-    [disabled, data]
+    () =>
+      disabled ||
+      data?.[0]?.docstatus === 1 ||
+      Boolean(data?.[0]?.is_period_locked) ||
+      isDayFullyBookedEmpty,
+    [disabled, data, isDayFullyBookedEmpty]
   );
   const displayHours = optimisticHours ?? hours;
 
@@ -408,6 +415,7 @@ export const EditableCell = ({
         className={mergeClassNames(
           "text-center group px-2 outline-none",
           isDisabled && "cursor-default",
+          isDayFullyBookedEmpty && "bg-muted/50 dark:bg-muted/30",
           !isDisabled && "hover:bg-muted/60 dark:hover:bg-muted/40 hover:cursor-pointer",
           isFocused && !isDisabled && "ring-2 ring-primary ring-inset",
           runningTimerElapsed && "bg-success/10 text-success ring-1 ring-success/40 ring-inset",
@@ -474,6 +482,13 @@ export const EditableCell = ({
             </span>
           )}
         </HoverCardTrigger>
+        {isDayFullyBookedEmpty && (
+          <HoverCardContent className="text-left w-full max-w-80 p-3">
+            <Typography variant="small" className="text-muted-foreground">
+              {DAY_FULLY_BOOKED_MESSAGE}
+            </Typography>
+          </HoverCardContent>
+        )}
         {description && (
           <HoverCardContent
             className="text-left whitespace-pre text-wrap w-full max-w-96 max-h-52 overflow-auto hover-content p-0"
