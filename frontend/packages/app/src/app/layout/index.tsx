@@ -49,17 +49,19 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <ErrorFallback>
-      <div className="flex flex-row h-screen w-full">
+      <div className="flex flex-row h-screen w-full min-h-0">
         <ErrorFallback>
           <Sidebar />
         </ErrorFallback>
-        <div className="w-full overflow-hidden flex flex-col">
+        <div className="flex min-h-0 flex-1 w-full flex-col overflow-hidden">
           {(user.employee || user.user == "Administrator") && (
             <>
               <RunningTimerBar employee={user.employee} />
-              <Suspense fallback={<></>}>
-                <ErrorFallback>{children}</ErrorFallback>
-              </Suspense>
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <Suspense fallback={<></>}>
+                  <ErrorFallback>{children}</ErrorFallback>
+                </Suspense>
+              </div>
             </>
           )}
         </div>

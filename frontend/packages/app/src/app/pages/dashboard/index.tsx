@@ -138,8 +138,8 @@ const ExecutiveDashboard = () => {
   }, [response?.refreshed_at]);
 
   return (
-    <div className="flex min-h-full flex-col">
-      <RootHeader className="border-b px-4 py-3 sm:px-6">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <RootHeader className="shrink-0 border-b px-4 py-3 sm:px-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
             <Typography variant="h3" className="flex items-center gap-2 text-lg font-semibold">
@@ -163,7 +163,8 @@ const ExecutiveDashboard = () => {
         </div>
       </RootHeader>
 
-      <div className="flex-1 space-y-4 p-3 sm:p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="space-y-4 p-3 sm:p-4">
         {isLoading ? (
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
             {Array.from({ length: 12 }).map((_, index) => (
@@ -245,6 +246,7 @@ const ExecutiveDashboard = () => {
         ) : null}
 
         {!isLoading && tiles.length ? <DashboardPanels panels={panels} /> : null}
+        </div>
       </div>
 
       <Dialog open={customizeOpen} onOpenChange={setCustomizeOpen}>
