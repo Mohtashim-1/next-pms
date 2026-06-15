@@ -15,8 +15,9 @@ export type PersonalAllocation = {
 };
 
 export type PersonalAllocationsResponse = {
-  employee: string;
+  employee: string | null;
   employee_name: string;
+  is_admin_view?: boolean;
   allocations: PersonalAllocation[];
   upcoming: PersonalAllocation[];
   start_date: string;
@@ -24,7 +25,9 @@ export type PersonalAllocationsResponse = {
 };
 
 export type CalendarFeedSettings = {
-  feed_url: string;
-  webcal_url: string;
+  feed_url: string | null;
+  webcal_url: string | null;
   has_token: boolean;
+  disabled?: boolean;
+  message?: string;
 };

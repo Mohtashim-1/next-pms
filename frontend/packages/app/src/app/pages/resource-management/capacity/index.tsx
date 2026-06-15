@@ -109,6 +109,7 @@ const CapacityDemandView = () => {
         ) : error ? (
           <Typography variant="p" className="text-destructive">
             Unable to load capacity planning data.
+            {error?.message ? ` ${String(error.message)}` : ""}
           </Typography>
         ) : response ? (
           <>

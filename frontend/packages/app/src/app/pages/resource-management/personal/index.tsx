@@ -46,7 +46,9 @@ const PersonalAssignmentsView = () => {
           <div>
             <Typography variant="h5">My Assignments</Typography>
             <Typography variant="small" className="text-muted-foreground">
-              Read-only personal view
+              {response?.is_admin_view
+                ? "Company-wide view (all active employees)"
+                : "Read-only personal view"}
               {response?.employee_name ? ` · ${response.employee_name}` : ""}
             </Typography>
           </div>
@@ -70,7 +72,8 @@ const PersonalAssignmentsView = () => {
                 Loading calendar sync settings...
               </Typography>
             ) : (
-              feedSettings && (
+              feedSettings &&
+              !feedSettings.disabled && (
                 <CalendarFeedCard settings={feedSettings} onRefresh={() => mutateFeed()} />
               )
             )}

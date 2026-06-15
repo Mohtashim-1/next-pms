@@ -25,10 +25,20 @@ ALLOCATION_FIELDS = [
     "note",
 ]
 
+COMPANY_ALLOCATION_ROLES = {"Projects Manager", "Projects User", "System Manager"}
+
+
+def _can_view_company_allocations() -> bool:
+    if get_employee_from_user():
+        return False
+    if frappe.session.user == "Administrator":
+        return True
+    return bool(set(frappe.get_roles()) & COMPANY_ALLOCATION_ROLES)
+
 
 def _get_employee_or_throw():
     employee = get_employee_from_user()
-    if not employee:
+    if not employee and not _can_view_company_allocations():
         frappe.throw("No employee record is linked to your user account.", frappe.PermissionError)
     return employee
 
@@ -41,6 +51,35 @@ def _fetch_personal_allocations(employee: str, start_date: str, end_date: str) -
         start_date,
         end_date,
     )
+
+
+def _fetch_company_allocations(start_date: str, end_date: str) -> list[dict]:
+    employees = frappe.get_all("Employee", filters={"status": "Active"}, pluck="name")
+    if not employees:
+        return []
+    return get_allocation_list_for_employee_for_given_range(
+        ALLOCATION_FIELDS,
+        "employee",
+        employees,
+        start_date,
+        end_date,
+    )
+
+
+def _build_upcoming(allocations: list[dict]) -> list[dict]:
+    today_date = getdate(today())
+    upcoming = [
+        row
+        for row in allocations
+        if row.get("allocation_end_date") and getdate(row.get("allocation_end_date")) >= today_date
+    ]
+    upcoming.sort(
+        key=lambda row: (
+            getdate(row.get("allocation_end_date")),
+            getdate(row.get("allocation_start_date")),
+        )
+    )
+    return upcoming
 
 
 def _get_or_create_calendar_token(employee: str, regenerate: bool = False) -> str:
@@ -66,31 +105,31 @@ def _get_employee_by_calendar_token(token: str | None) -> str | None:
 @frappe.whitelist()
 @error_logger
 def get_my_allocations(start_date: str | None = None, end_date: str | None = None):
-    employee = _get_employee_or_throw()
     start_date = start_date or add_days(today(), -30)
     end_date = end_date or add_days(today(), 180)
 
+    if _can_view_company_allocations():
+        allocations = _fetch_company_allocations(start_date, end_date)
+        return {
+            "employee": None,
+            "employee_name": "All Employees",
+            "is_admin_view": True,
+            "allocations": allocations,
+            "upcoming": _build_upcoming(allocations),
+            "start_date": start_date,
+            "end_date": end_date,
+        }
+
+    employee = _get_employee_or_throw()
     allocations = _fetch_personal_allocations(employee, start_date, end_date)
     employee_name = frappe.db.get_value("Employee", employee, "employee_name")
-
-    today_date = getdate(today())
-    upcoming = [
-        row
-        for row in allocations
-        if row.get("allocation_end_date") and getdate(row.get("allocation_end_date")) >= today_date
-    ]
-    upcoming.sort(
-        key=lambda row: (
-            getdate(row.get("allocation_end_date")),
-            getdate(row.get("allocation_start_date")),
-        )
-    )
 
     return {
         "employee": employee,
         "employee_name": employee_name,
+        "is_admin_view": False,
         "allocations": allocations,
-        "upcoming": upcoming,
+        "upcoming": _build_upcoming(allocations),
         "start_date": start_date,
         "end_date": end_date,
     }
@@ -99,6 +138,15 @@ def get_my_allocations(start_date: str | None = None, end_date: str | None = Non
 @frappe.whitelist()
 @error_logger
 def get_calendar_feed_settings():
+    if _can_view_company_allocations():
+        return {
+            "feed_url": None,
+            "webcal_url": None,
+            "has_token": False,
+            "disabled": True,
+            "message": "Calendar sync is available when your user is linked to an Employee record.",
+        }
+
     employee = _get_employee_or_throw()
     token = _get_or_create_calendar_token(employee)
     feed_url = get_url(
@@ -108,6 +156,7 @@ def get_calendar_feed_settings():
         "feed_url": feed_url,
         "webcal_url": feed_url.replace("https://", "webcal://").replace("http://", "webcal://"),
         "has_token": bool(token),
+        "disabled": False,
     }
 
 

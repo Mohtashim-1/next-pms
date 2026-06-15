@@ -7,9 +7,14 @@ from next_pms.resource_management.api.utils.query import get_employee_leaves
 
 
 def get_employee_leaves_and_holidays(employee, start_date, end_date):
-    holidays = get_holidays_for_employee(employee, start_date, end_date)
+    try:
+        holidays = get_holidays_for_employee(
+            employee, start_date, end_date, raise_exception=False
+        )
+    except Exception:
+        holidays = []
     leaves = get_employee_leaves(employee, get_date_str(start_date), get_date_str(end_date))
-    return {"holidays": holidays, "leaves": leaves}
+    return {"holidays": holidays or [], "leaves": leaves or []}
 
 
 def get_employee_joining_date_based_on_work_history(employee: dict | str):

@@ -105,7 +105,7 @@ def get_project_dashboard(project: str):
     task_filters = {"project": project}
     task_status = frappe.get_all(
         "Task",
-        fields=["status", "count(name) as count"],
+        fields=["status", {"COUNT": "name", "as": "count"}],
         filters=task_filters,
         group_by="status",
     )
@@ -344,7 +344,7 @@ def get_project_tasks(project: str, search: str | None = None, status: str | Non
     status_counts = frappe.get_all(
         "Task",
         filters={"project": project},
-        fields=["status", "count(name) as count"],
+        fields=["status", {"COUNT": "name", "as": "count"}],
         group_by="status",
     )
     total_count = sum(row.count for row in status_counts)

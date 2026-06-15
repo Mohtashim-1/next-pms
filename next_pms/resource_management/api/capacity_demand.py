@@ -137,7 +137,13 @@ def get_capacity_demand_view(
 
     allocation_map: dict[str, list] = {}
     for allocation in allocations:
-        allocation_map.setdefault(allocation.employee, []).append(allocation)
+        employee_key = (
+            allocation.get("employee")
+            if isinstance(allocation, dict)
+            else getattr(allocation, "employee", None)
+        )
+        if employee_key:
+            allocation_map.setdefault(employee_key, []).append(allocation)
 
     rows = build_capacity_demand_rows(employees, allocation_map, periods, group_by=group_by)
     summary = _build_summary(rows, periods)

@@ -8,6 +8,7 @@ from frappe import _
 from frappe.utils import now_datetime
 
 from next_pms.integrations.security.crypto import (
+	derive_fernet_encryption_key,
 	fingerprint_key,
 	generate_master_key_material,
 )
@@ -39,7 +40,8 @@ def get_master_key_material(key_version: str | None = None) -> str:
 	if wrapped:
 		from frappe.utils.password import decrypt
 
-		return decrypt(wrapped, key=f"pms.encryption.{key_version}")
+		purpose = f"pms.encryption.{key_version}"
+		return decrypt(wrapped, encryption_key=derive_fernet_encryption_key(purpose), key=purpose)
 
 	# Bootstrap: derive from site encryption key + version salt
 	from frappe.utils.password import get_encryption_key
@@ -102,14 +104,20 @@ def sync_customer_master_key(settings):
 
 	from frappe.utils.password import encrypt
 
-	frappe.conf.pms_customer_master_key = encrypt(cmk, key="pms.cmk.wrapper")
+	purpose = "pms.cmk.wrapper"
+	frappe.conf.pms_customer_master_key = encrypt(cmk, encryption_key=derive_fernet_encryption_key(purpose))
 
 
 def _load_customer_master_key() -> str | None:
 	if frappe.conf.get("pms_customer_master_key"):
 		from frappe.utils.password import decrypt
 
-		return decrypt(frappe.conf.pms_customer_master_key, key="pms.cmk.wrapper")
+		purpose = "pms.cmk.wrapper"
+		return decrypt(
+			frappe.conf.pms_customer_master_key,
+			encryption_key=derive_fernet_encryption_key(purpose),
+			key=purpose,
+		)
 
 	settings = get_security_settings()
 	cmk = settings.get_password("customer_master_key", raise_exception=False)
@@ -121,7 +129,8 @@ def _store_wrapped_key(key_version: str, material: str, settings):
 	from frappe.utils.password import encrypt
 
 	conf_key = f"pms_encryption_key_{key_version}"
-	wrapped = encrypt(material, key=f"pms.encryption.{key_version}")
+	purpose = f"pms.encryption.{key_version}"
+	wrapped = encrypt(material, encryption_key=derive_fernet_encryption_key(purpose))
 	update_site_config(conf_key, wrapped)
 	frappe.local.conf[conf_key] = wrapped
 

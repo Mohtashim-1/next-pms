@@ -171,19 +171,16 @@ def get_count(
     or_filters=None,
     ignore_permissions=False,
 ) -> int:
-    from frappe.desk.reportview import execute
+    from frappe.query_builder.functions import Count
+    from frappe.utils import cint
 
-    distinct = "distinct " if distinct else ""
-    fieldname = f"{distinct}`tab{doctype}`.name"
-
-    fieldname = [f"count({fieldname}) as total_count"]
-    count = execute(
-        doctype,
-        distinct=distinct,
-        limit=limit,
-        fields=fieldname,
+    count = frappe.qb.get_query(
+        table=doctype,
         filters=filters,
         or_filters=or_filters,
+        fields=Count("name" if distinct else "*"),
+        distinct=distinct,
+        limit=limit,
         ignore_permissions=ignore_permissions,
-    )[0].get("total_count")
-    return count
+    ).run()[0][0]
+    return cint(count)

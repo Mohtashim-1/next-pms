@@ -23,7 +23,10 @@ export const CalendarFeedCard = ({
     "next_pms.resource_management.api.personal.regenerate_calendar_feed_token"
   );
 
-  const copyFeed = (url: string, label: string) => {
+  const copyFeed = (url: string | null, label: string) => {
+    if (!url) {
+      return;
+    }
     copyToClipboard(url);
     toast({ variant: "success", description: `${label} copied to clipboard.` });
   };

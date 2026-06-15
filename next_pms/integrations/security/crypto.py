@@ -40,3 +40,11 @@ def decrypt_aes256_gcm(payload: str, key: bytes) -> str:
 
 def generate_master_key_material() -> str:
 	return base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
+
+
+def derive_fernet_encryption_key(purpose: str) -> str:
+	"""Derive a Fernet-compatible key from the site encryption key and a purpose string."""
+	from frappe.utils.password import get_encryption_key
+
+	digest = hashlib.sha256(f"{get_encryption_key()}:{purpose}".encode()).digest()
+	return base64.urlsafe_b64encode(digest).decode()

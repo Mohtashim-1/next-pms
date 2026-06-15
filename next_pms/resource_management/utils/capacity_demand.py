@@ -207,12 +207,21 @@ def build_capacity_demand_rows(
                 "periods": {},
             }
 
-        daily_hours = get_employee_daily_working_norm(employee_id)
-        leave_bundle = get_employee_leaves_and_holidays(
-            employee_id,
-            getdate(periods[0]["start_date"]),
-            getdate(periods[-1]["end_date"]),
-        )
+        try:
+            daily_hours = get_employee_daily_working_norm(employee_id)
+            leave_bundle = get_employee_leaves_and_holidays(
+                employee_id,
+                getdate(periods[0]["start_date"]),
+                getdate(periods[-1]["end_date"]),
+            )
+        except Exception:
+            frappe.log_error(
+                title=f"Capacity planning skipped leave data for {employee_id}",
+                message=frappe.get_traceback(),
+            )
+            daily_hours = 8
+            leave_bundle = {"holidays": [], "leaves": []}
+
         leaves = leave_bundle.get("leaves") or []
         holidays = leave_bundle.get("holidays") or []
         allocations = allocation_map.get(employee_id, [])
