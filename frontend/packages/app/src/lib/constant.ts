@@ -12,11 +12,19 @@ export const LOCAL_STORAGE_TASK = "task_list";
 export const RESOURCE_MANAGEMENT = "/resource-management";
 export const LIKED_TASK_KEY = "next_pms_liked_task";
 export const TIMESHEET_INPUT_MODE_KEY = "next_pms_timesheet_input_mode";
-// user roles for timesheet
+// user roles for timesheet / PM area access
 export const ROLES = [
   "Projects Manager",
   "Timesheet Manager",
   "Timesheet User",
+];
+
+// broader access for dashboard, home, team, project routes (matches backend)
+export const PM_ACCESS_ROLES = [
+  ...ROLES,
+  "Administrator",
+  "Projects User",
+  "Accounts Manager",
 ];
 
 export const CustomTime = [

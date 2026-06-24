@@ -9,7 +9,7 @@ import { useContextSelector } from "use-context-selector";
 /**
  * Internal dependencies.
  */
-import { TIMESHEET, HOME, DASHBOARD, TEAM, TASK, PROJECT, RESOURCE_MANAGEMENT, ROLES } from "@/lib/constant";
+import { TIMESHEET, HOME, DASHBOARD, TEAM, TASK, PROJECT, RESOURCE_MANAGEMENT, ROLES, PM_ACCESS_ROLES } from "@/lib/constant";
 import { UserContext } from "@/lib/UserProvider";
 import { default as Layout } from "./app/layout";
 import { RootState } from "./store";
@@ -118,7 +118,7 @@ const AuthenticatedRoute = () => {
 
 const PmRoute = () => {
   const user = useSelector((state: RootState) => state.user);
-  const hasAccess = user.roles.some((role: string) => ROLES.includes(role));
+  const hasAccess = user.roles.some((role: string) => PM_ACCESS_ROLES.includes(role));
 
   if (!hasAccess) {
     return <Navigate to={TIMESHEET} />;

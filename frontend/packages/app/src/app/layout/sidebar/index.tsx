@@ -34,6 +34,7 @@ import {
   PROJECT,
   RESOURCE_MANAGEMENT,
   ROLES,
+  PM_ACCESS_ROLES,
   TASK,
   TEAM,
   TEAM_APPROVALS,
@@ -59,7 +60,7 @@ const Sidebar = () => {
     reports: false,
   });
 
-  const hasPmRole = user.roles.some((role: string) => ROLES.includes(role));
+  const hasPmRole = user.roles.some((role: string) => PM_ACCESS_ROLES.includes(role));
   const { data: approvalCountData } = useFrappeGetCall(
     "next_pms.timesheet.api.approval_queue.get_approval_queue_count",
     {},

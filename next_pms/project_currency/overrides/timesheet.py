@@ -133,13 +133,14 @@ class TimesheetOverwrite(Timesheet):
         )
 
         if len(employee_promotion) == 0:
-            employee = frappe.get_doc(
+            employee = frappe.db.get_value(
                 "Employee",
                 self.employee,
                 ["ctc", "salary_currency"],
-            )
-            employee_salary = employee.ctc
-            employee_currency = employee.salary_currency
+                as_dict=True,
+            ) or {}
+            employee_salary = employee.get("ctc")
+            employee_currency = employee.get("salary_currency")
         else:
             employee_promotion = employee_promotion[0]
             employee_salary = employee_promotion.revised_ctc
@@ -231,6 +232,8 @@ def get_employee_billing_rate(
 def get_employee_costing_rate(employee: str, salary_currency: float, ctc: float, currency: str, start_date: any):
     if not salary_currency:
         return frappe.throw(frappe._("Please set salary currency for the employee."))
+    if not flt(ctc):
+        return 0
     salary = get_employee_salary(
         employee=employee,
         to_currency=currency,
