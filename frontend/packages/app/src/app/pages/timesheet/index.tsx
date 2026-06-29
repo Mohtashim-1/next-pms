@@ -24,7 +24,7 @@ import { useQueryParam } from "@next-pms/hooks";
 import { addDays } from "date-fns";
 import { useFrappeEventListener, useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
 import { isEmpty } from "lodash";
-import { Calendar, CalendarArrowDown, EllipsisVertical, Paperclip, Plus } from "lucide-react";
+import { Calendar, CalendarArrowDown, EllipsisVertical, Paperclip, Plus, Table2 } from "lucide-react";
 
 /**
  * Internal dependencies.
@@ -234,6 +234,10 @@ function Timesheet() {
     dispatch({ type: "SET_IMPORT_FROM_GOOGLE_CALENDAR_DIALOG_STATE", payload: true });
   };
 
+  const handleOpenTimesheetGrid = () => {
+    dispatch({ type: "SET_TIMESHEET_GRID_DIALOG_STATE", payload: true });
+  };
+
   const visibleWeekCount = Object.keys(timesheet.data?.data ?? {}).length;
   const hasMoreWeeks = visibleWeekCount > 0 && visibleWeekCount < MAX_VISIBLE_WEEK_COUNT;
 
@@ -257,21 +261,29 @@ function Timesheet() {
           <Plus />
           Time
         </Button>
-        {window.frappe?.boot?.is_calendar_setup && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                <EllipsisVertical />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="mr-2 [&_div]:cursor-pointer  [&_div]:gap-x-2">
+        <Button variant="outline" onClick={handleOpenTimesheetGrid} title="Time Sheet grid">
+          <Table2 />
+          Time Sheet
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline">
+              <EllipsisVertical />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="mr-2 [&_div]:cursor-pointer  [&_div]:gap-x-2">
+            <DropdownMenuItem onClick={handleOpenTimesheetGrid}>
+              <Table2 />
+              <Typography variant="p">Time Sheet</Typography>
+            </DropdownMenuItem>
+            {window.frappe?.boot?.is_calendar_setup && (
               <DropdownMenuItem onClick={handleImportTaskFromGoogleCalendar}>
                 <CalendarArrowDown />
                 <Typography variant="p">Import Events From Google Calendar</Typography>
               </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </Header>
 
       {isLoading && Object.keys(timesheet.data?.data).length == 0 ? (

@@ -68,6 +68,7 @@ export interface TimesheetState {
   data: DataProp;
   isDialogOpen: boolean;
   isImportFromGoogleCalendarDialogOpen: boolean;
+  isTimesheetGridDialogOpen: boolean;
   isEditDialogOpen: boolean;
   isAprrovalDialogOpen: boolean;
   isLeaveDialogOpen: boolean;
@@ -84,6 +85,7 @@ export type Action =
   | { type: "SET_WEEK_DATE"; payload: string }
   | { type: "SET_DIALOG_STATE"; payload: boolean }
   | { type: "SET_IMPORT_FROM_GOOGLE_CALENDAR_DIALOG_STATE"; payload: boolean }
+  | { type: "SET_TIMESHEET_GRID_DIALOG_STATE"; payload: boolean }
   | { type: "SET_APPROVAL_DIALOG_STATE"; payload: boolean }
   | { type: "SET_LEAVE_DIALOG_STATE"; payload: boolean }
   | { type: "SET_EDIT_DIALOG_STATE"; payload: boolean }

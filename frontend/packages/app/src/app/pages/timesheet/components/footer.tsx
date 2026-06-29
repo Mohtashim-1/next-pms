@@ -10,6 +10,7 @@ import AddTime from "@/app/components/add-time";
 import { Approval } from "./approval";
 import { EditTime } from "./editTime";
 import ImportFromGoogleCalendarDialog from "./importFromGoogleCalendarDialog";
+import TimesheetGridDialog from "./timesheetGridDialog";
 import type { FooterProps } from "./types";
 
 export const Footer = ({ timesheet, user, dispatch, callback }: FooterProps) => {
@@ -77,6 +78,19 @@ export const Footer = ({ timesheet, user, dispatch, callback }: FooterProps) => 
               dispatch({ type: "SET_WEEK_DATE", payload: date });
             }
           }}
+        />
+      )}
+      {timesheet.isTimesheetGridDialogOpen && (
+        <TimesheetGridDialog
+          open={timesheet.isTimesheetGridDialogOpen}
+          onOpenChange={(open) => {
+            dispatch({ type: "SET_TIMESHEET_GRID_DIALOG_STATE", payload: open });
+            if (!open) callback();
+          }}
+          employee={user.employee}
+          employeeName={user.employeeName}
+          roles={user.roles}
+          onSuccess={callback}
         />
       )}
     </>

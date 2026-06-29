@@ -34,6 +34,7 @@ export const initialState: TimesheetState = {
   isAprrovalDialogOpen: false,
   isLeaveDialogOpen: false,
   isImportFromGoogleCalendarDialogOpen: false,
+  isTimesheetGridDialogOpen: false,
   weekDate: getTodayDate(),
 };
 
@@ -115,6 +116,13 @@ const actionHandlers = {
   ): TimesheetState => ({
     ...state,
     isImportFromGoogleCalendarDialogOpen: payload,
+  }),
+  SET_TIMESHEET_GRID_DIALOG_STATE: (
+    state: TimesheetState,
+    payload: boolean
+  ): TimesheetState => ({
+    ...state,
+    isTimesheetGridDialogOpen: payload,
   }),
 };
 

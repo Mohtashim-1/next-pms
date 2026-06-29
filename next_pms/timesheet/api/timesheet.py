@@ -108,6 +108,7 @@ def _append_time_log(
     is_billable=None,
     billable_override_reason: str | None = None,
     require_override_reason: bool = False,
+    activity_type: str | None = None,
 ):
     project = frappe.get_value("Task", task, "project")
     resolved_billable, override_reason, _default = resolve_entry_billable(
@@ -139,23 +140,25 @@ def _append_time_log(
         existing_log.project = project
         existing_log.is_billable = resolved_billable
         existing_log.custom_billable_override_reason = override_reason
+        if activity_type:
+            existing_log.activity_type = activity_type
         _mark_draft_save(timesheet)
         ignore_permissions = employee_has_higher_access(employee, ptype="write")
         return timesheet, ignore_permissions
 
-    timesheet.append(
-        "time_logs",
-        {
-            "task": task,
-            "hours": hours,
-            "description": description,
-            "from_time": from_time,
-            "to_time": to_time,
-            "project": project,
-            "is_billable": resolved_billable,
-            "custom_billable_override_reason": override_reason,
-        },
-    )
+    log_row = {
+        "task": task,
+        "hours": hours,
+        "description": description,
+        "from_time": from_time,
+        "to_time": to_time,
+        "project": project,
+        "is_billable": resolved_billable,
+        "custom_billable_override_reason": override_reason,
+    }
+    if activity_type:
+        log_row["activity_type"] = activity_type
+    timesheet.append("time_logs", log_row)
     _mark_draft_save(timesheet)
     ignore_permissions = employee_has_higher_access(employee, ptype="write")
     return timesheet, ignore_permissions
@@ -526,6 +529,7 @@ def save(
     input_mode: str = "duration",
     is_billable: bool | None = None,
     billable_override_reason: str | None = None,
+    activity_type: str | None = None,
 ):
     """create time entry in Timesheet Detail child table."""
     if not employee:
@@ -557,6 +561,7 @@ def save(
         is_billable=is_billable,
         billable_override_reason=billable_override_reason,
         require_override_reason=is_billable is not None,
+        activity_type=activity_type,
     )
     timesheet.save(ignore_permissions=ignore_permissions)
     return _("New Timesheet created successfully.")
@@ -1188,31 +1193,102 @@ def bulk_save(timesheet_entries: list):
     """
     Create multiple time entries in Timesheet Detail child table.
 
-    :param timesheet_entries: List of dictionaries containing timesheet entry details
-    Each dictionary should have keys:
-    - date (str, mandatory)
-    - description (str, mandatory)
-    - task (str, mandatory)
-    - hours (float, optional, default=0)
-    - employee (str, optional)
-
+    Each entry supports: date, description, task, hours, employee, from_time,
+    to_time, input_mode, activity_type.
     """
+    if isinstance(timesheet_entries, str):
+        timesheet_entries = frappe.parse_json(timesheet_entries)
     if not isinstance(timesheet_entries, list):
         throw(_("Input must be a list of timesheet entries."), frappe.ValidationError)
 
     for entry in timesheet_entries:
-        date = entry.get("date")
-        description = entry.get("description")
-        task = entry.get("task")
-        hours = entry.get("hours", 0)
-        employee = entry.get("employee")
-
         save(
-            date=date,
-            description=description,
-            task=task,
-            hours=hours,
-            employee=employee,
+            date=entry.get("date"),
+            description=entry.get("description") or "-",
+            task=entry.get("task"),
+            hours=entry.get("hours", 0),
+            employee=entry.get("employee"),
+            from_time=entry.get("from_time"),
+            to_time=entry.get("to_time"),
+            input_mode=entry.get("input_mode") or "duration",
+            activity_type=entry.get("activity_type"),
+            is_billable=entry.get("is_billable"),
+            billable_override_reason=entry.get("billable_override_reason"),
         )
 
     return _("Event Timesheet created successfully.")
+
+
+GRID_ACTIVITY_TYPES = [
+    "Meeting",
+    "Admin",
+    "Bug",
+    "Development",
+    "Issue",
+    "Research",
+    "Support",
+    "Training",
+]
+
+
+def _ensure_grid_activity_types():
+    for name in GRID_ACTIVITY_TYPES:
+        if frappe.db.exists("Activity Type", name):
+            continue
+        frappe.get_doc({"doctype": "Activity Type", "activity_type": name}).insert(
+            ignore_permissions=True
+        )
+
+
+@frappe.whitelist()
+@error_logger
+def get_timesheet_grid_meta():
+    """Options for the spreadsheet-style timesheet grid."""
+    _ensure_grid_activity_types()
+    db_types = frappe.get_all("Activity Type", pluck="name", order_by="name asc")
+    activity_types = list(dict.fromkeys([*GRID_ACTIVITY_TYPES, *db_types]))
+    return {"activity_types": activity_types, "row_count": 15}
+
+
+@frappe.whitelist()
+@error_logger
+def bulk_save_grid(timesheet_entries: list):
+    """Save grid rows; returns per-row errors without stopping the whole batch."""
+    if isinstance(timesheet_entries, str):
+        timesheet_entries = frappe.parse_json(timesheet_entries)
+    if not isinstance(timesheet_entries, list):
+        throw(_("Input must be a list of timesheet entries."), frappe.ValidationError)
+
+    created = 0
+    errors = []
+    for idx, entry in enumerate(timesheet_entries, start=1):
+        if isinstance(entry, str):
+            entry = frappe.parse_json(entry)
+        if not entry or not entry.get("task") or not entry.get("date"):
+            continue
+        try:
+            save(
+                date=entry.get("date"),
+                description=entry.get("description") or entry.get("remarks") or "-",
+                task=entry.get("task"),
+                hours=entry.get("hours", 0),
+                employee=entry.get("employee"),
+                from_time=entry.get("from_time"),
+                to_time=entry.get("to_time"),
+                input_mode=entry.get("input_mode") or ("range" if entry.get("from_time") and entry.get("to_time") else "duration"),
+                activity_type=entry.get("activity_type") or entry.get("type"),
+                is_billable=entry.get("is_billable"),
+                billable_override_reason=entry.get("billable_override_reason"),
+            )
+            created += 1
+        except Exception as exc:
+            errors.append({"row": idx, "message": str(exc)})
+
+    if created == 0 and errors:
+        throw(errors[0]["message"])
+
+    return {
+        "created": created,
+        "errors": errors,
+        "message": _("{0} time entry row(s) saved.").format(created),
+    }
