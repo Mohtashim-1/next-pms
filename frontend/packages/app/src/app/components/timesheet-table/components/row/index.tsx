@@ -11,7 +11,7 @@ import { Clock } from "lucide-react";
 import { BillableIndicator } from "@/app/components/timesheet-billable/billableIndicator";
 import { isDayFullyBooked } from "@/lib/timesheetDayCapacity";
 import { isDatePeriodLocked } from "@/lib/timesheetPeriodLock";
-import { mergeClassNames, getTimesheetColumnBg } from "@/lib/utils";
+import { mergeClassNames, getTimesheetColumnBg, isWeeklyOff } from "@/lib/utils";
 import type { TaskDataItemProps, TaskDataProps } from "@/types/timesheet";
 import { GridCell } from "../gridCell";
 import { TaskHoverCard } from "../taskHoverCard";
@@ -100,10 +100,11 @@ const Row = ({
                   ];
                 }
                 const matchingHoliday = holidays.find((item) => item.holiday_date === date);
+                const isWeekend = isWeeklyOff(date, holidays);
 
                 const result = matchingHoliday
-                  ? { isHoliday: true, weekly_off: matchingHoliday.weekly_off }
-                  : { isHoliday: false, weekly_off: false };
+                  ? { isHoliday: true, weekly_off: matchingHoliday.weekly_off || isWeekend }
+                  : { isHoliday: isWeekend, weekly_off: isWeekend };
                 const cellHours = data.reduce((sum, item) => sum + (item.hours || 0), 0);
                 const dayFullyBooked = cellHours === 0 && isDayFullyBooked(dayTotals[date] ?? 0);
                 return (

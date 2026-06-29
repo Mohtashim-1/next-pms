@@ -2,7 +2,7 @@
  * External dependencies
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Spinner,
@@ -18,7 +18,7 @@ import {
 } from "@next-pms/design-system/components";
 import { floatToTime } from "@next-pms/design-system/utils";
 import { useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
-import { LoaderCircle, Plus, Save, Timer, Briefcase, CheckCircle2, AlertCircle } from "lucide-react";
+import { LoaderCircle, Plus, Save, Timer, Briefcase } from "lucide-react";
 import { z } from "zod";
 /**
  * Internal dependencies
@@ -48,9 +48,6 @@ function sumEntryHours(rows: z.infer<typeof TimesheetDraftUpdateSchema>["data"],
 
 export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [draftSaveStatus, setDraftSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const autoSaveRequestRef = useRef(0);
-  const persistQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
   const loadedDialogKeyRef = useRef<string | null>(null);
 
   const form = useForm<z.infer<typeof TimesheetDraftUpdateSchema>>({
@@ -68,7 +65,7 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
 
   const savedInputMode = (getLocalStorage(TIMESHEET_INPUT_MODE_KEY) as TimesheetInputMode) || "duration";
   const [inputMode, setInputMode] = useState<TimesheetInputMode>(savedInputMode);
-  const watchedRows = form.watch("data");
+  const watchedRows = useWatch({ control: form.control, name: "data" });
   const totalHours = useMemo(
     () => sumEntryHours(watchedRows ?? [], inputMode),
     [watchedRows, inputMode]
@@ -114,7 +111,6 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
 
     loadedDialogKeyRef.current = dialogKey;
     form.reset({ data: updatedData });
-    setDraftSaveStatus("idle");
     const firstRangeRow = updatedData.find((item) => item.input_mode === "range");
     if (firstRangeRow) {
       setInputMode("range");
@@ -146,7 +142,7 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
       project_default_is_billable: projectDefaultIsBillable,
       billable_override_reason: "",
     };
-    append(newRow, { shouldFocus: true });
+    append(newRow);
   };
 
   const buildUpdatePayload = (formData: z.infer<typeof TimesheetDraftUpdateSchema>) => ({
@@ -162,48 +158,31 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
         return false;
       }
 
-      const runPersist = async () => {
-        const requestId = ++autoSaveRequestRef.current;
-        setDraftSaveStatus("saving");
-
-        try {
-          const res = await updateTimesheet(buildUpdatePayload(parsed.data));
-          if (requestId !== autoSaveRequestRef.current) {
-            return false;
-          }
-          setDraftSaveStatus("saved");
-          form.reset(form.getValues());
-          if (showToast) {
-            toast({
-              variant: "success",
-              description: res.message,
-            });
-          }
-          return true;
-        } catch (err) {
-          if (requestId === autoSaveRequestRef.current) {
-            setDraftSaveStatus("error");
-            if (showToast) {
-              const error = parseFrappeErrorMsg(err);
-              toast({
-                variant: "destructive",
-                description: error,
-              });
-            }
-          }
-          return false;
+      try {
+        const res = await updateTimesheet(buildUpdatePayload(parsed.data));
+        if (showToast) {
+          toast({
+            variant: "success",
+            description: res.message,
+          });
         }
-      };
-
-      const queued = persistQueueRef.current.then(runPersist, runPersist);
-      persistQueueRef.current = queued.catch(() => false);
-      return queued;
+        return true;
+      } catch (err) {
+        if (showToast) {
+          const error = parseFrappeErrorMsg(err);
+          toast({
+            variant: "destructive",
+            description: error,
+          });
+        }
+        return false;
+      }
     },
-    [form, toast, updateTimesheet]
+    [toast, updateTimesheet]
   );
 
   const handleUpdate = async (formData: z.infer<typeof TimesheetDraftUpdateSchema>) => {
-    if (!form.formState.isDirty && draftSaveStatus === "saved") {
+    if (!form.formState.isDirty) {
       onClose();
       return;
     }
@@ -215,27 +194,6 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
       onClose();
     }
   };
-
-  useEffect(() => {
-    if (!open) {
-      setDraftSaveStatus("idle");
-      return;
-    }
-
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const subscription = form.watch((values) => {
-      if (!values.data?.length) return;
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        void persistDraft(values as z.infer<typeof TimesheetDraftUpdateSchema>);
-      }, 800);
-    });
-
-    return () => {
-      subscription.unsubscribe();
-      if (timer) clearTimeout(timer);
-    };
-  }, [form, open, persistDraft]);
 
   const removeFormRow = (index: number) => {
     const currentData = form.getValues().data || [];
@@ -284,7 +242,6 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
                     {data?.message?.task}
                   </Typography>
                 </div>
-                <DraftStatusBadge status={draftSaveStatus} />
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {data?.message?.project && (
@@ -313,7 +270,7 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleUpdate)} className="flex min-h-0 flex-1 flex-col">
-            <div className="flex-1 overflow-y-auto bg-muted/10 px-6 py-5">
+            <div className="flex-1 overflow-y-auto overscroll-contain bg-muted/10 px-6 py-5">
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center gap-3 py-20">
                   <Spinner />
@@ -381,7 +338,7 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
                   ) : (
                     <Save className="h-4 w-4" />
                   )}
-                  {!form.formState.isDirty && draftSaveStatus === "saved" ? "Done" : "Save & close"}
+                  {form.formState.isDirty ? "Save & close" : "Close"}
                 </Button>
               </div>
             </DialogFooter>
@@ -391,32 +348,3 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
     </Dialog>
   );
 };
-
-function DraftStatusBadge({ status }: { status: "idle" | "saving" | "saved" | "error" }) {
-  if (status === "idle") return null;
-
-  if (status === "saving") {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground ring-1 ring-border">
-        <LoaderCircle className="h-3 w-3 animate-spin" />
-        Saving…
-      </span>
-    );
-  }
-
-  if (status === "saved") {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success ring-1 ring-success/20">
-        <CheckCircle2 className="h-3 w-3" />
-        Saved
-      </span>
-    );
-  }
-
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-medium text-destructive ring-1 ring-destructive/20">
-      <AlertCircle className="h-3 w-3" />
-      Save failed
-    </span>
-  );
-}

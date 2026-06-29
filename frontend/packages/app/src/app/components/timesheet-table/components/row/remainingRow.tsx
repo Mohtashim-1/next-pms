@@ -8,7 +8,7 @@ import { floatToTime } from "@next-pms/design-system/utils";
  * Internal dependencies
  */
 import { calculateDayCapacityUsed } from "@/lib/timesheetDayTotals";
-import { expectatedHours, getTimesheetColumnBg, mergeClassNames } from "@/lib/utils";
+import { expectatedHours, getTimesheetColumnBg, isWeeklyOff, mergeClassNames } from "@/lib/utils";
 import type { TotalHourRowProps } from "./types";
 
 export const RemainingHourRow = ({
@@ -30,7 +30,7 @@ export const RemainingHourRow = ({
       </TableCell>
       {dates.map((date) => {
         const holiday = holidays.find((item) => item.holiday_date === date);
-        if (holiday?.weekly_off) {
+        if (isWeeklyOff(date, holidays)) {
           return (
             <TableCell
               key={date}

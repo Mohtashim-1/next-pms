@@ -1,6 +1,7 @@
 import { getDateFromDateAndTimeString } from "@next-pms/design-system/date";
 
 import type { HolidayProp, LeaveProps, TaskProps, timesheet } from "@/types/timesheet";
+import { isWeekendDay, isWeeklyOff } from "@/lib/utils";
 
 export const calculateTaskHoursForDate = (tasks: TaskProps, date: string) => {
   return Object.values(tasks).reduce((total, taskData) => {
@@ -19,7 +20,7 @@ export const calculateLeaveHoursForDate = (
 ) => {
   return leaves.reduce((total, leave) => {
     if (date >= leave.from_date && date <= leave.to_date) {
-      if (!leave.is_lwp && holiday?.weekly_off) {
+      if (!leave.is_lwp && (holiday ? holiday.weekly_off : isWeekendDay(date))) {
         return 0;
       }
       if (leave.half_day && leave.half_day_date === date) {
@@ -64,7 +65,7 @@ export const getRemainingHoursForDate = (
   holidays: HolidayProp[]
 ): number => {
   const holiday = holidays.find((item) => item.holiday_date === date);
-  if (holiday?.weekly_off) {
+  if (isWeeklyOff(date, holidays)) {
     return -calculateTaskHoursForDate(tasks, date);
   }
 

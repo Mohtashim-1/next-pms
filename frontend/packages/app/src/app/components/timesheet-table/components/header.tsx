@@ -9,7 +9,7 @@ import { LoaderCircle, Import, Lock } from "lucide-react";
  * Internal dependencies
  */
 import { getPeriodLockForDate } from "@/lib/timesheetPeriodLock";
-import { mergeClassNames, getTimesheetColumnBg } from "@/lib/utils";
+import { mergeClassNames, getTimesheetColumnBg, getWeekendColumnTextClass, isWeeklyOff } from "@/lib/utils";
 import type { HeaderProps } from "./types";
 
 /**
@@ -50,10 +50,11 @@ export const Header = ({
           const { date: formattedDate, day } = prettyDate(date);
           const periodLock = getPeriodLockForDate(date, periodLocks);
           const matchingHoliday = holidays.find((item) => item.holiday_date === date);
+          const isWeekend = isWeeklyOff(date, holidays);
 
           const result = matchingHoliday
-            ? { isHoliday: true, weekly_off: matchingHoliday.weekly_off }
-            : { isHoliday: false, weekly_off: false };
+            ? { isHoliday: true, weekly_off: matchingHoliday.weekly_off || isWeekend }
+            : { isHoliday: isWeekend, weekly_off: isWeekend };
 
           return (
             <TableHead
@@ -64,6 +65,7 @@ export const Header = ({
                 variant="p"
                 className={mergeClassNames(
                   "font-medium text-muted-foreground",
+                  isWeekend && getWeekendColumnTextClass(date, holidays),
                   result.isHoliday && !result.weekly_off && "text-muted-foreground/50"
                 )}
               >
@@ -73,6 +75,7 @@ export const Header = ({
                 variant="small"
                 className={mergeClassNames(
                   "text-muted-foreground/80",
+                  isWeekend && getWeekendColumnTextClass(date, holidays),
                   result.isHoliday && !result.weekly_off && "text-muted-foreground/50"
                 )}
               >

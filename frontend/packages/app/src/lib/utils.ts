@@ -274,19 +274,37 @@ export const getBgCsssForToday = (date: string) => {
   return isToday(getUTCDateTime(date)) ? "bg-accent/60" : "";
 };
 
+export const isWeekendDay = (date: string) => {
+  const day = getUTCDateTime(date).getDay();
+  return day === 0 || day === 6;
+};
+
 export const isWeeklyOff = (date: string, holidays: Array<{ holiday_date: string; weekly_off?: boolean }>) => {
   const holiday = holidays.find((item) => item.holiday_date === date);
-  return Boolean(holiday?.weekly_off);
+  if (holiday) {
+    return Boolean(holiday.weekly_off);
+  }
+  return isWeekendDay(date);
 };
 
 export const getWeekendColumnBg = (
   date: string,
   holidays: Array<{ holiday_date: string; weekly_off?: boolean }>
 ) => {
-  if (isWeeklyOff(date, holidays)) {
-    return "bg-slate-500/[0.14] dark:bg-slate-400/[0.08]";
+  if (!isWeeklyOff(date, holidays)) {
+    return "";
   }
-  return "";
+  return "bg-slate-500/25 dark:bg-slate-400/12 ring-1 ring-inset ring-slate-500/25 dark:ring-slate-400/15";
+};
+
+export const getWeekendColumnTextClass = (
+  date: string,
+  holidays: Array<{ holiday_date: string; weekly_off?: boolean }>
+) => {
+  if (!isWeeklyOff(date, holidays)) {
+    return "";
+  }
+  return "text-slate-500 dark:text-slate-400";
 };
 
 export const getTimesheetColumnBg = (

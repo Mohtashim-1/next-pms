@@ -16,6 +16,7 @@ import { getFormatedDate } from "@next-pms/design-system/date";
 import { floatToTime, mergeClassNames } from "@next-pms/design-system/utils";
 import { CalendarDays, Trash2 } from "lucide-react";
 import type { Control, UseFormReturn } from "react-hook-form";
+import { useWatch } from "react-hook-form";
 import { z } from "zod";
 
 import TimeSelector from "@/app/components/add-time/time-selector";
@@ -66,14 +67,14 @@ export const EditTimeEntryCard = ({
   projectDefaultIsBillable,
   onRemove,
 }: EditTimeEntryCardProps) => {
-  const row = form.watch(`data.${index}`);
+  const row = useWatch({ control, name: `data.${index}` });
   const duration = getEntryDuration(row, inputMode);
 
   return (
     <article
       className={mergeClassNames(
-        "group relative overflow-hidden rounded-xl border bg-card shadow-sm transition-shadow",
-        "hover:shadow-md focus-within:ring-2 focus-within:ring-primary/20"
+        "group relative overflow-hidden rounded-xl border bg-card shadow-sm",
+        "focus-within:ring-2 focus-within:ring-inset focus-within:ring-primary/20"
       )}
     >
       <div className="flex items-center justify-between gap-3 border-b bg-muted/30 px-4 py-2.5">
