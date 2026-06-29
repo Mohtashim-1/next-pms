@@ -1323,6 +1323,7 @@ def bulk_save_grid(timesheet_entries: list):
                 activity_type=entry.get("activity_type") or entry.get("type"),
                 is_billable=entry.get("is_billable"),
                 billable_override_reason=entry.get("billable_override_reason"),
+                force_new=True,
             )
             created += 1
             if entry.get("date"):
