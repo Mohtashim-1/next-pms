@@ -1,5 +1,6 @@
 export const BASE_ROUTE = "/next-pms";
 export const TIMESHEET = "timesheet";
+export const WORK_ENTRIES = "work-entries";
 export const HOME = "home";
 export const DASHBOARD = "dashboard";
 export const TEAM = "/team";

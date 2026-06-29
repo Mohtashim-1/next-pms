@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronUp,
   ClipboardList,
+  ListChecks,
   Clock3,
   BarChart3,
   FileText,
@@ -39,6 +40,7 @@ import {
   TEAM,
   TEAM_APPROVALS,
   TIMESHEET,
+  WORK_ENTRIES,
 } from "@/lib/constant";
 import { useFrappeGetCall } from "frappe-react-sdk";
 import { setLocalStorage } from "@/lib/storage";
@@ -95,6 +97,13 @@ const Sidebar = () => {
       icon: Clock3,
       label: "Timesheet",
       key: "timesheet",
+      isPmRoute: false,
+    },
+    {
+      to: WORK_ENTRIES,
+      icon: ListChecks,
+      label: "Work Entries",
+      key: "work-entries",
       isPmRoute: false,
     },
     {

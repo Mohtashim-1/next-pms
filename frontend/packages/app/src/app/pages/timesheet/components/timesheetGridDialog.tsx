@@ -25,7 +25,7 @@ import { format } from "date-fns";
 import { FrappeConfig, FrappeContext, useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
 import { LoaderCircle, Save, Table2 } from "lucide-react";
 
-import { parseFrappeErrorMsg } from "@/lib/utils";
+import { parseFrappeErrorMsg, removeHtmlString } from "@/lib/utils";
 import { TimePickerField } from "@/app/components/timesheet-input/timePickerField";
 import type { TaskData } from "@/types";
 
@@ -63,6 +63,15 @@ function emptyRow(employee: string, date: string): GridRow {
   };
 }
 
+type GridSaveError = {
+  row: number;
+  message: string;
+};
+
+function cleanErrorMessage(message: string) {
+  return removeHtmlString(message).replace(/\s+/g, " ").trim();
+}
+
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? value : [];
 }
@@ -98,6 +107,7 @@ export function TimesheetGridDialog({
   );
   const [tasks, setTasks] = useState<TaskData[]>([]);
   const [employees, setEmployees] = useState<Array<{ name: string; employee_name: string }>>([]);
+  const [saveErrors, setSaveErrors] = useState<GridSaveError[]>([]);
 
   const { data: meta } = useFrappeGetCall(
     "next_pms.timesheet.api.timesheet.get_timesheet_grid_meta",
@@ -161,6 +171,7 @@ export function TimesheetGridDialog({
 
   useEffect(() => {
     if (!open) return;
+    setSaveErrors([]);
     setRows(Array.from({ length: ROW_COUNT }, () => emptyRow(employee, today)));
     loadTasks();
     loadEmployees();
@@ -218,28 +229,40 @@ export function TimesheetGridDialog({
     }
 
     try {
+      setSaveErrors([]);
       const res = await bulkSave({ timesheet_entries: payload });
-      const errors = res.message?.errors ?? [];
+      const errors = asArray<GridSaveError>(res.message?.errors).map((error) => ({
+        row: error.row,
+        message: cleanErrorMessage(error.message),
+      }));
+      const created = Number(res.message?.created ?? 0);
+      const savedDates = asArray<string>(res.message?.saved_dates);
+      const focusDate = savedDates[0];
+
       if (errors.length) {
+        setSaveErrors(errors);
         toast({
-          variant: "destructive",
-          description: `${res.message?.message ?? "Saved with errors."} Row ${errors[0].row}: ${errors[0].message}`,
+          variant: created > 0 ? "default" : "destructive",
+          description:
+            created > 0
+              ? `${res.message?.message ?? "Some rows saved."} Fix the rows listed below and save again.`
+              : errors[0]?.message ?? "Could not save your time entries.",
         });
-      } else {
-        const savedDates = asArray<string>(res.message?.saved_dates);
-        const focusDate = savedDates[0];
-        const dateHint = focusDate
-          ? format(getUTCDateTime(focusDate), "MMM d, yyyy")
-          : undefined;
-        toast({
-          variant: "success",
-          description: dateHint
-            ? `${res.message?.message ?? "Saved."} Opening week of ${dateHint}.`
-            : res.message?.message ?? res.message,
-        });
-        onOpenChange(false);
-        onSuccess?.(focusDate);
+        if (created > 0) {
+          onSuccess?.(focusDate);
+        }
+        return;
       }
+
+      const dateHint = focusDate ? format(getUTCDateTime(focusDate), "MMM d, yyyy") : undefined;
+      toast({
+        variant: "success",
+        description: dateHint
+          ? `${res.message?.message ?? "Saved."} Opening week of ${dateHint}.`
+          : res.message?.message ?? res.message,
+      });
+      onOpenChange(false);
+      onSuccess?.(focusDate);
     } catch (err) {
       toast({
         variant: "destructive",
@@ -390,6 +413,19 @@ export function TimesheetGridDialog({
             </tbody>
           </table>
         </div>
+
+        {saveErrors.length > 0 && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 space-y-2">
+            <Typography variant="small" className="font-medium text-destructive">
+              Some rows could not be saved
+            </Typography>
+            <ul className="space-y-1 text-sm text-destructive/90 list-disc pl-5">
+              {saveErrors.map((error) => (
+                <li key={`${error.row}-${error.message}`}>{error.message}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {!canPickEmployee && (
           <Typography variant="small" className="text-muted-foreground">

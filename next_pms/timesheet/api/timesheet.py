@@ -5,12 +5,14 @@ from datetime import timedelta
 from frappe.utils import (
     add_days,
     flt,
+    formatdate,
     get_first_day_of_week,
     get_last_day_of_week,
     get_datetime,
     getdate,
     now_datetime,
     nowdate,
+    strip_html_tags,
     time_diff_in_hours,
 )
 
@@ -109,6 +111,7 @@ def _append_time_log(
     billable_override_reason: str | None = None,
     require_override_reason: bool = False,
     activity_type: str | None = None,
+    force_new: bool = False,
 ):
     project = frappe.get_value("Task", task, "project")
     resolved_billable, override_reason, _default = resolve_entry_billable(
@@ -121,16 +124,18 @@ def _append_time_log(
     timesheet.update({"parent_project": project})
     _normalize_invalid_duration_logs(timesheet, from_time)
     input_mode = get_input_mode_from_description(description)
-    existing_log = next(
-        (
-            log
-            for log in timesheet.time_logs
-            if log.task == task
-            and getdate(log.from_time) == getdate(from_time)
-            and get_input_mode_from_description(log.description) == input_mode
-        ),
-        None,
-    )
+    existing_log = None
+    if not force_new:
+        existing_log = next(
+            (
+                log
+                for log in timesheet.time_logs
+                if log.task == task
+                and getdate(log.from_time) == getdate(from_time)
+                and get_input_mode_from_description(log.description) == input_mode
+            ),
+            None,
+        )
 
     if existing_log:
         existing_log.hours = hours
@@ -530,6 +535,7 @@ def save(
     is_billable: bool | None = None,
     billable_override_reason: str | None = None,
     activity_type: str | None = None,
+    force_new: bool = False,
 ):
     """create time entry in Timesheet Detail child table."""
     if not employee:
@@ -562,6 +568,7 @@ def save(
         billable_override_reason=billable_override_reason,
         require_override_reason=is_billable is not None,
         activity_type=activity_type,
+        force_new=force_new,
     )
     timesheet.save(ignore_permissions=ignore_permissions)
     return _("New Timesheet created successfully.")
@@ -1250,6 +1257,42 @@ def get_timesheet_grid_meta():
     return {"activity_types": activity_types, "row_count": 15}
 
 
+def _format_grid_row_error(exc: Exception, entry: dict, row: int) -> str:
+    """Return a plain-language row error for the timesheet grid UI."""
+    raw = strip_html_tags(str(exc)).strip()
+    task_id = entry.get("task")
+    task_label = frappe.db.get_value("Task", task_id, "subject") if task_id else None
+    task_label = task_label or task_id or _("the selected task")
+    entry_date = getdate(entry.get("date")) if entry.get("date") else None
+    date_label = formatdate(entry_date) if entry_date else _("the selected date")
+    project = frappe.db.get_value("Task", task_id, "project") if task_id else None
+    project_label = frappe.db.get_value("Project", project, "project_name") if project else project
+    project_end = (
+        frappe.db.get_value("Project", project, "expected_end_date") if project else None
+    )
+    lower = raw.lower()
+
+    if "expected end date" in lower and "cannot be after" in lower:
+        project_hint = (
+            _(' Project "{0}" ends on {1}.').format(project_label, formatdate(project_end))
+            if project_label and project_end
+            else ""
+        )
+        return _(
+            'Row {0}: You cannot log time on {1} for "{2}". That date is after the project end date.{3} Use an earlier date or ask your project manager to extend the project.'
+        ).format(row, date_label, task_label, project_hint)
+
+    if "expected start date" in lower and "cannot be after" in lower:
+        return _(
+            'Row {0}: The date {1} for "{2}" is outside the project schedule. Check the task and project dates, then try again.'
+        ).format(row, date_label, task_label)
+
+    if "period lock" in lower or "locked" in lower:
+        return _("Row {0}: This date is locked for timesheet entry. {1}").format(row, raw)
+
+    return _("Row {0}: Could not save this row. {1}").format(row, raw)
+
+
 @frappe.whitelist()
 @error_logger
 def bulk_save_grid(timesheet_entries: list):
@@ -1285,14 +1328,18 @@ def bulk_save_grid(timesheet_entries: list):
             if entry.get("date"):
                 saved_dates.append(entry.get("date"))
         except Exception as exc:
-            errors.append({"row": idx, "message": str(exc)})
+            errors.append({"row": idx, "message": _format_grid_row_error(exc, entry, idx)})
 
     if created == 0 and errors:
         throw(errors[0]["message"])
+
+    summary = _("{0} time entry row(s) saved.").format(created)
+    if errors:
+        summary = _("{0} row(s) saved, {1} row(s) failed.").format(created, len(errors))
 
     return {
         "created": created,
         "errors": errors,
         "saved_dates": list(dict.fromkeys(saved_dates)),
-        "message": _("{0} time entry row(s) saved.").format(created),
+        "message": summary,
     }

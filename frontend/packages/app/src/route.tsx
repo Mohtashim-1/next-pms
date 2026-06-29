@@ -9,7 +9,7 @@ import { useContextSelector } from "use-context-selector";
 /**
  * Internal dependencies.
  */
-import { TIMESHEET, HOME, DASHBOARD, TEAM, TASK, PROJECT, RESOURCE_MANAGEMENT, ROLES, PM_ACCESS_ROLES } from "@/lib/constant";
+import { TIMESHEET, HOME, DASHBOARD, TEAM, TASK, PROJECT, RESOURCE_MANAGEMENT, ROLES, PM_ACCESS_ROLES, WORK_ENTRIES } from "@/lib/constant";
 import { UserContext } from "@/lib/UserProvider";
 import { default as Layout } from "./app/layout";
 import { RootState } from "./store";
@@ -20,6 +20,7 @@ import { setViews } from "./store/view";
  * Lazy load components.
  */
 const Timesheet = lazy(() => import("@/app/pages/timesheet"));
+const WorkEntries = lazy(() => import("@/app/pages/work-entries"));
 const Home = lazy(() => import("@/app/pages/home"));
 const Team = lazy(() => import("@/app/pages/team"));
 const TeamApprovals = lazy(() => import("@/app/pages/team/approvals"));
@@ -47,6 +48,7 @@ export function Router() {
       <Route element={<AuthenticatedRoute />}>
         <Route path="/" element={<Navigate to={TIMESHEET} replace />} />
         <Route path={TIMESHEET} element={<Timesheet />} />
+        <Route path={WORK_ENTRIES} element={<WorkEntries />} />
         <Route element={<PmRoute />}>
           <Route path={DASHBOARD} element={<ExecutiveDashboard />} />
           <Route path={HOME} element={<Home />} />

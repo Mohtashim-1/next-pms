@@ -356,6 +356,7 @@ after_request = [
 
 from next_pms.integrations.sso import oidc_hooks
 from next_pms.integrations.mfa.hooks import install_mfa_hooks
+import next_pms.timesheet.api.work_entries  # noqa: F401 — register whitelisted API
 
 oidc_hooks.install()
 install_mfa_hooks()
