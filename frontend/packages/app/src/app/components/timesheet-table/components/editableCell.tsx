@@ -19,10 +19,11 @@ import { CirclePlus, PencilLine, Timer } from "lucide-react";
  * Internal dependencies
  */
 import { BillableIndicator } from "@/app/components/timesheet-billable/billableIndicator";
+import { getBillableCellBg } from "@/lib/timesheetBillable";
 import { MarkdownContent } from "@/app/components/timesheet-description/markdownContent";
 import { DAY_FULLY_BOOKED_MESSAGE } from "@/lib/timesheetDayCapacity";
 import { DEFAULT_INLINE_DESCRIPTION, formatRangeLabel, isRangeEntry } from "@/lib/timesheetTime";
-import { mergeClassNames, getBgCsssForToday, parseFrappeErrorMsg } from "@/lib/utils";
+import { mergeClassNames, parseFrappeErrorMsg } from "@/lib/utils";
 import { timeStringToFloat } from "@/schema/timesheet";
 import type { cellProps } from "./types";
 
@@ -440,7 +441,7 @@ export const EditableCell = ({
           !isDisabled && "hover:bg-muted/60 dark:hover:bg-muted/40 hover:cursor-pointer",
           isFocused && !isDisabled && "ring-2 ring-primary ring-inset",
           runningTimerElapsed && "bg-success/10 text-success ring-1 ring-success/40 ring-inset",
-          getBgCsssForToday(date),
+          getBillableCellBg(realEntries, displayHours > 0),
           className
         )}
       >

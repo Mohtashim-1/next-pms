@@ -1147,28 +1147,41 @@ def get_timesheet_state(employee: str, start_date: str, end_date: str):
     return "Not Submitted"
 
 
-@frappe.whitelist()
-@validate_current_employee(ptype="write")
-def get_remaining_hour_for_employee(employee: str, date: str):
-    """Return the working hours for the given employee on the given date."""
-    from .employee import get_employee_working_hours
-
-    working_hours = get_employee_working_hours(employee)
-    if not working_hours.get("working_frequency") == "Per Day":
-        working_hours.update({"working_hour": working_hours.get("working_hour") / 5})
-
-    date = getdate(date)
-    timesheet_hours = frappe.get_all(
+def _get_logged_hours_for_day(employee: str, date) -> float:
+    day = getdate(date)
+    timesheets = frappe.get_all(
         "Timesheet",
         filters={
             "employee": employee,
-            "start_date": date,
-            "end_date": date,
+            "start_date": ["<=", day],
+            "end_date": [">=", day],
             "docstatus": ["!=", 2],
         },
-        pluck="total_hours",
+        pluck="name",
+        ignore_permissions=employee_has_higher_access(employee, ptype="read"),
     )
-    total_hours = sum(timesheet_hours)
+    total_hours = 0.0
+    for timesheet_name in timesheets:
+        doc = frappe.get_doc("Timesheet", timesheet_name)
+        for log in doc.time_logs:
+            if log.from_time and getdate(log.from_time) == day:
+                total_hours += flt(log.hours)
+    return total_hours
+
+
+@frappe.whitelist()
+@validate_current_employee(ptype="write")
+def get_remaining_hour_for_employee(employee: str, date: str):
+    """Return remaining working hours for the given employee on the given date."""
+    date = getdate(date)
+    daily_norm = flt(get_employee_daily_working_norm(employee))
+
+    holidays = get_holidays(employee, date, date)
+    holiday = next((item for item in holidays if getdate(item.holiday_date) == date), None)
+    if holiday and holiday.get("weekly_off"):
+        return flt(0 - _get_logged_hours_for_day(employee, date), 2)
+
+    total_hours = _get_logged_hours_for_day(employee, date)
 
     leaves = get_employee_leaves(
         start_date=add_days(date, -4 * 7),
@@ -1180,10 +1193,10 @@ def get_remaining_hour_for_employee(employee: str, date: str):
     if data:
         for d in data:
             if d.get("half_day") and d.get("half_day_date") == date:
-                total_hours += working_hours.get("working_hour") / 2
+                total_hours += daily_norm / 2
             else:
-                total_hours += working_hours.get("working_hour")
-    return working_hours.get("working_hour") - total_hours
+                total_hours += daily_norm
+    return flt(daily_norm - total_hours, 2)
 
 
 @frappe.whitelist()

@@ -274,6 +274,28 @@ export const getBgCsssForToday = (date: string) => {
   return isToday(getUTCDateTime(date)) ? "bg-accent/60" : "";
 };
 
+export const isWeeklyOff = (date: string, holidays: Array<{ holiday_date: string; weekly_off?: boolean }>) => {
+  const holiday = holidays.find((item) => item.holiday_date === date);
+  return Boolean(holiday?.weekly_off);
+};
+
+export const getWeekendColumnBg = (
+  date: string,
+  holidays: Array<{ holiday_date: string; weekly_off?: boolean }>
+) => {
+  if (isWeeklyOff(date, holidays)) {
+    return "bg-slate-500/[0.14] dark:bg-slate-400/[0.08]";
+  }
+  return "";
+};
+
+export const getTimesheetColumnBg = (
+  date: string,
+  holidays: Array<{ holiday_date: string; weekly_off?: boolean }>
+) => {
+  return mergeClassNames(getBgCsssForToday(date), getWeekendColumnBg(date, holidays));
+};
+
 export const isDateInRange = (
   date: string,
   startDate: string,

@@ -15,9 +15,10 @@ import { CirclePlus, PencilLine, Timer } from "lucide-react";
  * Internal dependencies
  */
 import { BillableIndicator } from "@/app/components/timesheet-billable/billableIndicator";
+import { getBillableCellBg } from "@/lib/timesheetBillable";
 import { MarkdownContent } from "@/app/components/timesheet-description/markdownContent";
 import { DAY_FULLY_BOOKED_MESSAGE } from "@/lib/timesheetDayCapacity";
-import { mergeClassNames, getBgCsssForToday } from "@/lib/utils";
+import { mergeClassNames } from "@/lib/utils";
 import type { cellProps } from "./types";
 
 /**
@@ -95,7 +96,7 @@ export const Cell = ({
           isDayFullyBookedEmpty && "bg-muted/50 dark:bg-muted/30",
           !isDisabled && "hover:h-full hover:bg-muted/60 dark:hover:bg-muted/40 hover:cursor-pointer",
           runningTimerElapsed && "bg-success/10 text-success ring-1 ring-success/40 ring-inset",
-          getBgCsssForToday(date),
+          getBillableCellBg(data ?? [], hours > 0),
           className
         )}
       >

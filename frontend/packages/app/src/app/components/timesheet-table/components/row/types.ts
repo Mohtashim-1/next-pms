@@ -27,6 +27,7 @@ export type GridCellBindings = {
 export type emptyRowProps = GridCellBindings & {
   dates: string[];
   holidayList: Array<string>;
+  holidays?: Array<HolidayProp>;
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   onCellClick?: (data) => void;
@@ -82,6 +83,7 @@ export interface leaveRowProps {
   leaves: Array<LeaveProps>;
   dates: string[];
   holidayList: Array<string>;
+  holidays?: Array<HolidayProp>;
   expectedHours: number;
   rowClassName?: string;
   headingClassName?: string;

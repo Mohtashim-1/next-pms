@@ -9,7 +9,7 @@ import { LoaderCircle, Import, Lock } from "lucide-react";
  * Internal dependencies
  */
 import { getPeriodLockForDate } from "@/lib/timesheetPeriodLock";
-import { mergeClassNames, getBgCsssForToday } from "@/lib/utils";
+import { mergeClassNames, getTimesheetColumnBg } from "@/lib/utils";
 import type { HeaderProps } from "./types";
 
 /**
@@ -58,7 +58,7 @@ export const Header = ({
           return (
             <TableHead
               key={date}
-              className={mergeClassNames("max-w-20 text-center px-2 min-w-20", getBgCsssForToday(date))}
+              className={mergeClassNames("max-w-20 text-center px-2 min-w-20", getTimesheetColumnBg(date, holidays))}
             >
               <Typography
                 variant="p"

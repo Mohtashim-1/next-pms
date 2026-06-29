@@ -30,7 +30,6 @@ import {
   Typography,
 } from "@next-pms/design-system/components";
 import { getFormatedDate } from "@next-pms/design-system/date";
-import { floatToTime } from "@next-pms/design-system/utils";
 import { FrappeConfig, FrappeContext, useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
 import { LoaderCircle, Play, Save, Search, Square, X } from "lucide-react";
 import { z } from "zod";
@@ -47,7 +46,7 @@ import { TIMESHEET_INPUT_MODE_KEY } from "@/lib/constant";
 import { getLocalStorage, setLocalStorage } from "@/lib/storage";
 import { isBillableValue } from "@/lib/timesheetBillable";
 import type { TimesheetInputMode } from "@/lib/timesheetTime";
-import { mergeClassNames, expectatedHours, parseFrappeErrorMsg } from "@/lib/utils";
+import { mergeClassNames, parseFrappeErrorMsg } from "@/lib/utils";
 import { TimesheetDraftSchema, timeStringToFloat } from "@/schema/timesheet";
 import type { TaskData } from "@/types";
 import TimeSelector from "./time-selector";
@@ -66,8 +65,6 @@ const debugAddTime = (event: string, details?: unknown) => {
  * @param employee - Employee for the timesheet entry(In case of employee role they can select their employee only).
  * @param open - Boolean value to open the dialog.
  * @param onOpenChange - Function to change the open state of the dialog.
- * @param workingFrequency - Working frequency of the employee.(Used to calculating remaining hours).
- * @param workingHours - Working hours of the employee.(Used to calculating remaining hours).
  * @param onSuccess - Function to call after successfully adding the timesheet entry.
  * @param task - Task name for the timesheet entry (eg: TASK-0001).
  * @param project - Project name for the timesheet entry (eg: Project-0001).
@@ -78,8 +75,6 @@ const AddTime = ({
   employeeName,
   open = false,
   onOpenChange,
-  workingFrequency,
-  workingHours,
   onSuccess,
   task = "",
   project = "",
@@ -99,7 +94,6 @@ const AddTime = ({
   const [selectedProject, setSelectedProject] = useState<string[]>(project ? [project] : []);
   const [selectedDate, setSelectedDate] = useState(getFormatedDate(initialDate));
   const [selectedEmployee, setSelectedEmployee] = useState(employee);
-  const expectedHours = expectatedHours(workingHours, workingFrequency);
   const { toast } = useToast();
   const savedInputMode = (getLocalStorage(TIMESHEET_INPUT_MODE_KEY) as TimesheetInputMode) || "duration";
   const form = useForm<z.infer<typeof TimesheetDraftSchema>>({
@@ -261,17 +255,6 @@ const AddTime = ({
     return null;
   };
 
-  const { data: perDayEmpHours, mutate: mutatePerDayHrs } = useFrappeGetCall(
-    "next_pms.timesheet.api.timesheet.get_remaining_hour_for_employee",
-    {
-      employee: selectedEmployee,
-      date: selectedDate,
-    },
-    undefined,
-    {
-      revalidateOnFocus: false,
-    }
-  );
   const { data: runningTimer, mutate: mutateRunningTimer } = useFrappeGetCall(
     "next_pms.timesheet.api.timesheet.get_running_timer",
     {
@@ -326,7 +309,6 @@ const AddTime = ({
           return false;
         }
         setDraftSaveStatus("saved");
-        mutatePerDayHrs();
         onSuccess?.(parsed.data);
         debugAddTime("persist success", {
           requestId,
@@ -361,7 +343,7 @@ const AddTime = ({
         return false;
       }
     },
-    [save, mutatePerDayHrs, onSuccess, closeDialog, toast]
+    [save, onSuccess, closeDialog, toast]
   );
 
   const handleSubmit = async (data: z.infer<typeof TimesheetDraftSchema>) => {
@@ -497,7 +479,6 @@ const AddTime = ({
           description: res.message?.message ?? "Timer stopped.",
         });
         mutateRunningTimer();
-        mutatePerDayHrs();
         window.dispatchEvent(new Event("next-pms:timer-updated"));
         onSuccess?.(form.getValues());
       })
@@ -535,19 +516,6 @@ const AddTime = ({
   }, [open, initialDate, task, project, employee, form, savedInputMode]);
 
   useEffect(() => {
-    if (!open || form.getValues("hours")) return;
-    const remaining = Number(perDayEmpHours?.message);
-    if (Number.isNaN(remaining)) return;
-    const defaultHours = remaining > 0 ? remaining : expectedHours;
-    if (defaultHours > 0) {
-      form.setValue("hours", floatToTime(defaultHours), {
-        shouldDirty: false,
-        shouldValidate: true,
-      });
-    }
-  }, [open, perDayEmpHours, expectedHours, form]);
-
-  useEffect(() => {
     updateProject(task);
   }, [task, updateProject]);
   useEffect(() => {
@@ -561,9 +529,6 @@ const AddTime = ({
     }
   }, [open, tasks, applyTaskBillableDefaults, form]);
 
-  useEffect(() => {
-    mutatePerDayHrs();
-  }, [mutatePerDayHrs, selectedDate, selectedEmployee]);
   useEffect(() => {
     mutateRunningTimer();
   }, [mutateRunningTimer, selectedEmployee]);
@@ -618,20 +583,6 @@ const AddTime = ({
                 Draft save failed
               </Typography>
             )}
-            <Typography
-              variant="p"
-              className={mergeClassNames(
-                Number(perDayEmpHours?.message) >= 0 && Number(perDayEmpHours?.message) <= expectedHours
-                  ? "text-success"
-                  : "text-destructive"
-              )}
-            >
-              {perDayEmpHours
-                ? `${floatToTime(Math.abs(perDayEmpHours?.message))} hrs ${
-                    perDayEmpHours?.message < 0 ? "extended" : "remaining"
-                  }`
-                : ""}
-            </Typography>
           </DialogTitle>
           {activeTimer && (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">

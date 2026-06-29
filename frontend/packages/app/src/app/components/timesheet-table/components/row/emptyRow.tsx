@@ -9,7 +9,7 @@ import { Clock } from "lucide-react";
  */
 import { isDayFullyBooked } from "@/lib/timesheetDayCapacity";
 import { isDatePeriodLocked } from "@/lib/timesheetPeriodLock";
-import { mergeClassNames } from "@/lib/utils";
+import { mergeClassNames, getTimesheetColumnBg } from "@/lib/utils";
 import type { TaskDataProps } from "@/types/timesheet";
 import { GridCell } from "../gridCell";
 import { TaskHoverCard } from "../taskHoverCard";
@@ -32,6 +32,7 @@ import type { emptyRowProps } from "./types";
 export const EmptyRow = ({
   dates,
   holidayList,
+  holidays = [],
   onCellClick,
   disabled,
   rowClassName,
@@ -107,7 +108,7 @@ export const EmptyRow = ({
             onCellClick={onCellClick}
             disabled={disabled || isDatePeriodLocked(date, periodLocks)}
             dayFullyBooked={isDayFullyBooked(dayTotals[date] ?? 0)}
-            className={cellClassName}
+            className={mergeClassNames(cellClassName, getTimesheetColumnBg(date, holidays))}
             runningTimerElapsed={isRunningTask && runningTimerDate === date ? runningTimerElapsed : undefined}
             gridRow={gridRow}
             gridCol={colIndex}

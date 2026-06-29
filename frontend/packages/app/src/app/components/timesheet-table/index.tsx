@@ -17,6 +17,7 @@ import { Header } from "./components/header";
 import { Row } from "./components/row";
 import { EmptyRow } from "./components/row/emptyRow";
 import { LeaveRow } from "./components/row/leaveRow";
+import { RemainingHourRow } from "./components/row/remainingRow";
 import { TotalHourRow } from "./components/row/totalRow";
 import type { timesheetTableProps } from "./components/types";
 import { useGridNavigation } from "./hooks/useGridNavigation";
@@ -209,9 +210,18 @@ export const TimesheetTable = ({
             workingHour={workingHour}
             workingFrequency={workingFrequency}
           />
+          <RemainingHourRow
+            leaves={leaves}
+            dates={dates}
+            tasks={tasks}
+            holidays={holidays}
+            workingHour={workingHour}
+            workingFrequency={workingFrequency}
+          />
           <LeaveRow
             dates={dates}
             holidayList={holidayList}
+            holidays={holidays}
             leaves={leaves}
             expectedHours={expectatedHours(workingHour, workingFrequency)}
           />
@@ -220,6 +230,7 @@ export const TimesheetTable = ({
             <EmptyRow
               dates={dates}
               holidayList={holidayList}
+              holidays={holidays}
               onCellClick={onCellClick}
               setSelectedTask={setSelectedTask}
               disabled={disabled}
@@ -245,6 +256,7 @@ export const TimesheetTable = ({
                   key={task.name}
                   dates={dates}
                   holidayList={holidayList}
+                  holidays={holidays}
                   onCellClick={onCellClick}
                   setSelectedTask={setSelectedTask}
                   disabled={disabled}

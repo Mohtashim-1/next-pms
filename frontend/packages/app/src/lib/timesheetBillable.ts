@@ -24,6 +24,21 @@ export const getBillableSummary = (entries: BillableEntry[] = []) => {
   };
 };
 
+export const getBillableCellBg = (
+  entries: Array<BillableEntry & { hours?: number }> = [],
+  hasHours = false
+) => {
+  if (!hasHours) return "";
+  const loggedEntries = entries.filter((entry) => (entry.hours ?? 0) > 0);
+  if (!loggedEntries.length) return "";
+
+  const summary = getBillableSummary(loggedEntries);
+  if (summary.isMixed) return "bg-amber-500/12 dark:bg-amber-400/10";
+  if (summary.isAllBillable) return "bg-emerald-500/12 dark:bg-emerald-400/10";
+  if (summary.hasNonBillable) return "bg-slate-500/15 dark:bg-slate-400/12";
+  return "";
+};
+
 export const needsBillableOverrideReason = (
   isBillable: boolean,
   projectDefault?: boolean | number | null

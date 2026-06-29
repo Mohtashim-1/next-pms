@@ -11,7 +11,7 @@ import { Clock } from "lucide-react";
 import { BillableIndicator } from "@/app/components/timesheet-billable/billableIndicator";
 import { isDayFullyBooked } from "@/lib/timesheetDayCapacity";
 import { isDatePeriodLocked } from "@/lib/timesheetPeriodLock";
-import { mergeClassNames } from "@/lib/utils";
+import { mergeClassNames, getTimesheetColumnBg } from "@/lib/utils";
 import type { TaskDataItemProps, TaskDataProps } from "@/types/timesheet";
 import { GridCell } from "../gridCell";
 import { TaskHoverCard } from "../taskHoverCard";
@@ -109,7 +109,7 @@ const Row = ({
                 return (
                   <GridCell
                     key={date}
-                    className={cellClassName}
+                    className={mergeClassNames(cellClassName, getTimesheetColumnBg(date, holidays))}
                     date={date}
                     data={data}
                     isHoliday={result.isHoliday && !result.weekly_off}

@@ -7,8 +7,8 @@ import { TableCell, TableRow, Typography } from "@next-pms/design-system/compone
 /**
  * Internal dependencies
  */
-import { mergeClassNames, getBgCsssForToday } from "@/lib/utils";
-import type { LeaveProps } from "@/types/timesheet";
+import { mergeClassNames, getTimesheetColumnBg } from "@/lib/utils";
+import type { HolidayProp, LeaveProps } from "@/types/timesheet";
 import type { leaveRowProps } from "./types";
 
 /**
@@ -29,6 +29,7 @@ export const LeaveRow = ({
   leaves,
   dates,
   holidayList,
+  holidays = [],
   expectedHours,
   rowClassName,
   headingClassName,
@@ -85,7 +86,7 @@ export const LeaveRow = ({
       {leaveData.map(({ date, data, hour, isHoliday }) => (
         <TableCell
           key={date}
-          className={mergeClassNames("text-center px-2", dataCellClassName, getBgCsssForToday(date))}
+          className={mergeClassNames("text-center px-2", dataCellClassName, getTimesheetColumnBg(date, holidays))}
         >
           <Typography variant="p" className={isHoliday ? "text-primary" : "text-warning"}>
             {hour && hour != 0 ? floatToTime(hour) : ""}
