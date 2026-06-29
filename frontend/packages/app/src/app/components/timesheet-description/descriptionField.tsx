@@ -20,6 +20,7 @@ type TimesheetDescriptionFieldProps<T extends FieldValues> = {
   label?: string;
   placeholder?: string;
   compact?: boolean;
+  layout?: "default" | "card" | "compact";
 };
 
 export const TimesheetDescriptionField = <T extends FieldValues>({
@@ -29,13 +30,17 @@ export const TimesheetDescriptionField = <T extends FieldValues>({
   label = "Description",
   placeholder = "What did you work on? Markdown is supported.",
   compact = false,
-}: TimesheetDescriptionFieldProps<T>) => (
+  layout,
+}: TimesheetDescriptionFieldProps<T>) => {
+  const resolvedLayout = layout ?? (compact ? "compact" : "default");
+
+  return (
   <FormField
     control={control}
     name={name}
     render={({ field }) => (
-      <FormItem className="space-y-1">
-        {!compact && (
+      <FormItem className={resolvedLayout === "card" ? "space-y-1.5" : "space-y-1"}>
+        {resolvedLayout === "default" && (
           <>
             <FormLabel>
               {label}
@@ -46,8 +51,14 @@ export const TimesheetDescriptionField = <T extends FieldValues>({
             </Typography>
           </>
         )}
+        {resolvedLayout === "card" && (
+          <FormLabel className="text-xs font-medium text-muted-foreground">
+            {label}
+            {required ? " *" : ""}
+          </FormLabel>
+        )}
         <FormControl>
-          {compact ? (
+          {resolvedLayout === "compact" ? (
             <Input
               placeholder={placeholder}
               className="h-9"
@@ -56,15 +67,19 @@ export const TimesheetDescriptionField = <T extends FieldValues>({
             />
           ) : (
             <TextArea
-              rows={5}
+              rows={resolvedLayout === "card" ? 2 : 5}
               placeholder={placeholder}
-              className="font-mono text-sm min-h-9"
+              className={
+                resolvedLayout === "card"
+                  ? "min-h-[4.5rem] resize-y rounded-lg border-muted-foreground/20 bg-background text-sm shadow-sm"
+                  : "font-mono text-sm min-h-9"
+              }
               {...field}
               value={field.value ?? ""}
             />
           )}
         </FormControl>
-        {required && (
+        {required && resolvedLayout === "default" && (
           <Typography variant="small" className="text-muted-foreground">
             Required for this project before submission.
           </Typography>
@@ -73,4 +88,5 @@ export const TimesheetDescriptionField = <T extends FieldValues>({
       </FormItem>
     )}
   />
-);
+  );
+};

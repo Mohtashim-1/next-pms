@@ -1,7 +1,7 @@
 /**
  * Spreadsheet-style bulk time entry (15 rows).
  */
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Button,
   DatePicker,
@@ -23,11 +23,20 @@ import {
 import { getFormatedDate, getTodayDate, getUTCDateTime } from "@next-pms/design-system/date";
 import { format } from "date-fns";
 import { FrappeConfig, FrappeContext, useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
-import { LoaderCircle, Save, Table2 } from "lucide-react";
+import { ClipboardPaste, Copy, Download, LoaderCircle, Save, Table2, Upload } from "lucide-react";
 
 import { parseFrappeErrorMsg, removeHtmlString } from "@/lib/utils";
 import { TimePickerField } from "@/app/components/timesheet-input/timePickerField";
 import type { TaskData } from "@/types";
+import {
+  downloadGridCsv,
+  getGridTemplateCsv,
+  mergeRowsIntoGrid,
+  parseGridClipboard,
+  rowsToCsv,
+  rowsToTsv,
+  type GridRowData,
+} from "./timesheetGridCsv";
 
 const ROW_COUNT = 15;
 
@@ -39,16 +48,7 @@ const MANAGER_ROLES = new Set([
   "Administrator",
 ]);
 
-type GridRow = {
-  date: string;
-  type: string;
-  from_time: string;
-  to_time: string;
-  employee: string;
-  project: string;
-  task: string;
-  remarks: string;
-};
+type GridRow = GridRowData;
 
 function emptyRow(employee: string, date: string): GridRow {
   return {
@@ -108,6 +108,18 @@ export function TimesheetGridDialog({
   const [tasks, setTasks] = useState<TaskData[]>([]);
   const [employees, setEmployees] = useState<Array<{ name: string; employee_name: string }>>([]);
   const [saveErrors, setSaveErrors] = useState<GridSaveError[]>([]);
+  const [pasteStartRow, setPasteStartRow] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  const clipboardOptions = useMemo(
+    () => ({
+      includeEmployee: canPickEmployee,
+      defaultEmployee: employee,
+      defaultDate: today,
+    }),
+    [canPickEmployee, employee, today]
+  );
 
   const { data: meta } = useFrappeGetCall(
     "next_pms.timesheet.api.timesheet.get_timesheet_grid_meta",
@@ -172,9 +184,11 @@ export function TimesheetGridDialog({
   useEffect(() => {
     if (!open) return;
     setSaveErrors([]);
+    setPasteStartRow(0);
     setRows(Array.from({ length: ROW_COUNT }, () => emptyRow(employee, today)));
     loadTasks();
     loadEmployees();
+    window.setTimeout(() => gridRef.current?.focus(), 150);
   }, [open, employee, today, loadTasks, loadEmployees]);
 
   const updateRow = (index: number, patch: Partial<GridRow>) => {
@@ -185,6 +199,91 @@ export function TimesheetGridDialog({
     const list = asArray<TaskData>(tasks);
     if (!project) return list;
     return list.filter((task) => task.project === project);
+  };
+
+  const applyPastedRows = useCallback(
+    (pasted: GridRow[], startIndex = 0) => {
+      if (!pasted.length) {
+        toast({
+          variant: "destructive",
+          description: "No rows found. Use CSV/TSV with columns: date, type, from_time, to_time, project, task, remarks.",
+        });
+        return;
+      }
+
+      setRows((prev) => mergeRowsIntoGrid(prev, pasted, startIndex, ROW_COUNT));
+      setSaveErrors([]);
+
+      const projectsToLoad = [...new Set(pasted.map((row) => row.project).filter(Boolean))];
+      projectsToLoad.forEach((project) => loadTasks(project));
+
+      toast({
+        variant: "success",
+        description: `Pasted ${Math.min(pasted.length, ROW_COUNT - startIndex)} row(s) starting at row ${startIndex + 1}.`,
+      });
+    },
+    [loadTasks, toast]
+  );
+
+  const handleExport = () => {
+    const csv = rowsToCsv(rows, canPickEmployee);
+    downloadGridCsv(csv, `timesheet-grid-${today}.csv`);
+    toast({ variant: "success", description: "Grid exported as CSV." });
+  };
+
+  const handleExportTemplate = () => {
+    const csv = getGridTemplateCsv(canPickEmployee, employee, today);
+    downloadGridCsv(csv, "timesheet-grid-template.csv");
+    toast({ variant: "success", description: "Template downloaded." });
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = parseGridClipboard(text, clipboardOptions);
+      applyPastedRows(parsed, 0);
+    } catch {
+      toast({ variant: "destructive", description: "Could not read the selected file." });
+    }
+  };
+
+  const handleCopy = async () => {
+    try {
+      const tsv = rowsToTsv(rows, canPickEmployee);
+      await navigator.clipboard.writeText(tsv);
+      toast({ variant: "success", description: "Grid copied — paste into Excel or another sheet." });
+    } catch {
+      toast({ variant: "destructive", description: "Could not copy to clipboard." });
+    }
+  };
+
+  const handlePasteFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const parsed = parseGridClipboard(text, clipboardOptions);
+      applyPastedRows(parsed, pasteStartRow);
+    } catch {
+      toast({
+        variant: "destructive",
+        description: "Could not read clipboard. Click a row first, or use Ctrl+V inside the grid.",
+      });
+    }
+  };
+
+  const handleGridPaste = (event: React.ClipboardEvent) => {
+    const text = event.clipboardData.getData("text/plain");
+    if (!text.trim()) return;
+    event.preventDefault();
+    const parsed = parseGridClipboard(text, clipboardOptions);
+    applyPastedRows(parsed, pasteStartRow);
   };
 
   const handleSave = async () => {
@@ -273,19 +372,54 @@ export function TimesheetGridDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] w-full xl:max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+      <DialogContent className="flex max-h-[92vh] w-[min(1500px,98vw)] max-w-[98vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[98vw]">
+        <DialogHeader className="space-y-3 border-b px-6 py-5">
+          <DialogTitle className="flex items-center gap-2 text-xl">
             <Table2 className="h-5 w-5" />
             Time Sheet
           </DialogTitle>
-          <DialogDescription>
-            Enter up to {ROW_COUNT} rows. Filled rows are saved to your timesheet when you click Save.
+          <DialogDescription className="text-sm leading-relaxed">
+            Enter up to {ROW_COUNT} rows, then save. Copy from Excel and press{" "}
+            <kbd className="rounded border bg-muted px-1.5 py-0.5 text-xs font-medium">Ctrl+V</kbd> in the grid,
+            or use Import / Export below.
           </DialogDescription>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <Button type="button" variant="outline" size="sm" onClick={handleCopy}>
+              <Copy className="h-4 w-4" />
+              Copy all
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={handlePasteFromClipboard}>
+              <ClipboardPaste className="h-4 w-4" />
+              Paste
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={handleImportClick}>
+              <Upload className="h-4 w-4" />
+              Import CSV
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={handleExport}>
+              <Download className="h-4 w-4" />
+              Export CSV
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={handleExportTemplate} className="text-muted-foreground">
+              Template
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+          </div>
         </DialogHeader>
 
-        <div className="overflow-auto border rounded-md flex-1">
-          <table className="w-full min-w-[1100px] text-sm border-collapse">
+        <div
+          ref={gridRef}
+          className="flex-1 overflow-auto border-y bg-background px-2 py-2 focus:outline-none"
+          tabIndex={0}
+          onPaste={handleGridPaste}
+        >
+          <table className="w-full min-w-[1280px] border-collapse text-sm">
             <thead className="bg-muted/50 sticky top-0 z-10">
               <tr>
                 <th className="border-b px-2 py-2 text-left font-medium w-10">#</th>
@@ -303,7 +437,11 @@ export function TimesheetGridDialog({
             </thead>
             <tbody>
               {rows.map((row, index) => (
-                <tr key={index} className="hover:bg-muted/20">
+                <tr
+                  key={index}
+                  className="hover:bg-muted/20"
+                  onClick={() => setPasteStartRow(index)}
+                >
                   <td className="border-b px-2 py-1 text-muted-foreground">{index + 1}</td>
                   <td className="border-b px-1 py-1 min-w-[130px]">
                     <div className="[&_button]:h-8 [&_button]:min-h-8 [&_button]:px-2 [&_button]:text-xs [&_p]:text-xs [&_svg]:h-3.5 [&_svg]:w-3.5">
@@ -415,7 +553,7 @@ export function TimesheetGridDialog({
         </div>
 
         {saveErrors.length > 0 && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 space-y-2">
+          <div className="mx-6 rounded-md border border-destructive/40 bg-destructive/10 p-3 space-y-2">
             <Typography variant="small" className="font-medium text-destructive">
               Some rows could not be saved
             </Typography>
@@ -428,12 +566,17 @@ export function TimesheetGridDialog({
         )}
 
         {!canPickEmployee && (
-          <Typography variant="small" className="text-muted-foreground">
+          <Typography variant="small" className="px-6 text-muted-foreground">
             Employee: {employeeName || employee}
           </Typography>
         )}
+        {pasteStartRow > 0 && (
+          <Typography variant="small" className="px-6 text-muted-foreground/80">
+            Paste will start at row {pasteStartRow + 1} — click another row to change.
+          </Typography>
+        )}
 
-        <DialogFooter>
+        <DialogFooter className="gap-2 border-t bg-muted/20 px-6 py-4">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
             Cancel
           </Button>

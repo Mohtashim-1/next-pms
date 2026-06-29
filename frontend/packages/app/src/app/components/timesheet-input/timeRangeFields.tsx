@@ -30,12 +30,12 @@ export const TimeRangeFields = ({
   if (compact) {
     return (
       <div className={mergeClassNames("space-y-1", className)}>
-        <div className="flex items-center gap-1.5">
-          <TimePickerField value={fromTime} onChange={onFromTimeChange} placeholder="09:00" className="min-w-0 flex-1" />
-          <span className="shrink-0 text-xs text-muted-foreground" aria-hidden>
+        <div className="flex items-center gap-2">
+          <TimePickerField value={fromTime} onChange={onFromTimeChange} placeholder="09:00" className="min-w-0 flex-1 h-10" />
+          <span className="shrink-0 px-0.5 text-sm text-muted-foreground" aria-hidden>
             –
           </span>
-          <TimePickerField value={toTime} onChange={onToTimeChange} placeholder="17:00" className="min-w-0 flex-1" />
+          <TimePickerField value={toTime} onChange={onToTimeChange} placeholder="17:00" className="min-w-0 flex-1 h-10" />
         </div>
         {(fromError || toError) && (
           <p className="text-xs text-destructive">{fromError || toError}</p>

@@ -15,7 +15,7 @@ import {
 import { getFormatedDate } from "@next-pms/design-system/date";
 import { floatToTime, mergeClassNames } from "@next-pms/design-system/utils";
 import { CalendarDays, Trash2 } from "lucide-react";
-import type { Control } from "react-hook-form";
+import type { Control, UseFormReturn } from "react-hook-form";
 import { z } from "zod";
 
 import TimeSelector from "@/app/components/add-time/time-selector";
@@ -31,7 +31,7 @@ type EditTimeEntryCardProps = {
   index: number;
   entryNumber: number;
   control: Control<FormValues>;
-  form: ReturnType<typeof import("react-hook-form").useForm<FormValues>>;
+  form: UseFormReturn<FormValues>;
   inputMode: TimesheetInputMode;
   descriptionRequired: boolean;
   projectDefaultIsBillable?: boolean | number | null;

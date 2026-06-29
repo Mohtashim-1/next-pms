@@ -45,7 +45,7 @@ export const BillableFields = <T extends FieldValues>({
   );
 
   return (
-    <div className={compact ? "space-y-1" : "space-y-2"}>
+    <div className={resolvedLayout === "default" ? "space-y-2" : "space-y-0"}>
       {showDefaultHint && projectDefault !== undefined && (
         <Typography variant="small" className="text-muted-foreground">
           Project default: {isBillableValue(projectDefault) ? "Billable" : "Non-billable"}
@@ -57,9 +57,11 @@ export const BillableFields = <T extends FieldValues>({
         render={({ field }) => (
           <FormItem
             className={
-              compact
+              resolvedLayout === "compact"
                 ? "flex items-center justify-center space-y-0"
-                : "flex items-center gap-2 space-y-0"
+                : resolvedLayout === "card"
+                  ? "flex items-center gap-3 space-y-0"
+                  : "flex items-center gap-2 space-y-0"
             }
           >
             <FormControl>
@@ -69,7 +71,14 @@ export const BillableFields = <T extends FieldValues>({
                 aria-label="Billable"
               />
             </FormControl>
-            {!compact && <FormLabel className="font-normal">Billable</FormLabel>}
+            <div className="min-w-0">
+              <FormLabel className="font-medium leading-none">Billable</FormLabel>
+              {resolvedLayout === "card" && projectDefault !== undefined && (
+                <Typography variant="small" className="mt-0.5 text-muted-foreground">
+                  Project default is {isBillableValue(projectDefault) ? "billable" : "non-billable"}
+                </Typography>
+              )}
+            </div>
             <FormMessage className="text-xs" />
           </FormItem>
         )}
@@ -79,10 +88,28 @@ export const BillableFields = <T extends FieldValues>({
           control={control}
           name={reasonName}
           render={({ field }) => (
-            <FormItem>
-              <FormLabel>Override reason</FormLabel>
+            <FormItem
+              className={
+                resolvedLayout === "card"
+                  ? "mt-3 space-y-1.5 rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2.5"
+                  : "mt-2 space-y-1"
+              }
+            >
+              <FormLabel
+                className={
+                  resolvedLayout === "card"
+                    ? "text-xs font-medium text-amber-800 dark:text-amber-300"
+                    : undefined
+                }
+              >
+                Override reason
+              </FormLabel>
               <FormControl>
-                <Input placeholder="Why does this entry differ from the project default?" {...field} />
+                <Input
+                  placeholder="Why does this entry differ from the project default?"
+                  className={resolvedLayout === "card" ? "h-9 bg-background" : undefined}
+                  {...field}
+                />
               </FormControl>
               <FormMessage className="text-xs" />
             </FormItem>

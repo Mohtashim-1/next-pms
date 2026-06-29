@@ -6,7 +6,9 @@ from frappe.utils import (
     add_days,
     flt,
     formatdate,
+    get_first_day,
     get_first_day_of_week,
+    get_last_day,
     get_last_day_of_week,
     get_datetime,
     getdate,
@@ -414,23 +416,51 @@ def _resolve_duration_time_slot(
     return candidate_start, candidate_end, float(hours)
 
 
+def _get_timesheet_view_min_date():
+    """Regular employees only see the current calendar month on their timesheet."""
+    if has_write_access():
+        return None
+    return get_first_day(getdate())
+
+
+def _get_current_month_bounds():
+    today = getdate()
+    return get_first_day(today), get_last_day(today)
+
+
 @frappe.whitelist()
 @error_logger
-def get_timesheet_data(employee: str, start_date: str | None = None, max_week: int = 4):
+def get_timesheet_data(
+    employee: str,
+    start_date: str | None = None,
+    max_week: int = 4,
+    current_month_only: int | bool = 0,
+):
     """Get timesheet data for the given employee for the given number of weeks."""
     if not employee:
         employee = get_employee_from_user(throw_exception=frappe.session.user != "Administrator")
     if not start_date:
         start_date = nowdate()
     apply_role_permission_for_doctype(["Timesheet User", "Timesheet Manager"], "Employee", "read", employee)
+    current_month_only = frappe.utils.cint(current_month_only)
+    if current_month_only:
+        min_view_date, max_view_date = _get_current_month_bounds()
+    else:
+        min_view_date = _get_timesheet_view_min_date()
+        max_view_date = None
 
-    def generate_week_data(start_date, max_week, employee=None, leaves=None, holidays=None):
+    def generate_week_data(
+        start_date, max_week, employee=None, leaves=None, holidays=None, min_date=None, max_date=None
+    ):
         data = {}
         daily_norm = get_employee_daily_working_norm(employee)
 
         cache_key = f"{EMP_TIMESHEET}::{employee}"
         for i in range(max_week):
             week_dates = get_week_dates(start_date)
+            if min_date and getdate(week_dates["end_date"]) < getdate(min_date):
+                break
+
             week_key = week_dates["key"]
 
             week_cache_key = f"{week_dates['start_date']}::{week_dates['end_date']}"
@@ -482,41 +512,60 @@ def get_timesheet_data(employee: str, start_date: str | None = None, max_week: i
             }
             frappe.cache().hset(cache_key, week_cache_key, data[week_key])
             start_date = add_days(getdate(week_dates["start_date"]), -1)
+
+        if min_date or max_date:
+            data = {
+                week_key: week_data
+                for week_key, week_data in data.items()
+                if (not min_date or getdate(week_data["end_date"]) >= getdate(min_date))
+                and (not max_date or getdate(week_data["start_date"]) <= getdate(max_date))
+            }
         return data
 
     hour_detail = get_employee_working_hours(employee)
     res = {**hour_detail}
 
     if not employee and frappe.session.user == "Administrator":
-        res["data"] = generate_week_data(start_date, max_week)
+        res["data"] = generate_week_data(
+            start_date, max_week, min_date=min_view_date, max_date=max_view_date
+        )
         res["holidays"] = []
         res["leaves"] = []
         from next_pms.timesheet.utils.period_lock import get_active_locks_between
 
-        range_start = add_days(start_date, -max_week * 7)
+        range_start = min_view_date or add_days(start_date, -max_week * 7)
         range_end = add_days(start_date, max_week * 7)
         res["period_locks"] = get_active_locks_between(range_start, range_end)
         return res
 
+    range_start = min_view_date or add_days(start_date, -max_week * 7)
+    range_end = add_days(start_date, max_week * 7)
+
     holidays = get_holidays(
         employee,
-        add_days(start_date, -max_week * 7),
-        add_days(start_date, max_week * 7),
+        range_start,
+        range_end,
     )
 
     leaves = get_employee_leaves(
-        start_date=add_days(start_date, -max_week * 7),
-        end_date=add_days(start_date, max_week * 7),
+        start_date=range_start,
+        end_date=range_end,
         employee=employee,
     )
     res["leaves"] = leaves
     res["holidays"] = holidays
-    res["data"] = generate_week_data(start_date, max_week, employee, leaves, holidays)
+    res["data"] = generate_week_data(
+        start_date,
+        max_week,
+        employee,
+        leaves,
+        holidays,
+        min_date=min_view_date,
+        max_date=max_view_date,
+    )
 
     from next_pms.timesheet.utils.period_lock import get_active_locks_between
 
-    range_start = add_days(start_date, -max_week * 7)
-    range_end = add_days(start_date, max_week * 7)
     res["period_locks"] = get_active_locks_between(range_start, range_end)
     return res
 
