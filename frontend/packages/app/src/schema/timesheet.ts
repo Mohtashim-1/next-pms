@@ -179,6 +179,7 @@ export const TimesheetDraftSchema = z
       .transform((val) => (typeof val === "number" ? Boolean(val) : val))
       .optional(),
     billable_override_reason: billableOverrideReasonSchema,
+    activity_type: z.string().optional().default(""),
   })
   .superRefine(validateDraftDurationOrRange)
   .superRefine(validateBillableOverride);

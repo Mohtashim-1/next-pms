@@ -20,7 +20,8 @@ export const InputModeToggle = ({ value, onChange, className }: InputModeToggleP
   return (
     <div className={mergeClassNames("space-y-2", className)}>
       <Typography variant="small" className="font-medium text-muted-foreground">
-        How do you want to log time?
+        How do you want to log time ?  <br/>
+        
       </Typography>
       <div className="inline-flex rounded-xl bg-muted/80 p-1 ring-1 ring-border/60">
         <Button

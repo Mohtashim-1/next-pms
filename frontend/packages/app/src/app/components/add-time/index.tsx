@@ -22,6 +22,11 @@ import {
   Separator,
   ComboBox,
   DatePicker,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Typography,
 } from "@next-pms/design-system/components";
 import { getFormatedDate } from "@next-pms/design-system/date";
@@ -111,6 +116,7 @@ const AddTime = ({
       is_billable: false,
       project_default_is_billable: undefined,
       billable_override_reason: "",
+      activity_type: "",
     },
     mode: "onChange",
   });
@@ -214,19 +220,26 @@ const AddTime = ({
     setLocalStorage(TIMESHEET_INPUT_MODE_KEY, mode);
   };
 
-  const buildSavePayload = (data: z.infer<typeof TimesheetDraftSchema>) =>
-    data.input_mode === "range"
-      ? {
-          ...data,
-          description: data.description || "-",
-          hours: 0,
-          from_time: data.from_time,
-          to_time: data.to_time,
-        }
-      : {
-          ...data,
-          description: data.description || "-",
-        };
+  const buildSavePayload = (data: z.infer<typeof TimesheetDraftSchema>) => {
+    const base =
+      data.input_mode === "range"
+        ? {
+            ...data,
+            description: data.description || "-",
+            hours: 0,
+            from_time: data.from_time,
+            to_time: data.to_time,
+          }
+        : {
+            ...data,
+            description: data.description || "-",
+          };
+
+    if (data.activity_type) {
+      return { ...base, activity_type: data.activity_type };
+    }
+    return base;
+  };
 
   const canAutoSaveDraft = (data: z.infer<typeof TimesheetDraftSchema>) => {
     return getSaveBlockMessage(data) === null;
@@ -409,6 +422,16 @@ const AddTime = ({
     filters: window.frappe?.boot?.global_filters.project,
     limit_page_length: "null",
   });
+
+  const { data: gridMeta } = useFrappeGetCall(
+    "next_pms.timesheet.api.timesheet.get_timesheet_grid_meta",
+    undefined,
+    open ? undefined : null
+  );
+
+  const activityTypes: string[] = Array.isArray(gridMeta?.message?.activity_types)
+    ? gridMeta.message.activity_types
+    : ["Meeting", "Admin", "Bug", "Development", "Issue", "Research", "Support", "Training"];
 
   const onEmployeeChange = (value: string) => {
     setSelectedEmployee(value);
@@ -751,6 +774,30 @@ const AddTime = ({
                   )}
                 />
               </div>
+              <FormField
+                control={form.control}
+                name="activity_type"
+                render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-sm">Work type</FormLabel>
+                    <Select value={field.value || undefined} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Select work type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {activityTypes.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               {form.watch("task") && (
                 <BillableFields
                   control={form.control}

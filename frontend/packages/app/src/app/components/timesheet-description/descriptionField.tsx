@@ -41,15 +41,15 @@ export const TimesheetDescriptionField = <T extends FieldValues>({
     render={({ field }) => (
       <FormItem className={resolvedLayout === "card" ? "space-y-1.5" : "space-y-1"}>
         {resolvedLayout === "default" && (
-          <>
-            <FormLabel>
+          <div className="space-y-1">
+            <FormLabel className="block leading-snug">
               {label}
               {required ? " *" : " (optional)"}
             </FormLabel>
-            <Typography variant="small" className="text-muted-foreground">
+            <Typography variant="small" className="block text-muted-foreground">
               Supports Markdown. No character limit.
             </Typography>
-          </>
+          </div>
         )}
         {resolvedLayout === "card" && (
           <FormLabel className="text-xs font-medium text-muted-foreground">
