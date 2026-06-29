@@ -1261,6 +1261,7 @@ def bulk_save_grid(timesheet_entries: list):
 
     created = 0
     errors = []
+    saved_dates = []
     for idx, entry in enumerate(timesheet_entries, start=1):
         if isinstance(entry, str):
             entry = frappe.parse_json(entry)
@@ -1281,6 +1282,8 @@ def bulk_save_grid(timesheet_entries: list):
                 billable_override_reason=entry.get("billable_override_reason"),
             )
             created += 1
+            if entry.get("date"):
+                saved_dates.append(entry.get("date"))
         except Exception as exc:
             errors.append({"row": idx, "message": str(exc)})
 
@@ -1290,5 +1293,6 @@ def bulk_save_grid(timesheet_entries: list):
     return {
         "created": created,
         "errors": errors,
+        "saved_dates": list(dict.fromkeys(saved_dates)),
         "message": _("{0} time entry row(s) saved.").format(created),
     }

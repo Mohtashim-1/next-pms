@@ -20,11 +20,13 @@ import {
   Typography,
   useToast,
 } from "@next-pms/design-system/components";
-import { getFormatedDate, getTodayDate } from "@next-pms/design-system/date";
+import { getFormatedDate, getTodayDate, getUTCDateTime } from "@next-pms/design-system/date";
+import { format } from "date-fns";
 import { FrappeConfig, FrappeContext, useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
 import { LoaderCircle, Save, Table2 } from "lucide-react";
 
 import { parseFrappeErrorMsg } from "@/lib/utils";
+import { TimePickerField } from "@/app/components/timesheet-input/timePickerField";
 import type { TaskData } from "@/types";
 
 const ROW_COUNT = 15;
@@ -75,7 +77,7 @@ interface TimesheetGridDialogProps {
   employee: string;
   employeeName?: string;
   roles?: string[];
-  onSuccess?: () => void;
+  onSuccess?: (savedDate?: string) => void;
 }
 
 export function TimesheetGridDialog({
@@ -224,17 +226,24 @@ export function TimesheetGridDialog({
           description: `${res.message?.message ?? "Saved with errors."} Row ${errors[0].row}: ${errors[0].message}`,
         });
       } else {
+        const savedDates = asArray<string>(res.message?.saved_dates);
+        const focusDate = savedDates[0];
+        const dateHint = focusDate
+          ? format(getUTCDateTime(focusDate), "MMM d, yyyy")
+          : undefined;
         toast({
           variant: "success",
-          description: res.message?.message ?? res.message,
+          description: dateHint
+            ? `${res.message?.message ?? "Saved."} Opening week of ${dateHint}.`
+            : res.message?.message ?? res.message,
         });
         onOpenChange(false);
-        onSuccess?.();
+        onSuccess?.(focusDate);
       }
     } catch (err) {
       toast({
         variant: "destructive",
-        description: parseFrappeErrorMsg(err as Error),
+        description: parseFrappeErrorMsg(err),
       });
     }
   };
@@ -301,20 +310,18 @@ export function TimesheetGridDialog({
                       </SelectContent>
                     </Select>
                   </td>
-                  <td className="border-b px-1 py-1">
-                    <Input
-                      type="time"
-                      className="h-8"
+                  <td className="border-b px-1 py-1 min-w-[100px]">
+                    <TimePickerField
                       value={row.from_time}
-                      onChange={(e) => updateRow(index, { from_time: e.target.value })}
+                      onChange={(value) => updateRow(index, { from_time: value })}
+                      placeholder="09:00"
                     />
                   </td>
-                  <td className="border-b px-1 py-1">
-                    <Input
-                      type="time"
-                      className="h-8"
+                  <td className="border-b px-1 py-1 min-w-[100px]">
+                    <TimePickerField
                       value={row.to_time}
-                      onChange={(e) => updateRow(index, { to_time: e.target.value })}
+                      onChange={(value) => updateRow(index, { to_time: value })}
+                      placeholder="17:00"
                     />
                   </td>
                   {canPickEmployee && (

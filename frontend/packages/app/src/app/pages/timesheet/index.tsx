@@ -1,7 +1,7 @@
 /**
  * External dependencies.
  */
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import {
   Button,
@@ -129,6 +129,19 @@ function Timesheet() {
       setLikedTaskData(res.message ?? []);
     });
   };
+
+  const handleTimesheetRefresh = useCallback(
+    (savedDate?: string) => {
+      if (savedDate) {
+        dispatch({ type: "SET_DATA", payload: { ...initialState.data } });
+        dispatch({ type: "SET_WEEK_DATE", payload: getFormatedDate(getUTCDateTime(savedDate)) });
+        setStartDateParam(getFormatedDate(getUTCDateTime(savedDate)));
+      }
+      mutate();
+      getLikedTaskData();
+    },
+    [mutate, setStartDateParam]
+  );
 
   useEffect(() => {
     getLikedTaskData();
@@ -389,7 +402,7 @@ function Timesheet() {
           )}
         </>
       )}
-      <Footer timesheet={timesheet} user={user} dispatch={dispatch} callback={mutate} />
+      <Footer timesheet={timesheet} user={user} dispatch={dispatch} callback={handleTimesheetRefresh} />
     </>
   );
 }

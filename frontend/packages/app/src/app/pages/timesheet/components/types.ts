@@ -50,7 +50,7 @@ export type FooterProps = {
   timesheet: TimesheetState;
   user: RootState["user"];
   dispatch: React.Dispatch<Action>;
-  callback: () => void;
+  callback: (savedDate?: string) => void;
 };
 
 export interface TimesheetState {
