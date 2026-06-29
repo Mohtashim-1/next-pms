@@ -21,7 +21,6 @@ import {
   FormLabel,
   FormMessage,
   Input,
-  Separator,
   useToast,
 } from "@next-pms/design-system/components";
 import { getFormatedDate } from "@next-pms/design-system/date";
@@ -67,7 +66,7 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
 
   const savedInputMode = (getLocalStorage(TIMESHEET_INPUT_MODE_KEY) as TimesheetInputMode) || "duration";
   const [inputMode, setInputMode] = useState<TimesheetInputMode>(savedInputMode);
-  const columns = ["Date", inputMode === "range" ? "Start / End" : "Hours", "Description", "Billable", ""];
+  const timeColumnLabel = inputMode === "range" ? "Start / End" : "Hours";
   const { toast } = useToast();
   const { call: updateTimesheet } = useFrappePostCall("next_pms.timesheet.api.timesheet.bulk_update_timesheet_detail");
   const { call: deleteTimesheet } = useFrappePostCall("next_pms.timesheet.api.timesheet.delete");
@@ -261,205 +260,328 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            Edit Time
-            {draftSaveStatus === "saving" && (
-              <Typography variant="small" className="text-muted-foreground">
-                Saving draft...
-              </Typography>
-            )}
-            {draftSaveStatus === "saved" && (
-              <Typography variant="small" className="text-success">
-                Saved
-              </Typography>
-            )}
-            {draftSaveStatus === "error" && (
-              <Typography variant="small" className="text-destructive">
-                Save failed — retrying on next edit
-              </Typography>
-            )}
-          </DialogTitle>
-          <Separator />
-          <div className="flex justify-between w-full ">
-            <span className="flex flex-col items-start">
-              <Typography title={data?.message?.task} variant="p" className="max-w-80 truncate font-semibold">
+      <DialogContent className="flex max-h-[88vh] w-full max-w-3xl flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="space-y-4 border-b px-6 py-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 space-y-1">
+              <DialogTitle className="text-lg">Edit Time</DialogTitle>
+              <Typography
+                title={data?.message?.task}
+                variant="p"
+                className="truncate font-medium leading-snug"
+              >
                 {data?.message?.task}
               </Typography>
-              <Typography title={data?.message?.project} variant="small" className="max-w-80 truncate">
+              <Typography
+                title={data?.message?.project}
+                variant="small"
+                className="truncate text-muted-foreground"
+              >
                 {data?.message?.project}
               </Typography>
-            </span>
+            </div>
+            <div className="shrink-0">
+              {draftSaveStatus === "saving" && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+                  <LoaderCircle className="h-3 w-3 animate-spin" />
+                  Saving…
+                </span>
+              )}
+              {draftSaveStatus === "saved" && (
+                <span className="inline-flex items-center rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
+                  Saved
+                </span>
+              )}
+              {draftSaveStatus === "error" && (
+                <span className="inline-flex items-center rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-medium text-destructive">
+                  Save failed
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <InputModeToggle value={inputMode} onChange={handleInputModeChange} />
+            {projectDefaultIsBillable !== undefined && (
+              <span className="inline-flex items-center rounded-md border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground">
+                Project default: {isBillableValue(projectDefaultIsBillable) ? "Billable" : "Non-billable"}
+              </span>
+            )}
           </div>
         </DialogHeader>
+
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleUpdate)}>
-            {isLoading ? (
-              <Spinner />
-            ) : (
-              <div className=" max-md:flex max-md:flex-col max-md:gap-y-3">
-                <InputModeToggle value={inputMode} onChange={handleInputModeChange} className="mb-4" />
-                <div className="flex flex-col max-md:hidden">
-                  <div className="py-2 bg-muted rounded-lg flex items-center gap-2 h-10 mb-5">
-                    {columns.map((column, key) => (
-                      <Typography
-                        key={`column-${key}`}
-                        variant="p"
-                        className={mergeClassNames(
-                          "w-full px-2 text-slate-600 dark:text-slate-200 font-medium ",
-                          key != 2 && "max-w-16",
-                          key == 0 && "max-w-28",
-                          key == 3 && "max-w-24"
+          <form onSubmit={form.handleSubmit(handleUpdate)} className="flex min-h-0 flex-1 flex-col">
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              {isLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <Spinner />
+                </div>
+              ) : (
+                <>
+                  <div className="hidden overflow-hidden rounded-lg border md:block">
+                    <table className="w-full text-sm">
+                      <thead className="border-b bg-muted/30">
+                        <tr>
+                          <th className="w-[7.5rem] px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
+                            Date
+                          </th>
+                          <th
+                            className={mergeClassNames(
+                              "px-3 py-2.5 text-left text-xs font-medium text-muted-foreground",
+                              inputMode === "range" ? "w-[13rem]" : "w-[8rem]"
+                            )}
+                          >
+                            {timeColumnLabel}
+                          </th>
+                          <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
+                            Description
+                          </th>
+                          <th className="w-16 px-3 py-2.5 text-center text-xs font-medium text-muted-foreground">
+                            Billable
+                          </th>
+                          <th className="w-10 px-2 py-2.5" />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {fields.map((item, index: number) => (
+                          <tr key={item.id} className="group hover:bg-muted/20">
+                            <td className="px-3 py-2 align-middle">
+                              <FormField
+                                control={form.control}
+                                name={`data.${index}.date`}
+                                render={({ field }) => (
+                                  <FormItem className="space-y-0">
+                                    <FormControl>
+                                      <div className="[&_button]:h-9 [&_button]:min-h-9 [&_button]:text-sm">
+                                        <DatePicker
+                                          date={new Date(field.value)}
+                                          onDateChange={(nextDate) => {
+                                            if (!nextDate) return;
+                                            form.setValue(`data.${index}.date`, getFormatedDate(nextDate), {
+                                              shouldValidate: true,
+                                              shouldDirty: true,
+                                              shouldTouch: true,
+                                            });
+                                          }}
+                                        />
+                                      </div>
+                                    </FormControl>
+                                    <FormMessage className="text-xs" />
+                                  </FormItem>
+                                )}
+                              />
+                            </td>
+                            <td className="px-3 py-2 align-middle">
+                              {inputMode === "duration" ? (
+                                <FormField
+                                  control={form.control}
+                                  name={`data.${index}.hours`}
+                                  render={({ field }) => (
+                                    <FormItem className="space-y-0">
+                                      <FormControl>
+                                        <div className="flex h-9 w-full rounded-md border">
+                                          <Input
+                                            placeholder="00:00"
+                                            type="text"
+                                            {...field}
+                                            className="h-9 rounded-none border-0 border-r focus-visible:ring-0 focus-visible:ring-offset-0"
+                                          />
+                                          <TimeSelector
+                                            onClick={(time: string) => {
+                                              form.setValue(`data.${index}.hours`, time, {
+                                                shouldValidate: true,
+                                                shouldDirty: true,
+                                                shouldTouch: true,
+                                              });
+                                            }}
+                                          />
+                                        </div>
+                                      </FormControl>
+                                      <FormMessage className="text-xs" />
+                                    </FormItem>
+                                  )}
+                                />
+                              ) : (
+                                <TimeRangeFields
+                                  compact
+                                  fromTime={form.watch(`data.${index}.from_time`) || ""}
+                                  toTime={form.watch(`data.${index}.to_time`) || ""}
+                                  onFromTimeChange={(value) =>
+                                    form.setValue(`data.${index}.from_time`, value, {
+                                      shouldDirty: true,
+                                      shouldValidate: true,
+                                    })
+                                  }
+                                  onToTimeChange={(value) =>
+                                    form.setValue(`data.${index}.to_time`, value, {
+                                      shouldDirty: true,
+                                      shouldValidate: true,
+                                    })
+                                  }
+                                  fromError={form.formState.errors.data?.[index]?.from_time?.message}
+                                  toError={form.formState.errors.data?.[index]?.to_time?.message}
+                                />
+                              )}
+                            </td>
+                            <td className="px-3 py-2 align-middle">
+                              <TimesheetDescriptionField
+                                compact
+                                control={form.control}
+                                name={`data.${index}.description`}
+                                required={descriptionRequired}
+                                placeholder="What did you work on?"
+                              />
+                            </td>
+                            <td className="px-3 py-2 align-middle">
+                              <BillableFields
+                                compact
+                                control={form.control}
+                                isBillableName={`data.${index}.is_billable`}
+                                reasonName={`data.${index}.billable_override_reason`}
+                                projectDefault={projectDefaultIsBillable}
+                                watchedIsBillable={form.watch(`data.${index}.is_billable`)}
+                                showDefaultHint={false}
+                              />
+                            </td>
+                            <td className="px-2 py-2 align-middle">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                type="button"
+                                title="Remove entry"
+                                aria-label="Remove entry"
+                                className="h-8 w-8 text-muted-foreground opacity-60 transition-opacity hover:text-destructive group-hover:opacity-100"
+                                onClick={() => removeFormRow(index)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex flex-col gap-3 md:hidden">
+                    {fields.map((item, index: number) => (
+                      <div key={item.id} className="space-y-3 rounded-lg border p-4">
+                        <FormField
+                          control={form.control}
+                          name={`data.${index}.date`}
+                          render={({ field }) => (
+                            <FormItem className="space-y-1">
+                              <FormLabel className="text-sm">Date</FormLabel>
+                              <FormControl>
+                                <DatePicker
+                                  date={new Date(field.value)}
+                                  onDateChange={(nextDate) => {
+                                    if (!nextDate) return;
+                                    form.setValue(`data.${index}.date`, getFormatedDate(nextDate), {
+                                      shouldValidate: true,
+                                      shouldDirty: true,
+                                      shouldTouch: true,
+                                    });
+                                  }}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        {inputMode === "duration" ? (
+                          <FormField
+                            control={form.control}
+                            name={`data.${index}.hours`}
+                            render={({ field }) => (
+                              <FormItem className="space-y-1">
+                                <FormLabel className="text-sm">Hours</FormLabel>
+                                <FormControl>
+                                  <div className="flex h-9 w-full rounded-md border">
+                                    <Input
+                                      placeholder="00:00"
+                                      type="text"
+                                      {...field}
+                                      className="h-9 rounded-none border-0 border-r focus-visible:ring-0 focus-visible:ring-offset-0"
+                                    />
+                                    <TimeSelector
+                                      onClick={(time: string) => {
+                                        form.setValue(`data.${index}.hours`, time, {
+                                          shouldValidate: true,
+                                          shouldDirty: true,
+                                          shouldTouch: true,
+                                        });
+                                      }}
+                                    />
+                                  </div>
+                                </FormControl>
+                                <FormMessage className="text-xs" />
+                              </FormItem>
+                            )}
+                          />
+                        ) : (
+                          <div className="space-y-1">
+                            <FormLabel className="text-sm">Start / End</FormLabel>
+                            <TimeRangeFields
+                              compact
+                              fromTime={form.watch(`data.${index}.from_time`) || ""}
+                              toTime={form.watch(`data.${index}.to_time`) || ""}
+                              onFromTimeChange={(value) =>
+                                form.setValue(`data.${index}.from_time`, value, {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                })
+                              }
+                              onToTimeChange={(value) =>
+                                form.setValue(`data.${index}.to_time`, value, {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                })
+                              }
+                              fromError={form.formState.errors.data?.[index]?.from_time?.message}
+                              toError={form.formState.errors.data?.[index]?.to_time?.message}
+                            />
+                          </div>
                         )}
-                      >
-                        {column}
-                      </Typography>
+                        <TimesheetDescriptionField
+                          compact
+                          control={form.control}
+                          name={`data.${index}.description`}
+                          required={descriptionRequired}
+                          label="Description"
+                          placeholder="What did you work on?"
+                        />
+                        <BillableFields
+                          control={form.control}
+                          isBillableName={`data.${index}.is_billable`}
+                          reasonName={`data.${index}.billable_override_reason`}
+                          projectDefault={projectDefaultIsBillable}
+                          watchedIsBillable={form.watch(`data.${index}.is_billable`)}
+                          showDefaultHint={false}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          className="w-full text-destructive hover:text-destructive"
+                          onClick={() => removeFormRow(index)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Remove entry
+                        </Button>
+                      </div>
                     ))}
                   </div>
-                </div>
-                {fields.map((item, index: number) => (
-                  <div
-                    className="flex gap-2 border-b pb-5 items-start pt-1 max-md:border max-md:rounded-md max-md:p-4 max-md:flex-col"
-                    key={item.id}
-                  >
-                    <FormField
-                      control={form.control}
-                      name={`data.${index}.date`}
-                      render={({ field }) => (
-                        <FormItem className="w-full md:max-w-28 space-y-2 truncate">
-                          <FormLabel className="flex gap-2 items-center md:hidden">
-                            <p title="subject" className="text-sm truncate">
-                              Date
-                            </p>
-                          </FormLabel>
-                          <FormControl>
-                            <DatePicker
-                              date={new Date(field.value)}
-                              onDateChange={(date) => {
-                                if (!date) return;
-                                form.setValue(`data.${index}.date`, getFormatedDate(date), {
-                                  shouldValidate: true,
-                                  shouldDirty: true,
-                                  shouldTouch: true,
-                                });
-                              }}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    {inputMode === "duration" ? (
-                      <FormField
-                        control={form.control}
-                        name={`data.${index}.hours`}
-                        render={({ field }) => {
-                          return (
-                            <FormItem className="w-full md:max-w-24 max-md:w-full md:px-2">
-                              <FormLabel className="flex gap-2 items-center md:hidden">
-                                <p title="subject" className="text-sm truncate">
-                                  Hours
-                                </p>
-                              </FormLabel>
-                              <FormControl>
-                                <div className=" flex w-full border rounded-md ">
-                                  <Input
-                                    placeholder="00:00"
-                                    type="text"
-                                    {...field}
-                                    className={mergeClassNames(
-                                      "p-1 border-0 border-r rounded-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                                    )}
-                                  />
-                                  <TimeSelector
-                                    onClick={(time: string) => {
-                                      form.setValue(`data.${index}.hours`, time, {
-                                        shouldValidate: true,
-                                        shouldDirty: true,
-                                        shouldTouch: true,
-                                      });
-                                    }}
-                                  />
-                                </div>
-                              </FormControl>
-                              <FormMessage className="text-xs" />
-                            </FormItem>
-                          );
-                        }}
-                      />
-                    ) : (
-                      <div className="w-full md:max-w-40 max-md:w-full md:px-2">
-                        <TimeRangeFields
-                          fromTime={form.watch(`data.${index}.from_time`) || ""}
-                          toTime={form.watch(`data.${index}.to_time`) || ""}
-                          onFromTimeChange={(value) =>
-                            form.setValue(`data.${index}.from_time`, value, {
-                              shouldDirty: true,
-                              shouldValidate: true,
-                            })
-                          }
-                          onToTimeChange={(value) =>
-                            form.setValue(`data.${index}.to_time`, value, {
-                              shouldDirty: true,
-                              shouldValidate: true,
-                            })
-                          }
-                          fromError={form.formState.errors.data?.[index]?.from_time?.message}
-                          toError={form.formState.errors.data?.[index]?.to_time?.message}
-                        />
-                      </div>
-                    )}
-                    <div className="w-full md:px-2">
-                      <TimesheetDescriptionField
-                        control={form.control}
-                        name={`data.${index}.description`}
-                        required={descriptionRequired}
-                        label="Description"
-                        placeholder="Update your progress"
-                      />
-                    </div>
-                    <div className="w-full md:max-w-40 md:px-2">
-                      <BillableFields
-                        control={form.control}
-                        isBillableName={`data.${index}.is_billable`}
-                        reasonName={`data.${index}.billable_override_reason`}
-                        projectDefault={projectDefaultIsBillable}
-                        watchedIsBillable={form.watch(`data.${index}.is_billable`)}
-                        showDefaultHint={index === 0}
-                      />
-                    </div>
-                    <div className=" flex items-center min-h-10 gap-2 md:px-2 max-md:w-full">
-                      <Button
-                        variant="destructive"
-                        className="p-1 h-fit max-md:h-8 max-md:w-full  mt-1 max-md:flex max-md:justify-center max-md:items-center"
-                        type="button"
-                        onClick={() => removeFormRow(index)}
-                      >
-                        <Trash2 />{" "}
-                        <Typography className="hidden text-sm text-white max-md:block" variant="p">
-                          Delete Row
-                        </Typography>
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <DialogFooter className="sm:justify-between mt-4 flex max-md:flex-col gap-y-2">
-              <Button type="button" variant="outline" onClick={addEmptyFormRow}>
-                <Plus />
-                Add Row
+                </>
+              )}
+            </div>
+
+            <DialogFooter className="gap-2 border-t bg-muted/20 px-6 py-4 sm:justify-between">
+              <Button type="button" variant="outline" size="sm" onClick={addEmptyFormRow}>
+                <Plus className="h-4 w-4" />
+                Add row
               </Button>
-              <Button
-                variant="success"
-                disabled={!form.formState.isValid || isSubmitting}
-              >
-                {isSubmitting ? (
-                  <LoaderCircle className="animate-spin" />
-                ) : (
-                  <Save />
-                )}
+              <Button variant="success" size="sm" disabled={!form.formState.isValid || isSubmitting}>
+                {isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 {!form.formState.isDirty && draftSaveStatus === "saved" ? "Done" : "Save"}
               </Button>
             </DialogFooter>

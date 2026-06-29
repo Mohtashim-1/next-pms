@@ -411,7 +411,12 @@ export const EditableCell = ({
     }
   };
 
-  const displayValue = displayHours > 0 ? (rangeLabel || floatToTime(displayHours)) : "-";
+  const displayValue =
+    displayHours > 0
+      ? hasMultipleEntries || !rangeLabel
+        ? floatToTime(displayHours)
+        : rangeLabel
+      : "-";
 
   return (
     <HoverCard openDelay={500} closeDelay={500}>

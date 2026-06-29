@@ -24,6 +24,8 @@ type BillableFieldsProps<T extends FieldValues> = {
   projectDefault?: boolean | number | null;
   watchedIsBillable?: boolean | number | null;
   showDefaultHint?: boolean;
+  compact?: boolean;
+  layout?: "default" | "card" | "compact";
 };
 
 export const BillableFields = <T extends FieldValues>({
@@ -33,14 +35,17 @@ export const BillableFields = <T extends FieldValues>({
   projectDefault,
   watchedIsBillable,
   showDefaultHint = true,
+  compact = false,
+  layout,
 }: BillableFieldsProps<T>) => {
+  const resolvedLayout = layout ?? (compact ? "compact" : "default");
   const requiresReason = needsBillableOverrideReason(
     isBillableValue(watchedIsBillable),
     projectDefault
   );
 
   return (
-    <div className="space-y-2">
+    <div className={compact ? "space-y-1" : "space-y-2"}>
       {showDefaultHint && projectDefault !== undefined && (
         <Typography variant="small" className="text-muted-foreground">
           Project default: {isBillableValue(projectDefault) ? "Billable" : "Non-billable"}
@@ -50,14 +55,21 @@ export const BillableFields = <T extends FieldValues>({
         control={control}
         name={isBillableName}
         render={({ field }) => (
-          <FormItem className="flex items-center gap-2 space-y-0">
+          <FormItem
+            className={
+              compact
+                ? "flex items-center justify-center space-y-0"
+                : "flex items-center gap-2 space-y-0"
+            }
+          >
             <FormControl>
               <Checkbox
                 checked={isBillableValue(field.value)}
                 onCheckedChange={(checked) => field.onChange(Boolean(checked))}
+                aria-label="Billable"
               />
             </FormControl>
-            <FormLabel className="font-normal">Billable</FormLabel>
+            {!compact && <FormLabel className="font-normal">Billable</FormLabel>}
             <FormMessage className="text-xs" />
           </FormItem>
         )}
