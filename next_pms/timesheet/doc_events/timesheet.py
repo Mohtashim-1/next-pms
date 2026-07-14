@@ -39,13 +39,19 @@ def before_save(doc, method=None):
         return
     if doc.flags.keep_actual_times:
         for key, data in enumerate(doc.get("time_logs")):
-            doc.time_logs[key].project = get_value("Task", {"name": doc.time_logs[key].task}, "project")
+            if doc.time_logs[key].task:
+                task_project = get_value("Task", {"name": doc.time_logs[key].task}, "project")
+                if task_project:
+                    doc.time_logs[key].project = task_project
         validate_start_date(doc)
         return
 
     for key, data in enumerate(doc.get("time_logs")):
         normalize_time_log_entry(doc.time_logs[key])
-        doc.time_logs[key].project = get_value("Task", {"name": doc.time_logs[key].task}, "project")
+        if doc.time_logs[key].task:
+            task_project = get_value("Task", {"name": doc.time_logs[key].task}, "project")
+            if task_project:
+                doc.time_logs[key].project = task_project
     validate_start_date(doc)
 
 
@@ -130,8 +136,6 @@ def validate_required_descriptions(doc, method=None):
     from next_pms.timesheet.utils.description import validate_entry_description
 
     for log in doc.get("time_logs"):
-        if not log.task:
-            continue
         validate_entry_description(log.task, log.project, log.description)
 
 

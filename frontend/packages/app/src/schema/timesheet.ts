@@ -11,7 +11,20 @@ const descriptionSchema = z
   .trim()
   .min(1, { message: "Please enter description." });
 
-const draftDescriptionSchema = z.string().optional().default("");
+const draftDescriptionSchema = z
+  .string({
+    required_error: "Please enter remarks.",
+  })
+  .trim()
+  .min(1, { message: "Please enter remarks." })
+  .refine((val) => !["-", "—", "–"].includes(val), { message: "Please enter remarks." });
+
+const workTypeSchema = z
+  .string({
+    required_error: "Please select a work type.",
+  })
+  .trim()
+  .min(1, { message: "Please select a work type." });
 
 const leaveReasonSchema = z
   .string({
@@ -155,12 +168,8 @@ const validateDurationOrRange = (
 
 export const TimesheetDraftSchema = z
   .object({
-    task: z
-      .string({
-        required_error: "Please select a task.",
-      })
-      .trim()
-      .min(1, { message: "Please select a task." }),
+    task: z.string().trim().optional().default(""),
+    project: z.string().trim().optional().default(""),
     description: draftDescriptionSchema,
     hours: z.union([hourSchema, z.string().optional(), z.number().optional()]).optional(),
     date: z.string({
@@ -179,19 +188,15 @@ export const TimesheetDraftSchema = z
       .transform((val) => (typeof val === "number" ? Boolean(val) : val))
       .optional(),
     billable_override_reason: billableOverrideReasonSchema,
-    activity_type: z.string().optional().default(""),
+    activity_type: workTypeSchema,
   })
   .superRefine(validateDraftDurationOrRange)
   .superRefine(validateBillableOverride);
 
 export const TimesheetSchema = z
   .object({
-    task: z
-      .string({
-        required_error: "Please select a task.",
-      })
-      .trim()
-      .min(1, { message: "Please select a task." }),
+    task: z.string().trim().optional().default(""),
+    project: z.string().trim().optional().default(""),
     description: descriptionSchema,
     hours: z.union([hourSchema, z.string().optional(), z.number().optional()]).optional(),
     date: z.string({
@@ -201,6 +206,7 @@ export const TimesheetSchema = z
     input_mode: timesheetInputModeSchema,
     from_time: z.string().optional(),
     to_time: z.string().optional(),
+    activity_type: workTypeSchema,
   })
   .superRefine(validateDurationOrRange);
 
@@ -240,11 +246,12 @@ export const TimesheetDraftSingleRowSchema = z
     hours: z.union([hourSchema, z.string().optional(), z.number().optional()]).optional(),
     description: draftDescriptionSchema,
     date: z.string({}),
-    task: z.string({}),
+    task: z.string().optional().default(""),
     parent: z.string({}),
     input_mode: timesheetInputModeSchema,
     from_time: z.string().optional(),
     to_time: z.string().optional(),
+    activity_type: z.string().optional().default(""),
     is_billable: z
       .union([z.boolean(), z.number()])
       .transform((val) => {
@@ -269,11 +276,12 @@ export const TimesheetSingleRowSchema = z
     hours: z.union([hourSchema, z.string().optional(), z.number().optional()]).optional(),
     description: descriptionSchema,
     date: z.string({}),
-    task: z.string({}),
+    task: z.string().optional().default(""),
     parent: z.string({}),
     input_mode: timesheetInputModeSchema,
     from_time: z.string().optional(),
     to_time: z.string().optional(),
+    activity_type: workTypeSchema,
     is_billable: z
       .union([z.boolean(), z.number()])
       .transform((val) => {
@@ -315,7 +323,7 @@ export function serializeTimesheetUpdateRow(row: z.infer<typeof TimesheetDraftSi
     parent: row.parent,
     task: row.task,
     date: row.date,
-    description: row.description || "-",
+    description: row.description || "",
     input_mode: row.input_mode,
     hours: 0,
   };
@@ -414,12 +422,8 @@ export const LeaveSchema = z.object({
 
 export const EditTimesheetSchema = z
   .object({
-    task: z
-      .string({
-        required_error: "Please select a task.",
-      })
-      .trim()
-      .min(1, { message: "Please select a task." }),
+    task: z.string().trim().optional().default(""),
+    project: z.string().trim().optional().default(""),
     description: descriptionSchema,
     hours: z.union([hourSchema, z.string().optional(), z.number().optional()]).optional(),
     date: z.string({
@@ -430,5 +434,6 @@ export const EditTimesheetSchema = z
     input_mode: timesheetInputModeSchema,
     from_time: z.string().optional(),
     to_time: z.string().optional(),
+    activity_type: workTypeSchema,
   })
   .superRefine(validateDurationOrRange);

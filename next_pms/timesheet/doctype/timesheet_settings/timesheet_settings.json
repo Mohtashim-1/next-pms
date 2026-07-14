@@ -11,6 +11,7 @@
   "ignored_role",
   "column_break_cypz",
   "allow_future_entries",
+  "require_project_on_timesheet",
   "reminder_setting_section",
   "send_daily_reminder",
   "daily_reminder_template",
@@ -67,6 +68,13 @@
    "fieldname": "allow_future_entries",
    "fieldtype": "Check",
    "label": "Allow Future Entries"
+  },
+  {
+   "default": "0",
+   "description": "When enabled, Project (or a Task linked to a Project) is mandatory on timesheet entries — including Desk Timesheet and Next PMS Add Time. When disabled, timesheets can be saved without a project.",
+   "fieldname": "require_project_on_timesheet",
+   "fieldtype": "Check",
+   "label": "Require Project on Timesheet"
   },
   {
    "default": "1",

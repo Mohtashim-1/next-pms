@@ -29,12 +29,16 @@ def get_task_project_default_is_billable(task: str | None) -> int:
 
 
 def resolve_entry_billable(
-    task: str,
+    task: str | None,
     is_billable=None,
     billable_override_reason: str | None = None,
     require_override_reason: bool = True,
+    project: str | None = None,
 ):
-    default = get_task_project_default_is_billable(task)
+    if task:
+        default = get_task_project_default_is_billable(task)
+    else:
+        default = get_project_default_is_billable(project) if project else 0
 
     if is_billable is None:
         return default, None, default

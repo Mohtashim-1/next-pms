@@ -56,12 +56,12 @@ def get_project_description_settings(project: str | None) -> dict:
     }
 
 
-def validate_entry_description(task: str, project: str | None, description: str | None):
-    settings = get_project_description_settings(project)
-    if settings["required"] and not is_meaningful_description(description):
-        task_label = task or _("Unknown task")
+def validate_entry_description(task: str | None, project: str | None, description: str | None):
+    # Remarks / description are always required for time entries.
+    if not is_meaningful_description(description):
+        task_label = task or project or _("this entry")
         throw(
-            _("Description is required for project entries. Please add a description for task {0}.").format(task_label),
+            _("Remarks are required. Please add remarks for {0}.").format(task_label),
             frappe.MandatoryError,
         )
 
@@ -69,7 +69,8 @@ def validate_entry_description(task: str, project: str | None, description: str 
 def enrich_log_description_fields(log: dict, project: str | None = None):
     project = project or log.get("project")
     settings = get_project_description_settings(project)
-    log["description_required"] = settings["required"]
+    # Always mark description required in UI; project flag still controls approval display.
+    log["description_required"] = True
     log["show_description_in_approval"] = settings["show_in_approval"]
     log["include_description_on_invoice"] = settings["include_on_invoice"]
     log["description"] = strip_description_content(log.get("description"))

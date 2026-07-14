@@ -313,16 +313,24 @@ export function TimesheetGridDialog({
           hours,
           employee: row.employee || employee,
           task: row.task,
-          description: row.remarks || row.type || "-",
+          project: row.project,
+          description: row.remarks,
           remarks: row.remarks,
         };
       })
-      .filter((row) => row.task && row.date && (row.hours > 0 || (row.from_time && row.to_time)));
+      .filter(
+        (row) =>
+          row.date &&
+          row.type &&
+          (row.remarks || "").trim() &&
+          (row.task || row.project) &&
+          (row.hours > 0 || (row.from_time && row.to_time))
+      );
 
     if (payload.length === 0) {
       toast({
         variant: "destructive",
-        description: "Add at least one row with date, task, and from/to time.",
+        description: "Add at least one row with date, work type, remarks, project/task, and time.",
       });
       return;
     }

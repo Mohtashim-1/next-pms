@@ -59,18 +59,20 @@ def _get_running_timer_user_key(user: str | None = None):
     return f"{EMP_TIMESHEET}::running_timer_user::{user or frappe.session.user}"
 
 
-def _get_open_timesheet(employee: str, date, project: str):
-    parent = frappe.db.get_value(
-        "Timesheet",
-        {
-            "employee": employee,
-            "start_date": [">=", getdate(date)],
-            "end_date": ["<=", getdate(date)],
-            "parent_project": project,
-            "docstatus": ["!=", 2],
-        },
-        "name",
-    )
+def _get_open_timesheet(employee: str, date, project: str | None = None):
+    filters = {
+        "employee": employee,
+        "start_date": [">=", getdate(date)],
+        "end_date": ["<=", getdate(date)],
+        "docstatus": ["!=", 2],
+    }
+    if project:
+        filters["parent_project"] = project
+        parent = frappe.db.get_value("Timesheet", filters, "name")
+    else:
+        rows = frappe.get_all("Timesheet", filters=filters, fields=["name", "parent_project"], limit_page_length=20)
+        parent = next((row.name for row in rows if not row.parent_project), None)
+
     if parent:
         return frappe.get_doc("Timesheet", parent)
 
@@ -104,7 +106,7 @@ def _normalize_invalid_duration_logs(timesheet, date):
 
 def _append_time_log(
     employee: str,
-    task: str,
+    task: str | None,
     description: str,
     from_time,
     to_time,
@@ -114,20 +116,31 @@ def _append_time_log(
     require_override_reason: bool = False,
     activity_type: str | None = None,
     force_new: bool = False,
+    project: str | None = None,
 ):
-    project = frappe.get_value("Task", task, "project")
+    from next_pms.timesheet.utils.settings import is_project_required_on_timesheet
+
+    task = (task or "").strip() or None
+    project = (project or "").strip() or None
+    if task:
+        project = frappe.get_value("Task", task, "project") or project
+    if not project and is_project_required_on_timesheet():
+        throw(_("Project is required when no task is selected."), frappe.MandatoryError)
+
     resolved_billable, override_reason, _default = resolve_entry_billable(
         task,
         is_billable,
         billable_override_reason,
         require_override_reason=require_override_reason,
+        project=project,
     )
     timesheet = _get_open_timesheet(employee, getdate(from_time), project)
-    timesheet.update({"parent_project": project})
+    if project:
+        timesheet.update({"parent_project": project})
     _normalize_invalid_duration_logs(timesheet, from_time)
     input_mode = get_input_mode_from_description(description)
     existing_log = None
-    if not force_new:
+    if not force_new and task:
         existing_log = next(
             (
                 log
@@ -226,17 +239,17 @@ def _get_timesheet_submission_summary(employee: str, start_date: str):
                 task_names.add(log.task)
             if log.project:
                 project_names.add(log.project)
-            if not log.task:
-                violations.append(_("Time entry {0} is missing a task.").format(log.name))
-            if not log.project:
+            if not log.activity_type:
+                violations.append(_("Time entry {0} is missing a work type.").format(log.name))
+            from next_pms.timesheet.utils.settings import is_project_required_on_timesheet
+
+            if is_project_required_on_timesheet() and not log.project:
                 violations.append(_("Time entry {0} is missing a project.").format(log.name))
-            description_settings = get_project_description_settings(log.project)
-            if description_settings["required"] and not is_meaningful_description(log.description):
+            if not is_meaningful_description(log.description):
                 violations.append(
-                    _("Time entry {0} requires a description for project {1}.").format(
-                        log.name, log.project or _("Unknown")
-                    )
+                    _("Time entry {0} requires remarks / description.").format(log.name)
                 )
+            description_settings = get_project_description_settings(log.project)
             if description_settings["show_in_approval"] and is_meaningful_description(log.description):
                 task_subject = frappe.db.get_value("Task", log.task, "subject") if log.task else ""
                 project_name = frappe.db.get_value("Project", log.project, "project_name") if log.project else ""
@@ -575,7 +588,7 @@ def get_timesheet_data(
 def save(
     date: str,
     description: str,
-    task: str,
+    task: str = None,
     hours: float = 0,
     employee: str = None,
     from_time: str = None,
@@ -585,14 +598,24 @@ def save(
     billable_override_reason: str | None = None,
     activity_type: str | None = None,
     force_new: bool = False,
+    project: str | None = None,
 ):
     """create time entry in Timesheet Detail child table."""
+    from next_pms.timesheet.utils.description import is_meaningful_description
+    from next_pms.timesheet.utils.settings import is_project_required_on_timesheet
+
     if not employee:
         employee = get_employee_from_user()
-    if not task:
-        throw(_("Task is mandatory for creating time entry."), frappe.MandatoryError)
+    task = (task or "").strip() or None
+    project = (project or "").strip() or None
+    activity_type = (activity_type or "").strip() or None
+    if not activity_type:
+        throw(_("Work Type is mandatory for creating time entry."), frappe.MandatoryError)
+    if not is_meaningful_description(description):
+        throw(_("Remarks are required for creating time entry."), frappe.MandatoryError)
+    if is_project_required_on_timesheet() and not task and not project:
+        throw(_("Select a project (or a task) for the time entry."), frappe.MandatoryError)
     _assert_week_editable(employee, date)
-    description = description or "-"
 
     if input_mode == "duration":
         resolved_from, resolved_to, resolved_hours = _resolve_duration_time_slot(
@@ -618,6 +641,7 @@ def save(
         require_override_reason=is_billable is not None,
         activity_type=activity_type,
         force_new=force_new,
+        project=project,
     )
     timesheet.save(ignore_permissions=ignore_permissions)
     return _("New Timesheet created successfully.")
@@ -643,29 +667,54 @@ def get_running_timer(employee: str = None):
 
 @frappe.whitelist()
 @error_logger
-def start_timer(task: str, description: str = "", employee: str = None):
+def start_timer(
+    task: str = None,
+    description: str = "",
+    employee: str = None,
+    activity_type: str = None,
+    project: str = None,
+):
     """Start one running timer for the employee."""
+    from next_pms.timesheet.utils.description import is_meaningful_description
+    from next_pms.timesheet.utils.settings import is_project_required_on_timesheet
+
     if not employee:
         employee = get_employee_from_user()
-    if not task:
-        throw(_("Task is mandatory for starting timer."), frappe.MandatoryError)
+    task = (task or "").strip() or None
+    project = (project or "").strip() or None
+    activity_type = (activity_type or "").strip() or None
+    if not activity_type:
+        throw(_("Work Type is mandatory for starting timer."), frappe.MandatoryError)
+    if not is_meaningful_description(description):
+        throw(_("Remarks are required for starting timer."), frappe.MandatoryError)
+    if task:
+        project = frappe.get_value("Task", task, "project") or project
+    if is_project_required_on_timesheet() and not project:
+        throw(_("Select a project (or a task) before starting the timer."), frappe.MandatoryError)
     _assert_week_editable(employee, nowdate())
 
     timer_key = _get_running_timer_key(employee)
     if frappe.cache().get_value(timer_key):
         throw(_("A timer is already running. Stop it before starting another one."))
 
-    task_details = frappe.get_value("Task", task, ["subject", "project", "project.project_name"], as_dict=True)
-    if not task_details:
-        throw(_("Task does not exist."), frappe.DoesNotExistError)
+    task_subject = ""
+    project_name = frappe.db.get_value("Project", project, "project_name") if project else ""
+    if task:
+        task_details = frappe.get_value("Task", task, ["subject", "project", "project.project_name"], as_dict=True)
+        if not task_details:
+            throw(_("Task does not exist."), frappe.DoesNotExistError)
+        task_subject = task_details.subject
+        project = task_details.project or project
+        project_name = task_details.project_name or project_name
 
     timer = {
         "employee": employee,
         "user": frappe.session.user,
         "task": task,
-        "task_subject": task_details.subject,
-        "project": task_details.project,
-        "project_name": task_details.project_name,
+        "task_subject": task_subject,
+        "project": project,
+        "project_name": project_name,
+        "activity_type": activity_type,
         "description": description or "",
         "started_at": now_datetime(),
     }
@@ -706,6 +755,9 @@ def stop_timer(employee: str = None):
         from_time=started_at,
         to_time=stopped_at,
         hours=hours,
+        activity_type=timer.get("activity_type"),
+        project=timer.get("project"),
+        force_new=True,
     )
     timesheet.flags.keep_actual_times = True
     timesheet.save(ignore_permissions=ignore_permissions)
@@ -1370,12 +1422,14 @@ def bulk_save_grid(timesheet_entries: list):
     for idx, entry in enumerate(timesheet_entries, start=1):
         if isinstance(entry, str):
             entry = frappe.parse_json(entry)
-        if not entry or not entry.get("task") or not entry.get("date"):
+        if not entry or not entry.get("date"):
+            continue
+        if not entry.get("task") and not entry.get("project"):
             continue
         try:
             save(
                 date=entry.get("date"),
-                description=entry.get("description") or entry.get("remarks") or "-",
+                description=entry.get("description") or entry.get("remarks") or "",
                 task=entry.get("task"),
                 hours=entry.get("hours", 0),
                 employee=entry.get("employee"),
@@ -1386,6 +1440,7 @@ def bulk_save_grid(timesheet_entries: list):
                 is_billable=entry.get("is_billable"),
                 billable_override_reason=entry.get("billable_override_reason"),
                 force_new=True,
+                project=entry.get("project"),
             )
             created += 1
             if entry.get("date"):

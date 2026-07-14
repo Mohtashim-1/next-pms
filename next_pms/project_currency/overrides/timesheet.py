@@ -42,9 +42,53 @@ class TimesheetOverwrite(Timesheet):
             if flt(data.hours) == 0.0:
                 frappe.throw(frappe._("Row {0}: Hours value must be greater than zero.").format(data.idx))
 
+            if not data.activity_type:
+                frappe.throw(frappe._("Row {0}: Work Type is mandatory.").format(data.idx))
+
+            from next_pms.timesheet.utils.description import is_meaningful_description
+
+            if not is_meaningful_description(data.description):
+                frappe.throw(frappe._("Row {0}: Remarks are required.").format(data.idx))
+
     def update_cost(self):
+        from next_pms.timesheet.utils.settings import is_project_required_on_timesheet
+
         if not self.parent_project:
-            return frappe.throw(frappe._("The timesheet does not include the project. Project is mandatory."))
+            if is_project_required_on_timesheet():
+                return frappe.throw(frappe._("The timesheet does not include the project. Project is mandatory."))
+
+            # Project optional — derive company/currency from employee when possible and skip project billing.
+            if self.employee and not self.company:
+                self.company = frappe.db.get_value("Employee", self.employee, "company")
+            if self.company:
+                self.currency = get_company_currency(self.company)
+                self.exchange_rate = get_exchange_rate(
+                    self.currency,
+                    frappe.defaults.get_global_default("currency"),
+                    self.start_date,
+                )
+            for data in self.time_logs:
+                costing_hours = data.billing_hours or data.hours or 0
+                costing_rate = 0
+                base_costing_rate = 0
+                try:
+                    if self.company:
+                        costing_rate = self.get_activity_costing_rate(currency=self.currency) or 0
+                        base_costing_rate = (
+                            self.get_activity_costing_rate(currency=frappe.defaults.get_global_default("currency")) or 0
+                        )
+                except Exception:
+                    costing_rate = 0
+                    base_costing_rate = 0
+                data.costing_rate = costing_rate or 0
+                data.costing_amount = (data.costing_rate or 0) * costing_hours
+                data.base_costing_rate = base_costing_rate or 0
+                data.base_costing_amount = (data.base_costing_rate or 0) * costing_hours
+                data.billing_rate = 0
+                data.billing_amount = 0
+                data.base_billing_rate = 0
+                data.base_billing_amount = 0
+            return
 
         self.customer = frappe.db.get_value("Project", self.parent_project, "customer")
 
@@ -113,8 +157,13 @@ class TimesheetOverwrite(Timesheet):
                 data.base_billing_amount = 0
 
     def get_activity_costing_rate(self, currency=None):
+        from next_pms.timesheet.utils.settings import is_project_required_on_timesheet
+
         if not self.parent_project:
-            return frappe.throw(frappe._("Project is not defined in Timesheet."))
+            if is_project_required_on_timesheet():
+                return frappe.throw(frappe._("Project is not defined in Timesheet."))
+            # Without a project, still allow employee-based costing rate.
+            pass
 
         employee_salary, employee_currency = 0, ""
         #  DO NOT REMOVE
@@ -149,8 +198,12 @@ class TimesheetOverwrite(Timesheet):
         return get_employee_costing_rate(self.employee, employee_currency, employee_salary, currency, self.start_date)
 
     def get_activity_billing_rate(self, currency=None, valid_from_date=None, custom_billing_type=None):
+        from next_pms.timesheet.utils.settings import is_project_required_on_timesheet
+
         if not self.parent_project:
-            return frappe.throw(frappe._("Project is not defined in Timesheet."))
+            if is_project_required_on_timesheet():
+                return frappe.throw(frappe._("Project is not defined in Timesheet."))
+            return 0
 
         if custom_billing_type != "Time and Material":
             custom_default_hourly_billing_rate = frappe.db.get_value(

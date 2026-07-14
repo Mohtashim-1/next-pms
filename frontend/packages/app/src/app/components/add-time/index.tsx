@@ -100,6 +100,7 @@ const AddTime = ({
     resolver: zodResolver(TimesheetDraftSchema),
     defaultValues: {
       task: task,
+      project: project || "",
       hours: "",
       description: "",
       date: initialDate,
@@ -117,7 +118,7 @@ const AddTime = ({
   const inputMode = form.watch("input_mode");
   const selectedTaskName = form.watch("task");
   const selectedTask = tasks.find((item) => item.name === selectedTaskName);
-  const descriptionRequired = Boolean(selectedTask?.custom_require_timesheet_description);
+  const descriptionRequired = true;
   const closeDialog = useCallback(() => {
     form.reset();
     onOpenChange(form.getValues());
@@ -190,19 +191,30 @@ const AddTime = ({
         tasks.find((item: TaskData) => {
           if (item.name === value) {
             setSelectedProject([item.project]);
+            form.setValue("project", item.project || "", {
+              shouldValidate: true,
+              shouldDirty: true,
+              shouldTouch: true,
+            });
           }
         });
       }
     },
-    [selectedProject, tasks]
+    [form, selectedProject, tasks]
   );
   const handleProjectChange = (value: string | string[]) => {
+    const projectName = value instanceof Array ? value[0] : value;
     if (value instanceof Array) {
       setSelectedProject(value);
     } else {
       setSelectedProject([value]);
     }
     setSearchTask("");
+    form.setValue("project", projectName || "", {
+      shouldValidate: true,
+      shouldDirty: true,
+      shouldTouch: true,
+    });
     form.setValue("task", "", {
       shouldValidate: true,
       shouldDirty: true,
@@ -215,23 +227,27 @@ const AddTime = ({
   };
 
   const buildSavePayload = (data: z.infer<typeof TimesheetDraftSchema>) => {
+    const projectValue = data.project || selectedProject[0] || "";
     const base =
       data.input_mode === "range"
         ? {
             ...data,
-            description: data.description || "-",
+            task: data.task || "",
+            project: projectValue,
+            description: data.description,
             hours: 0,
             from_time: data.from_time,
             to_time: data.to_time,
+            activity_type: data.activity_type,
           }
         : {
             ...data,
-            description: data.description || "-",
+            task: data.task || "",
+            project: projectValue,
+            description: data.description,
+            activity_type: data.activity_type,
           };
 
-    if (data.activity_type) {
-      return { ...base, activity_type: data.activity_type };
-    }
     return base;
   };
 
@@ -240,7 +256,10 @@ const AddTime = ({
   };
 
   const getSaveBlockMessage = (data: z.infer<typeof TimesheetDraftSchema>): string | null => {
-    if (!data.task) return "Please select a task.";
+    if (!(data.activity_type || "").trim()) return "Please select a work type.";
+    if (!(data.description || "").trim() || ["-", "—", "–"].includes((data.description || "").trim())) {
+      return "Please enter remarks.";
+    }
     if (data.input_mode === "range") {
       if (!data.from_time) return "Please enter a start time.";
       if (!data.to_time) return "Please enter an end time.";
@@ -265,7 +284,7 @@ const AddTime = ({
       revalidateOnFocus: false,
     }
   );
-  const activeTimer = runningTimer?.message?.task ? runningTimer.message : null;
+  const activeTimer = runningTimer?.message?.started_at ? runningTimer.message : null;
 
   const persistDraft = useCallback(
     async (data: z.infer<typeof TimesheetDraftSchema>, closeOnSuccess = false) => {
@@ -435,10 +454,18 @@ const AddTime = ({
   };
   const handleStartTimer = () => {
     const values = form.getValues();
-    if (!values.task) {
+    const projectValue = values.project || selectedProject[0] || "";
+    if (!(values.activity_type || "").trim()) {
       toast({
         variant: "destructive",
-        description: "Please select a task before starting the timer.",
+        description: "Please select a work type before starting the timer.",
+      });
+      return;
+    }
+    if (!(values.description || "").trim() || ["-", "—", "–"].includes((values.description || "").trim())) {
+      toast({
+        variant: "destructive",
+        description: "Please enter remarks before starting the timer.",
       });
       return;
     }
@@ -446,7 +473,9 @@ const AddTime = ({
     setTimerSubmitting(true);
     startTimer({
       employee: selectedEmployee,
-      task: values.task,
+      task: values.task || undefined,
+      project: projectValue || undefined,
+      activity_type: values.activity_type,
       description: values.description,
     })
       .then(() => {
@@ -676,7 +705,7 @@ const AddTime = ({
               </div>
               <div className="grid gap-x-4 grid-cols-2">
                 <FormItem className="space-y-1">
-                  <FormLabel>Projects</FormLabel>
+                  <FormLabel>Projects <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
                   <ComboBox
                     label="Search Projects"
                     showSelected
@@ -697,7 +726,7 @@ const AddTime = ({
                   name="task"
                   render={() => (
                     <FormItem className="space-y-1">
-                      <FormLabel>Tasks</FormLabel>
+                      <FormLabel>Tasks <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
                       <FormControl>
                         <ComboBox
                           label="Search Task"
@@ -730,7 +759,9 @@ const AddTime = ({
                 name="activity_type"
                 render={({ field }) => (
                   <FormItem className="space-y-1">
-                    <FormLabel className="text-sm">Work type</FormLabel>
+                    <FormLabel className="text-sm">
+                      Work type <span className="text-destructive">*</span>
+                    </FormLabel>
                     <Select value={field.value || undefined} onValueChange={field.onChange}>
                       <FormControl>
                         <SelectTrigger className="h-9">
@@ -762,7 +793,7 @@ const AddTime = ({
                 control={form.control}
                 name="description"
                 required={descriptionRequired}
-                label="Work description"
+                label="Remarks"
               />
               <DialogFooter className="sm:justify-start w-full pt-3">
                 <div className="flex flex-wrap gap-3 w-full">
