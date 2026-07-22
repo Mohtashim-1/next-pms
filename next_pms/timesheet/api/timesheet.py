@@ -151,6 +151,62 @@ def _append_time_log(
             ),
             None,
         )
+    elif not force_new and activity_type:
+        # Activity-only logs (Admin/Support/…) — merge on autosave / re-save so we don't
+        # create duplicates when the Add Time dialog watches the form and saves again.
+        from frappe.utils import get_datetime, now_datetime, time_diff_in_seconds
+        from next_pms.timesheet.utils.time_log import strip_input_mode_marker
+
+        activity_type = activity_type.strip()
+        day = getdate(from_time)
+        desc_plain = (strip_input_mode_marker(description) or "").strip()
+        candidates = [
+            log
+            for log in timesheet.time_logs
+            if not log.task
+            and (log.activity_type or "").strip() == activity_type
+            and getdate(log.from_time) == day
+        ]
+
+        def _log_sort_key(log):
+            return get_datetime(log.creation) if log.creation else get_datetime(log.from_time)
+
+        existing_log = next(
+            (
+                log
+                for log in candidates
+                if get_input_mode_from_description(log.description) == input_mode
+            ),
+            None,
+        )
+        if not existing_log and desc_plain:
+            existing_log = next(
+                (
+                    log
+                    for log in candidates
+                    if (strip_input_mode_marker(log.description) or "").strip() == desc_plain
+                ),
+                None,
+            )
+        if not existing_log and desc_plain:
+            # Remarks still being typed ("Hand" → "Handling tickets…")
+            for log in sorted(candidates, key=_log_sort_key, reverse=True):
+                prev = (strip_input_mode_marker(log.description) or "").strip()
+                if prev and (desc_plain.startswith(prev) or prev.startswith(desc_plain)):
+                    existing_log = log
+                    break
+        if not existing_log and candidates:
+            # Same Add Time session: update most recent row created in the last 30 minutes
+            now = now_datetime()
+            recent = []
+            for log in candidates:
+                created = get_datetime(log.creation) if log.creation else None
+                if created and abs(time_diff_in_seconds(now, created)) <= 30 * 60:
+                    recent.append(log)
+            if recent:
+                existing_log = sorted(recent, key=_log_sort_key, reverse=True)[0]
+            elif len(candidates) == 1:
+                existing_log = candidates[0]
 
     if existing_log:
         existing_log.hours = hours
