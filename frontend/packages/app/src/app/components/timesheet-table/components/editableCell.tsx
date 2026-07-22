@@ -342,40 +342,32 @@ export const EditableCell = ({
 
   const handleCellClick = () => {
     if (isDisabled) return;
-    debugInlineEdit("cell clicked", {
+    debugInlineEdit("cell clicked → open edit dialog", {
       date,
       gridRow,
       gridCol,
       taskName,
+      activityType,
+      displayHours,
       hasMultipleEntries,
-      primaryEntryInputMode: primaryEntry?.input_mode,
-      fromTime: primaryEntry?.from_time,
-      toTime: primaryEntry?.to_time,
       data,
     });
     onFocusCell(gridRow, gridCol);
-    if (
-      (!taskName && !activityType) ||
-      hasMultipleEntries ||
-      (primaryEntry?.input_mode !== "duration" && isRangeEntry(primaryEntry?.from_time, primaryEntry?.to_time))
-    ) {
-      openDetailDialog();
-      return;
-    }
-    onStartEditing(gridRow, gridCol);
+    onStopEditing(gridRow, gridCol);
+    openDetailDialog();
   };
 
   const handleOpenFullEditor = (event: React.MouseEvent) => {
     event.stopPropagation();
-    if (isDisabled || displayHours <= 0) return;
+    if (isDisabled) return;
     debugInlineEdit("open full editor", { date, gridRow, gridCol, displayHours });
     onStopEditing(gridRow, gridCol);
     openDetailDialog();
   };
 
   const handleCellDoubleClick = () => {
-    if (isDisabled || displayHours <= 0) return;
-    debugInlineEdit("cell double-clicked", { date, gridRow, gridCol, displayHours });
+    if (isDisabled) return;
+    debugInlineEdit("cell double-clicked → open edit dialog", { date, gridRow, gridCol, displayHours });
     onStopEditing(gridRow, gridCol);
     openDetailDialog();
   };
@@ -405,15 +397,15 @@ export const EditableCell = ({
         onMoveFocus?.(0, event.shiftKey ? -1 : 1);
         break;
       case "Enter":
+      case " ":
         event.preventDefault();
         handleCellClick();
         break;
       default:
-        if (/^[0-9.:]$/.test(event.key) && (taskName || activityType) && !hasMultipleEntries) {
+        // Typing opens the edit dialog (same as cell click) instead of tiny inline input
+        if (/^[0-9.:]$/.test(event.key)) {
           event.preventDefault();
-          debugInlineEdit("typed to start editing", { date, gridRow, gridCol, key: event.key });
-          onStartEditing(gridRow, gridCol);
-          setDraftHours(event.key);
+          handleCellClick();
         }
         break;
     }

@@ -300,7 +300,7 @@ export const TimesheetTable = ({
       </Table>
       {gridBindings.enableInlineEdit && (
         <Typography variant="small" className="text-muted-foreground px-1 py-2">
-          Draft auto-saves as you edit · Arrow keys move between cells · Enter or type a digit to edit · Tab / Shift+Tab next cell · Esc cancel
+          Draft auto-saves as you edit · Click a cell to edit time · Arrow keys move focus · Esc cancel
         </Typography>
       )}
       </div>
