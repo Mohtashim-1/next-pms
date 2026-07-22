@@ -46,7 +46,7 @@ function sumEntryHours(rows: z.infer<typeof TimesheetDraftUpdateSchema>["data"],
   }, 0);
 }
 
-export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps) => {
+export const EditTime = ({ employee, date, task, activity_type = "", open, onClose }: EditTimeProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const loadedDialogKeyRef = useRef<string | null>(null);
 
@@ -73,13 +73,18 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
   const { toast } = useToast();
   const { call: updateTimesheet } = useFrappePostCall("next_pms.timesheet.api.timesheet.bulk_update_timesheet_detail");
   const { call: deleteTimesheet } = useFrappePostCall("next_pms.timesheet.api.timesheet.delete");
+  const resolvedActivityType = activity_type || (task?.startsWith("activity::") ? task.replace(/^activity::/, "") : "");
+  const resolvedTask = task?.startsWith("activity::") ? "" : task || "";
   const { data, isLoading, mutate } = useFrappeGetCall("next_pms.timesheet.api.timesheet.get_timesheet_details", {
     employee: employee,
     date: date,
-    task: task,
+    task: resolvedTask,
+    activity_type: resolvedActivityType || undefined,
   });
   const projectDefaultIsBillable = data?.message?.project_default_is_billable;
   const descriptionRequired = Boolean(data?.message?.description_required);
+  const entryLabel = data?.message?.task || resolvedActivityType || "Time entry";
+  const isActivityRow = Boolean(data?.message?.is_activity_row || resolvedActivityType);
 
   const updatedData = useMemo(() => {
     if (!data) return [];
@@ -94,10 +99,12 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
         is_billable: isBillableValue(item.is_billable),
         project_default_is_billable: data.message.project_default_is_billable,
         billable_override_reason: item.billable_override_reason || "",
+        activity_type: item.activity_type || resolvedActivityType || data.message.activity_type || "",
+        task: item.task || resolvedTask || "",
       };
     });
     return updatedData;
-  }, [data]);
+  }, [data, resolvedActivityType, resolvedTask]);
 
   useEffect(() => {
     if (!open) {
@@ -106,7 +113,7 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
     }
     if (!data) return;
 
-    const dialogKey = `${employee}-${date}-${task}`;
+    const dialogKey = `${employee}-${date}-${resolvedTask}-${resolvedActivityType}`;
     if (loadedDialogKeyRef.current === dialogKey) return;
 
     loadedDialogKeyRef.current = dialogKey;
@@ -116,7 +123,7 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
       setInputMode("range");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, data, employee, date, task]);
+  }, [open, data, employee, date, resolvedTask, resolvedActivityType]);
 
   const handleInputModeChange = (mode: TimesheetInputMode) => {
     setInputMode(mode);
@@ -133,11 +140,12 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
       description: "",
       name: "",
       parent: parent,
-      task: task,
+      task: resolvedTask,
       date: date,
       input_mode: inputMode,
       from_time: "",
       to_time: "",
+      activity_type: resolvedActivityType || data?.message?.activity_type || "",
       is_billable: isBillableValue(projectDefaultIsBillable),
       project_default_is_billable: projectDefaultIsBillable,
       billable_override_reason: "",
@@ -235,11 +243,14 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
                 <div className="min-w-0">
                   <DialogTitle className="text-xl font-semibold tracking-tight">Edit time</DialogTitle>
                   <Typography
-                    title={data?.message?.task}
+                    title={entryLabel}
                     variant="p"
                     className="mt-1 truncate text-base font-medium"
                   >
-                    {data?.message?.task}
+                    {entryLabel}
+                    {isActivityRow ? (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">Work type</span>
+                    ) : null}
                   </Typography>
                 </div>
               </div>
@@ -285,7 +296,9 @@ export const EditTime = ({ employee, date, task, open, onClose }: EditTimeProps)
                     No time logged yet
                   </Typography>
                   <Typography variant="small" className="mt-1 max-w-xs text-muted-foreground">
-                    Add your first entry for this task.
+                    {isActivityRow
+                      ? "Add your first entry for this work type."
+                      : "Add your first entry for this task."}
                   </Typography>
                   <Button type="button" variant="outline" size="sm" className="mt-4" onClick={addEmptyFormRow}>
                     <Plus className="h-4 w-4" />

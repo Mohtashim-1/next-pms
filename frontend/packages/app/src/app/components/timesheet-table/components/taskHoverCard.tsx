@@ -47,6 +47,7 @@ export const TaskHoverCard = ({
 
   const handleLike = (e: React.MouseEvent<SVGSVGElement>) => {
     e.stopPropagation();
+    if (taskData.is_activity_row) return;
     let add: addAction = "Yes";
     if (taskLiked) {
       add = "No";
@@ -70,6 +71,25 @@ export const TaskHoverCard = ({
         });
       });
   };
+
+  if (taskData.is_activity_row) {
+    return (
+      <div className="flex w-full gap-2 items-center">
+        <div className="flex w-full truncate overflow-hidden flex-col">
+          <Typography variant="p" className="truncate overflow-hidden flex items-center gap-3">
+            <span className="truncate">{taskData.subject}</span>
+            <span className="text-xs text-muted-foreground shrink-0">Work type</span>
+          </Typography>
+          {taskData.project_name ? (
+            <Typography variant="small" className="text-muted-foreground whitespace-nowrap text-ellipsis overflow-hidden">
+              {taskData.project_name}
+            </Typography>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <HoverCard openDelay={1000} closeDelay={0}>
       <div className="flex w-full gap-2">

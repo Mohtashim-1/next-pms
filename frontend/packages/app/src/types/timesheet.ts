@@ -18,6 +18,13 @@ export interface TaskDataProps {
   actual_time: number;
   status: string;
   data: Array<TaskDataItemProps>;
+  /** True when row is Activity Type only (Admin/Dev/…) with no Task */
+  is_activity_row?: boolean;
+  activity_type?: string;
+  _liked_by?: string | null;
+  description_required?: boolean;
+  show_description_in_approval?: boolean;
+  include_description_on_invoice?: boolean;
 }
 
 export interface TaskDataItemProps {
@@ -48,6 +55,7 @@ export interface TaskDataItemProps {
   subject?: string;
   project?: string;
   project_name?: string | null;
+  activity_type?: string;
 }
 
 export interface LeaveProps {
@@ -107,6 +115,8 @@ export interface NewTimesheetProps {
   description: string;
   hours: number;
   employee: string;
+  project?: string;
+  activity_type?: string;
 }
 
 export type RunningTimer = {

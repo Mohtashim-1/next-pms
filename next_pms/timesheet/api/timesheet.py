@@ -968,14 +968,19 @@ def update_timesheet_detail(
     from_time: str | None = None,
     to_time: str | None = None,
     input_mode: str = "duration",
+    activity_type: str | None = None,
 ):
     parent_doc = frappe.get_doc("Timesheet", parent)
     _assert_week_editable(parent_doc.employee, parent_doc.start_date)
     ignore_permissions = employee_has_higher_access(parent_doc.employee, ptype="write")
     logs_to_remove = []
     new_logs = []
-    task_project = frappe.get_value("Task", task, "project")
+    task = (task or "").strip() or None
+    activity_type = (activity_type or "").strip() or None
+    task_project = frappe.get_value("Task", task, "project") if task else None
     existing_log = next((log for log in parent_doc.time_logs if name and log.name == name), None)
+    if not activity_type and existing_log:
+        activity_type = (existing_log.activity_type or "").strip() or None
     if input_mode == "duration":
         resolved_from, resolved_to, resolved_hours = _resolve_duration_time_slot(
             employee=parent_doc.employee,
@@ -1005,6 +1010,8 @@ def update_timesheet_detail(
             "to_time": str(resolved_to),
             "input_mode": input_mode,
         }
+        if activity_type:
+            payload["activity_type"] = activity_type
         if is_billable is not None:
             payload["is_billable"] = is_billable
             payload["billable_override_reason"] = billable_override_reason
@@ -1024,6 +1031,8 @@ def update_timesheet_detail(
         log.task = task
         log.from_time = resolved_from
         log.to_time = resolved_to
+        if activity_type:
+            log.activity_type = activity_type
         if is_billable is not None:
             resolved_billable, override_reason, _default = resolve_entry_billable(
                 task,
@@ -1080,7 +1089,7 @@ def update_timesheet_detail(
 
 
 def get_timesheet(dates: list, employee: str):
-    from next_pms.timesheet.utils.constant import ALLOWED_TIMESHET_DETAIL_FIELDS
+    from next_pms.timesheet.utils.constant import ACTIVITY_ROW_PREFIX, ALLOWED_TIMESHET_DETAIL_FIELDS
 
     """Return the time entry from Timesheet Detail child table based on the list of dates and for the given employee.
     example:
@@ -1101,6 +1110,9 @@ def get_timesheet(dates: list, employee: str):
             },
             ...
         }
+
+    Logs without a Task but with an Activity Type (Admin, Dev, …) are returned under
+    synthetic keys ``activity::<Activity Type>`` so the Next PMS grid can show them.
     """
     data = {}
     total_hours = 0
@@ -1135,49 +1147,136 @@ def get_timesheet(dates: list, employee: str):
             "status",
             "_liked_by",
         ],
-    )
+    ) if task_ids else []
     task_details_dict = {task["name"]: task for task in task_details}
-    for log in timesheet_logs:
+
+    def _append_log_to_row(row_key: str, row_meta: dict, log, project_for_desc: str | None, task_for_billable: str | None):
+        nonlocal total_hours
         total_hours += log.hours
-        if not log.task:
-            continue
-        task = task_details_dict.get(log.task)
-        if not task:
-            continue
-        task_name = task["name"]
-        project_default = get_project_default_is_billable(task["project"])
-        description_settings = get_project_description_settings(task["project"])
-        if task_name not in data:
-            data[task_name] = {
-                "name": task_name,
-                "subject": task["subject"],
-                "data": [],
-                "is_billable": project_default,
-                "project_default_is_billable": project_default,
-                "description_required": description_settings["required"],
-                "show_description_in_approval": description_settings["show_in_approval"],
-                "include_description_on_invoice": description_settings["include_on_invoice"],
-                "project_name": task["project_name"],
-                "project": task["project"],
-                "expected_time": task["expected_time"],
-                "actual_time": task["actual_time"],
-                "status": task["status"],
-                "_liked_by": task["_liked_by"],
-            }
+        if row_key not in data:
+            data[row_key] = {**row_meta, "data": []}
 
         log_data = {field: log.get(field) for field in ALLOWED_TIMESHET_DETAIL_FIELDS}
         marked_input_mode = get_input_mode_from_description(log.description)
         log_data["input_mode"] = marked_input_mode or "range"
         log_data["description"] = strip_input_mode_marker(log.description)
-        enrich_log_billable_fields(log_data, task_name)
-        enrich_log_description_fields(log_data, task.get("project"))
+        # Keep task empty for activity-only rows so the UI does not treat the synthetic key as a Task ID
+        if row_meta.get("is_activity_row"):
+            log_data["task"] = ""
+            log_data["activity_type"] = row_meta.get("activity_type") or log.get("activity_type")
+        enrich_log_billable_fields(log_data, task_for_billable)
+        enrich_log_description_fields(log_data, project_for_desc)
         from next_pms.timesheet.utils.rejection import enrich_entry_rejection_fields
 
         enrich_entry_rejection_fields(log_data)
         from next_pms.timesheet.utils.period_lock import enrich_entry_period_lock_fields
 
         enrich_entry_period_lock_fields(log_data, locks)
-        data[task_name]["data"].append(log_data)
+        data[row_key]["data"].append(log_data)
+
+    for log in timesheet_logs:
+        if log.task:
+            task = task_details_dict.get(log.task)
+            if not task:
+                # Orphan task reference — still count hours under activity if present
+                activity = (log.activity_type or "").strip()
+                if activity:
+                    row_key = f"{ACTIVITY_ROW_PREFIX}{activity}"
+                    _append_log_to_row(
+                        row_key,
+                        {
+                            "name": row_key,
+                            "subject": activity,
+                            "data": [],
+                            "is_billable": 0,
+                            "project_default_is_billable": 0,
+                            "description_required": False,
+                            "show_description_in_approval": False,
+                            "include_description_on_invoice": False,
+                            "project_name": None,
+                            "project": log.project or "",
+                            "expected_time": 0,
+                            "actual_time": 0,
+                            "status": "Open",
+                            "_liked_by": None,
+                            "is_activity_row": True,
+                            "activity_type": activity,
+                        },
+                        log,
+                        log.project,
+                        None,
+                    )
+                else:
+                    total_hours += log.hours
+                continue
+
+            task_name = task["name"]
+            project_default = get_project_default_is_billable(task["project"])
+            description_settings = get_project_description_settings(task["project"])
+            _append_log_to_row(
+                task_name,
+                {
+                    "name": task_name,
+                    "subject": task["subject"],
+                    "data": [],
+                    "is_billable": project_default,
+                    "project_default_is_billable": project_default,
+                    "description_required": description_settings["required"],
+                    "show_description_in_approval": description_settings["show_in_approval"],
+                    "include_description_on_invoice": description_settings["include_on_invoice"],
+                    "project_name": task["project_name"],
+                    "project": task["project"],
+                    "expected_time": task["expected_time"],
+                    "actual_time": task["actual_time"],
+                    "status": task["status"],
+                    "_liked_by": task["_liked_by"],
+                    "is_activity_row": False,
+                    "activity_type": log.activity_type,
+                },
+                log,
+                task.get("project"),
+                task_name,
+            )
+            continue
+
+        # No task — group by activity type (Admin, Dev, …)
+        activity = (log.activity_type or "").strip()
+        if not activity:
+            total_hours += log.hours
+            continue
+
+        row_key = f"{ACTIVITY_ROW_PREFIX}{activity}"
+        project = log.project or ""
+        project_default = get_project_default_is_billable(project) if project else 0
+        description_settings = get_project_description_settings(project) if project else {
+            "required": False,
+            "show_in_approval": False,
+            "include_on_invoice": False,
+        }
+        _append_log_to_row(
+            row_key,
+            {
+                "name": row_key,
+                "subject": activity,
+                "data": [],
+                "is_billable": project_default,
+                "project_default_is_billable": project_default,
+                "description_required": description_settings["required"],
+                "show_description_in_approval": description_settings["show_in_approval"],
+                "include_description_on_invoice": description_settings["include_on_invoice"],
+                "project_name": frappe.db.get_value("Project", project, "project_name") if project else None,
+                "project": project,
+                "expected_time": 0,
+                "actual_time": 0,
+                "status": "Open",
+                "_liked_by": None,
+                "is_activity_row": True,
+                "activity_type": activity,
+            },
+            log,
+            project or None,
+            None,
+        )
 
     return [data, total_hours]
 
@@ -1253,7 +1352,15 @@ def get_remaining_hour_for_employee(employee: str, date: str):
 
 @frappe.whitelist()
 @validate_current_employee(ptype="read")
-def get_timesheet_details(date: str, task: str, employee: str):
+def get_timesheet_details(date: str, task: str = None, employee: str = None, activity_type: str = None):
+    from next_pms.timesheet.utils.constant import ACTIVITY_ROW_PREFIX
+
+    task = (task or "").strip()
+    activity_type = (activity_type or "").strip() or None
+    if task.startswith(ACTIVITY_ROW_PREFIX):
+        activity_type = task[len(ACTIVITY_ROW_PREFIX) :]
+        task = ""
+
     logs = frappe.get_list(
         "Timesheet",
         fields=[
@@ -1261,6 +1368,8 @@ def get_timesheet_details(date: str, task: str, employee: str):
             "time_logs.hours",
             "time_logs.description",
             "time_logs.task",
+            "time_logs.activity_type",
+            "time_logs.project",
             "time_logs.from_time",
             "time_logs.to_time",
             "time_logs.from_time as date",
@@ -1275,26 +1384,51 @@ def get_timesheet_details(date: str, task: str, employee: str):
         },
         ignore_permissions=employee_has_higher_access(employee, ptype="read"),
     )
-    logs = [log for log in logs if log["task"] == task]
+
+    if task:
+        logs = [log for log in logs if log.get("task") == task]
+        task_project = frappe.get_value("Task", task, ["subject", "project.project_name", "project"], as_dict=True)
+        project_default = get_project_default_is_billable(task_project.project if task_project else None)
+        description_settings = get_project_description_settings(task_project.project if task_project else None)
+        title = task_project.subject if task_project else task
+        project_name = task_project.project_name if task_project else ""
+        project_id = task_project.project if task_project else None
+        is_activity_row = False
+    else:
+        # Activity-only rows (Admin / Dev / …) — no Task on the time log
+        logs = [
+            log
+            for log in logs
+            if not log.get("task")
+            and (log.get("activity_type") or "").strip() == (activity_type or "")
+        ]
+        project_id = next((log.get("project") for log in logs if log.get("project")), None)
+        project_name = frappe.db.get_value("Project", project_id, "project_name") if project_id else ""
+        project_default = get_project_default_is_billable(project_id)
+        description_settings = get_project_description_settings(project_id)
+        title = activity_type or "Work type"
+        is_activity_row = True
+
     for log in logs:
         marked_input_mode = get_input_mode_from_description(log.get("description"))
         log["input_mode"] = marked_input_mode or "range"
         log["description"] = strip_input_mode_marker(log.get("description"))
-    task_project = frappe.get_value("Task", task, ["subject", "project.project_name", "project"], as_dict=True)
-    project_default = get_project_default_is_billable(task_project.project if task_project else None)
-    description_settings = get_project_description_settings(task_project.project if task_project else None)
-    for log in logs:
-        enrich_log_billable_fields(log, task)
-        enrich_log_description_fields(log, task_project.project if task_project else None)
+        enrich_log_billable_fields(log, task or None)
+        enrich_log_description_fields(log, project_id)
         log["billable_override_reason"] = log.pop("custom_billable_override_reason", None)
+        if is_activity_row:
+            log["task"] = ""
+            log["activity_type"] = activity_type
 
     return {
-        "task": task_project.subject if task_project else "",
-        "project": task_project.project_name if task_project else "",
+        "task": title,
+        "project": project_name or "",
         "project_default_is_billable": project_default,
         "description_required": description_settings["required"],
         "show_description_in_approval": description_settings["show_in_approval"],
         "include_description_on_invoice": description_settings["include_on_invoice"],
+        "is_activity_row": is_activity_row,
+        "activity_type": activity_type,
         "data": logs,
     }
 

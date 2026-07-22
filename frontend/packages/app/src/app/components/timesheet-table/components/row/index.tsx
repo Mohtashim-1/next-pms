@@ -61,7 +61,7 @@ const Row = ({
               <TableCell className={mergeClassNames("cursor-pointer max-w-sm", taskCellClassName)}>
                 <TaskHoverCard
                   name={task}
-                  hideLikeButton={hideLikeButton}
+                  hideLikeButton={hideLikeButton || Boolean(taskData.is_activity_row)}
                   taskData={taskData}
                   setSelectedTask={setSelectedTask}
                   setIsTaskLogDialogBoxOpen={setIsTaskLogDialogBoxOpen}
@@ -90,7 +90,8 @@ const Row = ({
                       description: "",
                       name: "",
                       parent: "",
-                      task: taskData.name,
+                      task: taskData.is_activity_row ? "" : taskData.name,
+                      activity_type: taskData.activity_type || "",
                       from_time: date,
                       input_mode: "duration",
                       docstatus: 0,

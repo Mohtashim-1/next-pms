@@ -20,12 +20,20 @@ export const ROLES = [
   "Timesheet User",
 ];
 
-// broader access for dashboard, home, team, project routes (matches backend)
+// PM / manager routes: Home, Team, Project, Resource Management (NOT Timesheet User)
 export const PM_ACCESS_ROLES = [
-  ...ROLES,
+  "Projects Manager",
+  "Timesheet Manager",
   "Administrator",
   "Projects User",
   "Accounts Manager",
+  "System Manager",
+];
+
+/** Roles that may use Timesheet / Work Entries / Task (self-scoped) */
+export const TIMESHEET_ACCESS_ROLES = [
+  ...PM_ACCESS_ROLES,
+  "Timesheet User",
 ];
 
 export const CustomTime = [

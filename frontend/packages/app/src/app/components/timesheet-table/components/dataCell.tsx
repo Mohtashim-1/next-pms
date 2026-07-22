@@ -81,6 +81,7 @@ export const Cell = ({
       name: "",
       task: data?.[0]?.task ?? "",
       project: data?.[0]?.project ?? "",
+      activity_type: data?.[0]?.activity_type ?? "",
     };
     onCellClick?.(value);
   }, [isDisabled, date, hours, data, onCellClick]);

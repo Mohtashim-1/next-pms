@@ -127,6 +127,8 @@ export const EditableCell = ({
   }, [isEditing]);
 
   const taskName = data?.[0]?.task ?? primaryEntry?.task;
+  const activityType = data?.[0]?.activity_type ?? primaryEntry?.activity_type ?? "";
+  const canPersistWithoutTask = Boolean(activityType) || Boolean(primaryEntry?.name && primaryEntry?.parent);
 
   const openDetailDialog = useCallback(() => {
     if (isDisabled) return;
@@ -146,6 +148,7 @@ export const EditableCell = ({
       name: primaryEntry?.name ?? "",
       task: data?.[0]?.task ?? "",
       project: data?.[0]?.project ?? "",
+      activity_type: data?.[0]?.activity_type ?? "",
     };
     onCellClick?.(value);
   }, [isDisabled, date, displayHours, gridRow, gridCol, taskName, primaryEntry, data, onCellClick]);
@@ -197,7 +200,7 @@ export const EditableCell = ({
         return;
       }
 
-      if (!taskName) {
+      if (!taskName && !canPersistWithoutTask) {
         debugInlineEdit("persist skipped: missing task, opening dialog", {
           date,
           parsedHours,
@@ -215,9 +218,10 @@ export const EditableCell = ({
             parent: primaryEntry.parent,
             hours: parsedHours,
             description: primaryEntry.description || DEFAULT_INLINE_DESCRIPTION,
-            task: taskName,
+            task: taskName || "",
             date,
             input_mode: "duration",
+            activity_type: activityType || undefined,
           };
           debugInlineEdit("update payload", payload);
           const response = await updateTimesheet(payload);
@@ -229,10 +233,11 @@ export const EditableCell = ({
           const payload = {
             date,
             description: DEFAULT_INLINE_DESCRIPTION,
-            task: taskName,
+            task: taskName || "",
             hours: parsedHours,
             employee,
             input_mode: "duration",
+            activity_type: activityType || undefined,
           };
           debugInlineEdit("save payload", payload);
           const response = await saveTimesheet(payload);
@@ -278,6 +283,8 @@ export const EditableCell = ({
       primaryEntry,
       data,
       taskName,
+      activityType,
+      canPersistWithoutTask,
       date,
       employee,
       gridRow,
@@ -348,7 +355,7 @@ export const EditableCell = ({
     });
     onFocusCell(gridRow, gridCol);
     if (
-      !taskName ||
+      (!taskName && !activityType) ||
       hasMultipleEntries ||
       (primaryEntry?.input_mode !== "duration" && isRangeEntry(primaryEntry?.from_time, primaryEntry?.to_time))
     ) {
@@ -402,7 +409,7 @@ export const EditableCell = ({
         handleCellClick();
         break;
       default:
-        if (/^[0-9.:]$/.test(event.key) && taskName && !hasMultipleEntries) {
+        if (/^[0-9.:]$/.test(event.key) && (taskName || activityType) && !hasMultipleEntries) {
           event.preventDefault();
           debugInlineEdit("typed to start editing", { date, gridRow, gridCol, key: event.key });
           onStartEditing(gridRow, gridCol);

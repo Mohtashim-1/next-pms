@@ -21,7 +21,7 @@ import {
   PieChart,
   GanttChartSquareIcon,
   Home,
-  LayoutDashboard,
+  // LayoutDashboard, // Dashboard hidden for now
   Search,
   UserCircle2,
   Users,
@@ -30,11 +30,10 @@ import {
  * Internal dependencies.
  */
 import {
-  DASHBOARD,
+  // DASHBOARD, // Dashboard hidden for now
   HOME,
   PROJECT,
   RESOURCE_MANAGEMENT,
-  ROLES,
   PM_ACCESS_ROLES,
   TASK,
   TEAM,
@@ -78,13 +77,14 @@ const Sidebar = () => {
   );
   const publicViews = viewInfo.views.filter((view: ViewData) => view.public && !view.default);
   const routes: Array<Route> = [
-    {
-      to: DASHBOARD,
-      icon: LayoutDashboard,
-      label: "Dashboard",
-      key: "dashboard",
-      isPmRoute: true,
-    },
+    // Dashboard hidden for now
+    // {
+    //   to: DASHBOARD,
+    //   icon: LayoutDashboard,
+    //   label: "Dashboard",
+    //   key: "dashboard",
+    //   isPmRoute: true,
+    // },
     {
       to: HOME,
       icon: Home,
@@ -148,12 +148,15 @@ const Sidebar = () => {
       isPmRoute: false,
     },
   ];
-  if (!user.roles.includes("Contractor") || user.userName == "Administrator") {
+  if (
+    hasPmRole &&
+    (!user.roles.includes("Contractor") || user.userName == "Administrator")
+  ) {
     routes.push({
       to: RESOURCE_MANAGEMENT,
       label: "Resource Management",
       key: "resource-management",
-      isPmRoute: false,
+      isPmRoute: true,
       children: [
         {
           to: RESOURCE_MANAGEMENT + "/my-assignments",

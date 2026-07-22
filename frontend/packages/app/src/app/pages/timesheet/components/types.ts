@@ -29,15 +29,17 @@ export type TimesheetDetail = Pick<
 > & {
   date: string;
   input_mode?: "duration" | "range";
+  activity_type?: string;
 };
 
 export interface EditTimeProps {
   employee: string;
   date: string;
   task: string;
+  activity_type?: string;
   open: boolean;
   onClose: () => void;
-  user: UserState;
+  user: RootState["user"];
 }
 
 export interface ExpandableHoursProps {
@@ -62,6 +64,7 @@ export interface TimesheetState {
     hours: number;
     employee: string;
     project?: string;
+    activity_type?: string;
   };
   dateRange: { start_date: string; end_date: string };
 

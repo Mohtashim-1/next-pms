@@ -11,6 +11,7 @@ ALLOWED_TIMESHET_DETAIL_FIELDS = [
     "project",
     "task",
     "project_name",
+    "activity_type",
     "is_billable",
     "custom_billable_override_reason",
     "custom_entry_approval_status",
@@ -21,3 +22,6 @@ ALLOWED_TIMESHET_DETAIL_FIELDS = [
     "parent",
     "docstatus",
 ]
+
+# Synthetic timesheet-grid row key for logs that only have Activity Type (no Task)
+ACTIVITY_ROW_PREFIX = "activity::"

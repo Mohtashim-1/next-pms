@@ -318,6 +318,7 @@ export function serializeTimesheetUpdateRow(row: z.infer<typeof TimesheetDraftSi
     billable_override_reason?: string;
     from_time?: string;
     to_time?: string;
+    activity_type?: string;
   } = {
     name: row.name,
     parent: row.parent,
@@ -327,6 +328,10 @@ export function serializeTimesheetUpdateRow(row: z.infer<typeof TimesheetDraftSi
     input_mode: row.input_mode,
     hours: 0,
   };
+
+  if (row.activity_type) {
+    entry.activity_type = row.activity_type;
+  }
 
   if (row.is_billable !== undefined) {
     entry.is_billable = row.is_billable;
