@@ -251,7 +251,7 @@ const ReportViewer = () => {
     const query = search.trim().toLowerCase();
     if (!query) return resultRows;
     return resultRows.filter((row) =>
-      colKeys.some((column) => String(row[column.key] ?? "").toLowerCase().includes(query))
+      colKeys.some((column) => stripHtml(String(row[column.key] ?? "")).toLowerCase().includes(query))
     );
   }, [colKeys, resultRows, search]);
 
@@ -283,15 +283,19 @@ const ReportViewer = () => {
         });
       }
     }
-    return String(value);
+    return stripHtml(String(value));
   };
 
   const exportCsv = () => {
     if (!visibleCols.length) return;
-    const escape = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const escape = (value: unknown) => `"${stripHtml(String(value ?? "")).replace(/"/g, '""')}"`;
     const csv = [
       visibleCols.map((column) => escape(column.label)).join(","),
-      ...rows.map((row) => visibleCols.map((column) => escape(row[column.key])).join(",")),
+      ...rows.map((row) =>
+        visibleCols
+          .map((column) => escape(formatCell(row[column.key], column.fieldtype) || row[column.key]))
+          .join(",")
+      ),
     ].join("\n");
     downloadBlob(`\uFEFF${csv}`, `${slug(reportName)}.csv`, "text/csv;charset=utf-8");
   };
@@ -313,9 +317,8 @@ const ReportViewer = () => {
           .map((column) => {
             const raw = row[column.key];
             const isNum = NUMERIC_TYPES.has(column.fieldtype) && raw !== "" && raw != null && Number.isFinite(Number(raw));
-            return `<Cell><Data ss:Type="${isNum ? "Number" : "String"}">${escapeXml(
-              isNum ? Number(raw) : raw
-            )}</Data></Cell>`;
+            const display = isNum ? Number(raw) : stripHtml(String(raw ?? ""));
+            return `<Cell><Data ss:Type="${isNum ? "Number" : "String"}">${escapeXml(display)}</Data></Cell>`;
           })
           .join("");
         return `<Row>${cells}</Row>`;
@@ -384,13 +387,45 @@ const ReportViewer = () => {
   <div class="meta">${escapeHtml(filterText || "No filters")} · ${filteredRows.length} rows</div>
   ${summaryHtml}
   <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
-  <script>window.onload=()=>{window.print();}</script>
 </body></html>`;
-    const win = window.open("", "_blank", "noopener,noreferrer,width=1100,height=800");
-    if (!win) return;
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
+
+    // Hidden iframe print — avoids blank about:blank popups from noopener window.open.
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("title", "Print report");
+    iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none;";
+    document.body.appendChild(iframe);
+
+    const frameWindow = iframe.contentWindow;
+    const frameDocument = frameWindow?.document;
+    if (!frameWindow || !frameDocument) {
+      iframe.remove();
+      return;
+    }
+
+    frameDocument.open();
+    frameDocument.write(html);
+    frameDocument.close();
+
+    const cleanup = () => {
+      iframe.remove();
+    };
+
+    const triggerPrint = () => {
+      try {
+        frameWindow.focus();
+        frameWindow.print();
+      } finally {
+        // Give the print dialog time to open before tearing down the frame.
+        window.setTimeout(cleanup, 1000);
+      }
+    };
+
+    if (frameDocument.readyState === "complete") {
+      window.setTimeout(triggerPrint, 50);
+    } else {
+      iframe.onload = () => window.setTimeout(triggerPrint, 50);
+    }
+
     setPrintOpen(false);
   };
 
@@ -448,6 +483,7 @@ const ReportViewer = () => {
                   <DropdownMenuCheckboxItem
                     key={column.key}
                     checked={!hiddenColumns.has(column.key)}
+                    onSelect={(event) => event.preventDefault()}
                     onCheckedChange={(checked) => {
                       setHiddenColumns((prev) => {
                         const next = new Set(prev);
@@ -603,9 +639,10 @@ const ReportViewer = () => {
 
         <div className="relative min-h-0 flex-1 overflow-auto rounded-lg border bg-card shadow-sm">
           {running && !rows.length ? (
-            <div className="space-y-px p-2">
-              {Array.from({ length: 10 }).map((_, index) => (
-                <Skeleton key={index} className="h-9 w-full rounded-sm" />
+            <div className="space-y-1 bg-card p-3">
+              <Skeleton className="mb-2 h-8 w-full rounded-md bg-muted/80" />
+              {Array.from({ length: 8 }).map((_, index) => (
+                <Skeleton key={index} className="h-8 w-full rounded-md bg-muted/60" />
               ))}
             </div>
           ) : (
@@ -801,6 +838,8 @@ const ReportFilter = ({
   const isDate = filter.fieldtype === "Date";
   const isSelect = filter.fieldtype === "Select";
   const isMulti = filter.fieldtype === "MultiSelectList";
+  const isCheck = filter.fieldtype === "Check";
+  const isNumber = ["Int", "Float", "Currency"].includes(filter.fieldtype);
   const isLink =
     (filter.fieldtype === "Link" || isMulti) && Boolean(filter.options) && !isSelect;
 
@@ -850,6 +889,21 @@ const ReportFilter = ({
     return mapped;
   }, [linkData, arrayValue]);
 
+  if (isCheck) {
+    const checked = stringValue === "1" || stringValue === "true";
+    return (
+      <label className="flex h-10 min-w-[11rem] max-w-[16rem] flex-none cursor-pointer items-center gap-2 self-end rounded-md border border-input bg-background px-3">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-primary"
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked ? "1" : "0")}
+        />
+        <span className="truncate text-xs text-foreground">{filter.label}</span>
+      </label>
+    );
+  }
+
   return (
     <label className="relative flex min-w-[11rem] max-w-[16rem] flex-1 flex-col gap-1 sm:flex-none">
       <span className="text-[11px] font-medium text-muted-foreground">
@@ -897,7 +951,7 @@ const ReportFilter = ({
         </select>
       ) : (
         <Input
-          type={filter.fieldtype === "Int" || filter.fieldtype === "Float" ? "number" : "text"}
+          type={isNumber ? "number" : "text"}
           value={stringValue}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
@@ -923,6 +977,27 @@ function downloadBlob(content: string, filename: string, type: string) {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function stripHtml(value: string) {
+  if (!value || !/[<>]/.test(value)) return value;
+  // Prefer DOM parsing so entities decode correctly; fall back to regex in non-browser contexts.
+  if (typeof document !== "undefined") {
+    const host = document.createElement("div");
+    host.innerHTML = value;
+    return (host.textContent || host.innerText || "").replace(/\s+/g, " ").trim();
+  }
+  return value
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/p>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function escapeHtml(value: string) {

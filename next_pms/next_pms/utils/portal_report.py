@@ -58,10 +58,29 @@ PORTAL_REPORT_FILTERS: dict[str, list[dict]] = {
 	"Employee Analytics": [
 		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company", "reqd": 1},
 	],
+	# Gross Profit keeps its own JS schema (company / dates / group_by / dimensions).
+	# Company default is a Desk-session value, and the fiscal-year default window can start
+	# in the future — a trailing 12 months is a more useful landing state in the portal.
 	"Gross Profit": [
-		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
-		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "month_ago"},
-		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "default": "company"},
+		{"fieldname": "from_date", "default": "year_ago"},
+		{"fieldname": "to_date", "default": "today"},
+	],
+	"Overhead Allocation Report": [
+		{"fieldname": "from_date", "default": "year_ago"},
+		{"fieldname": "to_date", "default": "today"},
+	],
+	"Service Line / Department Profitability": [
+		{"fieldname": "from_date", "default": "year_ago"},
+		{"fieldname": "to_date", "default": "today"},
+	],
+	"Client Profitability Report": [
+		{"fieldname": "from_date", "default": "year_ago"},
+		{"fieldname": "to_date", "default": "today"},
+	],
+	"Project Profitability Report": [
+		{"fieldname": "from_date", "default": "year_ago"},
+		{"fieldname": "to_date", "default": "today"},
 	],
 	"Employees working on a holiday": [
 		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "month_ago"},
@@ -101,10 +120,20 @@ def _resolve_default(value):
 		return add_months(today(), -1)
 	if value == "two_months_ago":
 		return add_months(today(), -2)
+	if value == "year_ago":
+		return add_months(today(), -12)
 	if value == "company":
 		return frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
 	if value == "year":
 		return frappe.utils.getdate(today()).year
+	if value in ("fiscal_year_start", "fiscal_year_end"):
+		try:
+			from erpnext.accounts.utils import get_fiscal_year
+
+			fy = get_fiscal_year(today(), as_dict=True)
+			return str(fy.year_start_date if value == "fiscal_year_start" else fy.year_end_date)
+		except Exception:
+			return add_months(today(), -12) if value == "fiscal_year_start" else today()
 	return value
 
 
@@ -114,11 +143,12 @@ def _filters_from_report_doc(report) -> list[dict]:
 		rows.append(
 			{
 				"fieldname": row.fieldname,
-				"label": row.label,
+				"label": row.label or row.fieldname.replace("_", " ").title(),
 				"fieldtype": row.fieldtype,
-				"options": row.options,
-				"default": row.default,
-				"reqd": int(row.reqd or 0),
+				"options": row.get("options"),
+				"default": row.get("default"),
+				# `Report Filter` stores this as `mandatory`, not `reqd`.
+				"reqd": int(row.get("mandatory") or 0),
 			}
 		)
 	return rows
@@ -172,14 +202,14 @@ def _parse_filters_from_js(report_name: str, module: str | None) -> list[dict]:
 			"fieldtype": fieldtype,
 		}
 
-		# Link doctype (string options)
+		# Link doctype (string options). JS sources embed `\n` as an escape, not a real newline.
 		opt = re.search(r"options\s*:\s*[\"']([^\"']*)[\"']", block)
 		if opt:
-			item["options"] = opt.group(1)
+			item["options"] = opt.group(1).replace("\\n", "\n")
 		else:
 			opt2 = re.search(r"options\s*:\s*`([^`]*)`", block)
 			if opt2:
-				item["options"] = opt2.group(1)
+				item["options"] = opt2.group(1).replace("\\n", "\n")
 
 		# Array-of-values / array-of-objects options (Select)
 		if "options" not in item:
@@ -201,7 +231,9 @@ def _parse_filters_from_js(report_name: str, module: str | None) -> list[dict]:
 				item["options"] = link_dt.group(1)
 
 		# Defaults
-		if "get_today" in block and "add_months" in block:
+		if "get_fiscal_year" in block:
+			item["default"] = "fiscal_year_end" if re.search(r"\)\s*\[\s*2\s*\]", block) else "fiscal_year_start"
+		elif "get_today" in block and "add_months" in block:
 			if "-1" in block or "- 1" in block:
 				item["default"] = "month_ago"
 			elif "-2" in block or "- 2" in block:
@@ -219,6 +251,26 @@ def _parse_filters_from_js(report_name: str, module: str | None) -> list[dict]:
 
 		filters.append(item)
 	return filters
+
+
+def _merge_filter_defs(base: list[dict], overrides: list[dict] | None) -> list[dict]:
+	"""Patch parsed filters with portal overrides, keeping filters the script needs."""
+	if not overrides:
+		return base
+	if not base:
+		# Partial overrides only patch an existing schema; they cannot stand alone.
+		return [dict(o) for o in overrides if o.get("fieldtype")]
+
+	by_name = {f["fieldname"]: dict(f) for f in base}
+	order = [f["fieldname"] for f in base]
+	for override in overrides:
+		name = override["fieldname"]
+		if name in by_name:
+			by_name[name].update({k: v for k, v in override.items() if v is not None})
+		else:
+			by_name[name] = dict(override)
+			order.append(name)
+	return [by_name[name] for name in order]
 
 
 def _user_can_view_report(report) -> bool:
@@ -279,9 +331,10 @@ def get_portal_report_meta(report_name: str) -> dict:
 	if not _user_can_view_report(report):
 		frappe.throw("You do not have permission to view this report.", frappe.PermissionError)
 
-	filters = PORTAL_REPORT_FILTERS.get(report_name) or _filters_from_report_doc(report)
-	if not filters:
-		filters = _parse_filters_from_js(report_name, report.module)
+	# Real filter schema first (report doc → report JS), then patch with portal overrides.
+	# Overrides must never drop filters the report script depends on (e.g. Gross Profit's `group_by`).
+	filters = _filters_from_report_doc(report) or _parse_filters_from_js(report_name, report.module)
+	filters = _merge_filter_defs(filters, PORTAL_REPORT_FILTERS.get(report_name))
 
 	resolved = []
 	defaults = {}

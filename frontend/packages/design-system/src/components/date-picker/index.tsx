@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Matcher } from "react-day-picker";
 import { Calendar as CalendarIcon } from "lucide-react";
 
@@ -21,9 +21,27 @@ export type DatePickerProp = CalendarProps & {
   onDateChange?: (date: Date) => void;
 };
 
-const DatePicker = ({ date, disabled, onDateChange, disabledDates, ...props }: DatePickerProp) => {
+const DatePicker = ({
+  date,
+  disabled,
+  onDateChange,
+  disabledDates,
+  captionLayout = "dropdown-buttons",
+  fromYear,
+  toYear,
+  ...props
+}: DatePickerProp) => {
   const [pickerDate, setPickerDate] = useState<Date>();
   const [isOpen, setIsOpen] = useState(false);
+
+  const yearRange = useMemo(() => {
+    const current = new Date().getFullYear();
+    return {
+      fromYear: fromYear ?? current - 25,
+      toYear: toYear ?? current + 5,
+    };
+  }, [fromYear, toYear]);
+
   useEffect(() => {
     if (!date) setPickerDate(getUTCDateTime() as Date);
 
@@ -49,10 +67,20 @@ const DatePicker = ({ date, disabled, onDateChange, disabledDates, ...props }: D
             <CalendarIcon className=" stroke-slate-400" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="z-[1000]">
+        <PopoverContent className="z-[1000] w-auto border bg-popover p-0 text-popover-foreground shadow-md" align="start">
           {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
           {/* @ts-expect-error */}
-          <Calendar mode="single" selected={pickerDate} onSelect={onDateSelect} disabled={disabledDates} {...props} />
+          <Calendar
+            mode="single"
+            selected={pickerDate}
+            onSelect={onDateSelect}
+            disabled={disabledDates}
+            captionLayout={captionLayout}
+            fromYear={yearRange.fromYear}
+            toYear={yearRange.toYear}
+            defaultMonth={pickerDate}
+            {...props}
+          />
         </PopoverContent>
       </Popover>
     </div>

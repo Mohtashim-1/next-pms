@@ -2,8 +2,8 @@
  * External dependencies.
  */
 import * as React from "react";
-import { DayPicker } from "react-day-picker";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { DayPicker, DropdownProps } from "react-day-picker";
+import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 /**
  * Internal dependencies.
  */
@@ -12,16 +12,47 @@ import { buttonVariants } from "../button/buttonVariants";
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 
+/**
+ * Custom month/year dropdown — avoids native <select> chrome (white boxes on Linux/dark UIs).
+ * Visible label uses theme tokens; the real <select> is fully transparent on top.
+ */
+const CalendarDropdown = ({ value, onChange, caption, children, ...props }: DropdownProps) => {
+  return (
+    <div
+      className="relative inline-flex h-8 min-w-[4.5rem] items-center justify-between gap-1 rounded-md border border-border px-2 text-sm font-medium text-foreground"
+      style={{ backgroundColor: "hsl(var(--muted))", color: "hsl(var(--foreground))" }}
+    >
+      <span className="pointer-events-none truncate">{caption}</span>
+      <ChevronDown className="pointer-events-none h-3.5 w-3.5 shrink-0 opacity-70" />
+      <select
+        {...props}
+        value={value}
+        onChange={onChange}
+        className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+        style={{ colorScheme: "dark" }}
+      >
+        {children}
+      </select>
+    </div>
+  );
+};
+
 const Calendar = ({ className, classNames, showOutsideDays = true, ...props }: CalendarProps) => {
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
-      className={className}
+      className={mergeClassNames("p-3", className)}
       classNames={{
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
         month: "space-y-4",
-        caption: "flex justify-center pt-1 relative items-center",
-        caption_label: "text-sm font-medium",
+        caption: "flex justify-center pt-1 relative items-center gap-1",
+        caption_label: "text-sm font-medium text-foreground",
+        caption_dropdowns: "flex items-center justify-center gap-2",
+        dropdown: "absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0",
+        dropdown_month: "relative",
+        dropdown_year: "relative",
+        dropdown_icon: "hidden",
+        vhidden: "sr-only",
         nav: "space-x-1 flex items-center",
         nav_button: mergeClassNames(
           buttonVariants({ variant: "outline" }),
@@ -52,6 +83,7 @@ const Calendar = ({ className, classNames, showOutsideDays = true, ...props }: C
         IconRight: ({ className, ...props }) => (
           <ChevronRight className={mergeClassNames("h-4 w-4", className)} {...props} />
         ),
+        Dropdown: CalendarDropdown,
       }}
       {...props}
     />
