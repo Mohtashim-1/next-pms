@@ -14,6 +14,7 @@ from next_pms.next_pms.utils.executive_dashboard import (
     resolve_dashboard_persona,
     save_dashboard_layout,
 )
+from next_pms.next_pms.utils.portal_report import get_portal_report_meta, run_portal_report
 
 
 def _ensure_access(allow_timesheet_user: bool = False):
@@ -87,3 +88,17 @@ def get_tile_options():
         "visible": get_visible_tiles(),
         "report_access_roles": sorted(REPORT_ACCESS_ROLES),
     }
+
+
+@whitelist()
+@error_logger
+def get_report_meta(report_name: str):
+    """Filter schema + defaults for in-portal report viewer (no Desk)."""
+    return get_portal_report_meta(report_name)
+
+
+@whitelist()
+@error_logger
+def run_report(report_name: str, filters: dict | str | None = None):
+    """Execute a Script/Query report inside Next PMS portal."""
+    return run_portal_report(report_name, filters=filters)

@@ -2,6 +2,7 @@
  * External dependencies.
  */
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Badge,
   Button,
@@ -41,14 +42,14 @@ type ReportItem = {
   url: string;
   detail?: "deep" | "high" | "summary";
   tags?: string[];
-  kind?: "desk" | "app";
+  kind?: "desk" | "app" | "portal";
 };
 
 type ReportsResponse = {
   allowed: boolean;
   reports: ReportItem[];
   categories?: string[];
-  counts?: { total: number; deep: number; desk: number; app: number };
+  counts?: { total: number; deep: number; desk?: number; portal?: number; app: number };
   persona?: { persona?: string; title?: string };
 };
 
@@ -129,7 +130,9 @@ const Reports = () => {
                 <Badge variant="secondary">{response.counts.total} reports</Badge>
                 <Badge variant="outline">{response.counts.deep} deep-dive</Badge>
                 <Badge variant="outline">{response.counts.app} live boards</Badge>
-                <Badge variant="outline">{response.counts.desk} desk reports</Badge>
+                <Badge variant="outline">
+                  {(response.counts.portal ?? response.counts.desk) || 0} in portal
+                </Badge>
               </div>
             ) : null}
           </div>
@@ -333,17 +336,13 @@ const ReportCard = ({
   featured?: boolean;
   compact?: boolean;
 }) => {
-  return (
-    <a
-      href={report.url}
-      target={report.kind === "app" ? undefined : "_blank"}
-      rel={report.kind === "app" ? undefined : "noreferrer"}
-      className={mergeClassNames(
-        "group block rounded-2xl border bg-card/80 transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg",
-        featured && "border-primary/25 bg-gradient-to-br from-primary/10 via-card to-card",
-        compact ? "p-3" : "p-4"
-      )}
-    >
+  const inPortal = report.kind === "app" || report.kind === "portal";
+  const to = report.url.startsWith("/next-pms/")
+    ? report.url.replace(/^\/next-pms/, "") || "/"
+    : report.url;
+
+  const body = (
+    <>
       <div className="mb-2 flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <Typography variant="p" className="font-semibold leading-snug">
@@ -355,6 +354,8 @@ const ReportCard = ({
             ) : null}
             {report.kind === "app" ? (
               <Badge variant="secondary">Live board</Badge>
+            ) : report.kind === "portal" ? (
+              <Badge variant="secondary">In portal</Badge>
             ) : (
               <Badge variant="outline">Desk report</Badge>
             )}
@@ -379,6 +380,26 @@ const ReportCard = ({
           ))}
         </div>
       ) : null}
+    </>
+  );
+
+  const className = mergeClassNames(
+    "group block rounded-2xl border bg-card/80 transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg",
+    featured && "border-primary/25 bg-gradient-to-br from-primary/10 via-card to-card",
+    compact ? "p-3" : "p-4"
+  );
+
+  if (inPortal) {
+    return (
+      <Link to={to} className={className}>
+        {body}
+      </Link>
+    );
+  }
+
+  return (
+    <a href={report.url} target="_blank" rel="noreferrer" className={className}>
+      {body}
     </a>
   );
 };

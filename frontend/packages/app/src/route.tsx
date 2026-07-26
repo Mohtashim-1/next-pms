@@ -40,6 +40,7 @@ const PortfolioMargins = lazy(() => import("@/app/pages/project/margins"));
 const BudgetBurnShare = lazy(() => import("@/app/pages/project/budget-burn-share"));
 const ExecutiveDashboard = lazy(() => import("@/app/pages/dashboard"));
 const Reports = lazy(() => import("@/app/pages/reports"));
+const ReportViewer = lazy(() => import("@/app/pages/reports/viewer"));
 const NotFound = lazy(() => import("@/app/pages/404"));
 
 export function Router() {
@@ -53,6 +54,7 @@ export function Router() {
         <Route path={WORK_ENTRIES} element={<WorkEntries />} />
         <Route element={<ReportsRoute />}>
           <Route path={REPORTS} element={<Reports />} />
+          <Route path={`${REPORTS}/view/:reportName`} element={<ReportViewer />} />
         </Route>
         <Route element={<PmRoute />}>
           <Route path={HOME} element={<Home />} />

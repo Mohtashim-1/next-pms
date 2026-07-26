@@ -112,6 +112,22 @@ REPORT_CATALOG = (
         "tags": ["approvals", "aging", "managers"],
     },
     {
+        "name": "Holiday Timesheet Gap",
+        "description": "Who logged timesheet hours on holiday / weekly-off dates",
+        "audience": ["System Manager", "Team Lead", "Projects Manager"],
+        "category": "Timesheet",
+        "detail": "deep",
+        "tags": ["holiday", "gap", "compliance"],
+    },
+    {
+        "name": "Timesheet Approval SLA",
+        "description": "Manager approval turnaround heat-map — aging and SLA breaches",
+        "audience": ["System Manager", "Team Lead", "Projects Manager"],
+        "category": "Timesheet",
+        "detail": "deep",
+        "tags": ["approvals", "sla", "heatmap"],
+    },
+    {
         "name": "Daily Timesheet Summary",
         "description": "Day-by-day timesheet entries across the organization",
         "audience": ["System Manager", "Team Lead", "Projects Manager"],
@@ -290,6 +306,14 @@ REPORT_CATALOG = (
         "tags": ["milestones", "tasks"],
     },
     {
+        "name": "Task Burndown",
+        "description": "Task burn-down by project phase / sprint proxy",
+        "audience": ["System Manager", "Projects Manager", "Team Lead"],
+        "category": "Project",
+        "detail": "deep",
+        "tags": ["burndown", "sprint", "tasks"],
+    },
+    {
         "name": "Delayed Tasks Summary",
         "description": "Open tasks past expected end date by project/owner",
         "audience": ["System Manager", "Projects Manager", "Team Lead"],
@@ -361,6 +385,22 @@ REPORT_CATALOG = (
         "category": "Finance",
         "detail": "high",
         "tags": ["client", "profit"],
+    },
+    {
+        "name": "Retainer vs Consumed Hours",
+        "description": "Contract retainer hours vs timesheet hours consumed",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Finance",
+        "detail": "deep",
+        "tags": ["retainer", "contract", "hours"],
+    },
+    {
+        "name": "Forecast vs Actual Revenue",
+        "description": "Opportunity forecast vs posted sales invoice revenue by month",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Finance",
+        "detail": "deep",
+        "tags": ["forecast", "revenue", "pipeline"],
     },
     {
         "name": "Client Profitability Report",
@@ -2046,8 +2086,9 @@ def get_reports_catalog_for_user() -> dict:
         reports.append(
             {
                 **item,
-                "url": f"/app/query-report/{quote(item['name'])}",
-                "kind": "desk",
+                # Open inside Next PMS portal — no Desk redirect
+                "url": f"/next-pms/reports/view/{quote(item['name'], safe='')}",
+                "kind": "portal",
             }
         )
 
@@ -2067,14 +2108,46 @@ def get_reports_catalog_for_user() -> dict:
             seen.add(r["category"])
             categories.append(r["category"])
 
+    # Nested menu for sidebar:
+    #   query reports (kind=portal) grouped by their category,
+    #   live boards/dashboards (kind=app) collected under a single "Dashboards & Tools" heading
+    TOOLS_HEADING = "Dashboards & Tools"
+    query_reports = [r for r in reports if r.get("kind") != "app"]
+    tool_reports = [r for r in reports if r.get("kind") == "app"]
+
+    def _link(r: dict) -> dict:
+        return {
+            "name": r["name"],
+            "url": r["url"],
+            "kind": r.get("kind"),
+            "detail": r.get("detail"),
+        }
+
+    by_category = []
+    for cat in categories:
+        cat_reports = [_link(r) for r in query_reports if r.get("category") == cat]
+        if cat_reports:
+            by_category.append({"category": cat, "reports": cat_reports})
+
+    if tool_reports:
+        by_category.append(
+            {
+                "category": TOOLS_HEADING,
+                "is_tools": True,
+                "reports": [_link(r) for r in tool_reports],
+            }
+        )
+
     return {
         "allowed": True,
         "reports": reports,
         "categories": categories,
+        "by_category": by_category,
         "persona": persona,
         "counts": {
             "total": len(reports),
             "deep": sum(1 for r in reports if r.get("detail") == "deep"),
+            "portal": sum(1 for r in reports if r.get("kind") == "portal"),
             "desk": sum(1 for r in reports if r.get("kind") == "desk"),
             "app": sum(1 for r in reports if r.get("kind") == "app"),
         },

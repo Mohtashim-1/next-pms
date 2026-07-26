@@ -75,6 +75,24 @@ const Sidebar = () => {
       refreshInterval: 60000,
     }
   );
+  const { data: reportsCatalogData } = useFrappeGetCall(
+    "next_pms.next_pms.api.executive_dashboard.get_reports_catalog",
+    undefined,
+    hasReportAccess ? "sidebar-reports-catalog" : null,
+    { revalidateOnFocus: false }
+  );
+  const reportCategories =
+    (reportsCatalogData?.message?.by_category as
+      | { category: string; reports: { name: string; url: string }[] }[]
+      | undefined) || [];
+
+  // Keep Reports expanded while browsing report pages
+  useEffect(() => {
+    if (location.pathname.includes("/reports")) {
+      setOpenRoutes((prev) => ({ ...prev, reports: true }));
+    }
+  }, [location.pathname]);
+
   const approvalQueueCount = approvalCountData?.message?.count ?? 0;
   const privateViews = viewInfo.views.filter(
     (view: ViewData) => view.user === user.user && !view.default && !view.public
@@ -152,12 +170,37 @@ const Sidebar = () => {
     },
   ];
   if (hasReportAccess) {
+    const reportChildren: NestedRoute[] = [
+      {
+        to: `/${REPORTS}`,
+        label: "All reports",
+        key: "reports-library",
+        icon: FileBarChart,
+      },
+      ...reportCategories.map((cat) => ({
+        label: cat.category,
+        key: `reports-cat-${cat.category}`,
+        icon: FileBarChart,
+        children: cat.reports.map((report) => {
+          // Catalog returns absolute /next-pms/... ; NavLink is under basename /next-pms
+          const to = report.url.startsWith("/next-pms/")
+            ? report.url.replace(/^\/next-pms/, "") || "/"
+            : report.url;
+          return {
+            to,
+            label: report.name,
+            key: `report-${report.name}`,
+          };
+        }),
+      })),
+    ];
     routes.splice(1, 0, {
-      to: REPORTS,
+      to: `/${REPORTS}`,
       icon: FileBarChart,
       label: "Reports",
       key: "reports",
       isPmRoute: false,
+      children: reportChildren,
     });
   }
   if (
@@ -293,17 +336,87 @@ const Sidebar = () => {
                     )}
                   >
                     {route.children.map((child: NestedRoute) => {
-                      const isChildActive = child.to === location.pathname;
+                      if (child.children?.length) {
+                        const catKey = child.key;
+                        const isCatOpen = openRoutes[catKey];
+                        return (
+                          <React.Fragment key={child.key}>
+                            <Button
+                              variant="ghost"
+                              title={child.label}
+                              className={mergeClassNames(
+                                "flex h-8 w-full items-center justify-start gap-x-2 rounded-lg p-2 text-left hover:bg-accent",
+                                user.isSidebarCollapsed && "hidden"
+                              )}
+                              onClick={() => toggleNestedRoutes(catKey)}
+                            >
+                              {isCatOpen ? (
+                                <ChevronUp className="h-3.5 w-3.5 shrink-0" />
+                              ) : (
+                                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                              )}
+                              <Typography variant="p" className="truncate text-xs font-medium text-muted-foreground">
+                                {child.label}
+                              </Typography>
+                            </Button>
+                            <div
+                              className={mergeClassNames(
+                                "flex flex-col gap-y-0.5",
+                                isCatOpen ? "flex" : "hidden",
+                                !user.isSidebarCollapsed && "pl-3"
+                              )}
+                            >
+                              {child.children.map((report) => {
+                                if (!report.to) return null;
+                                const isReportActive =
+                                  location.pathname === report.to ||
+                                  location.pathname === decodeURIComponent(report.to) ||
+                                  decodeURIComponent(location.pathname) === decodeURIComponent(report.to);
+                                return (
+                                  <NavLink
+                                    to={report.to}
+                                    key={report.key}
+                                    title={report.label}
+                                    className="group flex h-8 items-center"
+                                  >
+                                    <div
+                                      className={mergeClassNames(
+                                        "flex w-full items-center gap-x-2 rounded-lg p-1.5 text-foreground hover:bg-accent max-md:justify-center",
+                                        isReportActive && "border-l-2 border-primary bg-accent shadow-md",
+                                        !user.isSidebarCollapsed && "pl-2"
+                                      )}
+                                    >
+                                      <Typography
+                                        variant="p"
+                                        className={mergeClassNames(
+                                          "truncate text-xs text-foreground",
+                                          user.isSidebarCollapsed && "hidden"
+                                        )}
+                                      >
+                                        {report.label}
+                                      </Typography>
+                                    </div>
+                                  </NavLink>
+                                );
+                              })}
+                            </div>
+                          </React.Fragment>
+                        );
+                      }
+
+                      if (!child.to) return null;
+                      const isChildActive =
+                        child.to === location.pathname || location.pathname.startsWith(`${child.to}/`);
                       return (
                         <NavLink
                           to={child.to}
                           key={child.key}
                           title={child.label}
-                          className="flex items-center h-9 group"
+                          className="group flex h-9 items-center"
                         >
                           <div
                             className={mergeClassNames(
-                              "flex w-full p-2 rounded-lg items-center hover:bg-accent text-foreground gap-x-2 max-md:justify-center",
+                              "flex w-full items-center gap-x-2 rounded-lg p-2 text-foreground hover:bg-accent max-md:justify-center",
                               isChildActive && "border-l-2 border-primary bg-accent shadow-md",
                               !user.isSidebarCollapsed && "pl-3"
                             )}
@@ -311,7 +424,7 @@ const Sidebar = () => {
                             {child.icon && (
                               <child.icon
                                 className={mergeClassNames(
-                                  "shrink-0 stroke-foreground h-4 w-4",
+                                  "h-4 w-4 shrink-0 stroke-foreground",
                                   isChildActive && "stroke-primary"
                                 )}
                               />

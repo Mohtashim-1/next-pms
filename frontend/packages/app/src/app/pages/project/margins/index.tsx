@@ -31,8 +31,8 @@ import { BarChart3, TrendingDown, TrendingUp } from "lucide-react";
 /**
  * Internal dependencies.
  */
-import { AnalyticsDrilldownSheet } from "@/app/components/analytics/AnalyticsDrilldownSheet";
 import type { AnalyticsDrilldownResponse } from "@/app/components/analytics/analyticsDrilldown";
+import { AnalyticsDrilldownScreen } from "@/app/components/analytics/AnalyticsDrilldownScreen";
 import { Header as RootHeader } from "@/app/layout/root";
 import { mergeClassNames, parseFrappeErrorMsg } from "@/lib/utils";
 
@@ -100,6 +100,7 @@ const PortfolioMargins = () => {
   const [selectedDriver, setSelectedDriver] = useState<MarginDriver | null>(null);
   const [portfolioGroup, setPortfolioGroup] = useState<PortfolioRow | null>(null);
   const [drilldown, setDrilldown] = useState<AnalyticsDrilldownResponse | null>(null);
+  const [drilldownOpen, setDrilldownOpen] = useState(false);
 
   const apiArgs = useMemo(
     () => ({
@@ -143,6 +144,7 @@ const PortfolioMargins = () => {
   ) => {
     setSelectedProject(project);
     setSelectedDriver(driver ?? null);
+    setDrilldownOpen(true);
     if (row) {
       setPortfolioGroup(row);
     }
@@ -184,6 +186,87 @@ const PortfolioMargins = () => {
     amount: Number(summary?.recognized_revenue || 0),
     impact: "positive",
   };
+
+  const closeDrilldown = () => {
+    setDrilldownOpen(false);
+    setDrilldown(null);
+    setSelectedDriver(null);
+  };
+
+  if (drilldownOpen) {
+    return (
+      <AnalyticsDrilldownScreen
+        title="Margin Drivers"
+        description={
+          selectedProject
+            ? `${selectedProject} · ${fromDate} to ${toDate}`
+            : `${fromDate} to ${toDate}`
+        }
+        loading={drilldownLoading}
+        payload={drilldown}
+        onBack={closeDrilldown}
+        exportFilename={`margin-drilldown-${selectedProject || "portfolio"}-${fromDate}-to-${toDate}.csv`}
+        valueKey="amount"
+      >
+        {drilldown ? (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-md border p-3">
+                <Typography variant="small" className="text-muted-foreground">
+                  Recognized Revenue
+                </Typography>
+                <Typography variant="p" className="font-semibold">
+                  {drilldown.summary?.recognized_revenue as number}
+                </Typography>
+              </div>
+              <div className="rounded-md border p-3">
+                <Typography variant="small" className="text-muted-foreground">
+                  Incurred Cost
+                </Typography>
+                <Typography variant="p" className="font-semibold">
+                  {drilldown.summary?.incurred_cost as number}
+                </Typography>
+              </div>
+              <div className="col-span-2 rounded-md border p-3">
+                <Typography variant="small" className="text-muted-foreground">
+                  Actual Margin
+                </Typography>
+                <Typography
+                  variant="p"
+                  className={mergeClassNames("font-semibold", marginClass(Number(drilldown.summary?.actual_margin || 0)))}
+                >
+                  {drilldown.summary?.actual_margin as number}
+                </Typography>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Typography variant="p" className="font-medium">
+                Drivers
+              </Typography>
+              {(drilldown.drivers || []).map((driver) => (
+                <button
+                  key={`${driver.driver_type}-${driver.driver_key}`}
+                  type="button"
+                  className={mergeClassNames(
+                    "flex w-full items-center justify-between rounded-md border px-3 py-2 text-left hover:bg-muted/50",
+                    selectedDriver?.driver_key === driver.driver_key && "border-primary/50 bg-accent"
+                  )}
+                  onClick={() => selectedProject && openProjectDrilldown(selectedProject, driver, portfolioGroup)}
+                >
+                  <div>
+                    <div className="font-medium">{driver.driver}</div>
+                    <div className="text-sm capitalize text-muted-foreground">{driver.driver_type}</div>
+                  </div>
+                  <Badge variant={driver.impact === "positive" ? "outline" : "destructive"}>{driver.amount}</Badge>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
+      </AnalyticsDrilldownScreen>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -390,83 +473,6 @@ const PortfolioMargins = () => {
           </>
         )}
       </div>
-
-      <AnalyticsDrilldownSheet
-        open={Boolean(drilldown)}
-        title="Margin Drivers"
-        description={
-          selectedProject
-            ? `${selectedProject} · ${fromDate} to ${toDate}`
-            : `${fromDate} to ${toDate}`
-        }
-        loading={drilldownLoading}
-        payload={drilldown}
-        onClose={() => {
-          setDrilldown(null);
-          setSelectedDriver(null);
-        }}
-        exportFilename={`margin-drilldown-${selectedProject || "portfolio"}-${fromDate}-to-${toDate}.csv`}
-        valueKey="amount"
-      >
-        {drilldown ? (
-          <div className="mt-4 space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-md border p-3">
-                <Typography variant="small" className="text-muted-foreground">
-                  Recognized Revenue
-                </Typography>
-                <Typography variant="p" className="font-semibold">
-                  {drilldown.summary?.recognized_revenue as number}
-                </Typography>
-              </div>
-              <div className="rounded-md border p-3">
-                <Typography variant="small" className="text-muted-foreground">
-                  Incurred Cost
-                </Typography>
-                <Typography variant="p" className="font-semibold">
-                  {drilldown.summary?.incurred_cost as number}
-                </Typography>
-              </div>
-              <div className="rounded-md border p-3 col-span-2">
-                <Typography variant="small" className="text-muted-foreground">
-                  Actual Margin
-                </Typography>
-                <Typography variant="p" className={mergeClassNames("font-semibold", marginClass(Number(drilldown.summary?.actual_margin || 0)))}>
-                  {drilldown.summary?.actual_margin as number}
-                </Typography>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Typography variant="p" className="font-medium">
-                Drivers
-              </Typography>
-              {(drilldown.drivers || []).map((driver) => (
-                <button
-                  key={`${driver.driver_type}-${driver.driver_key}`}
-                  type="button"
-                  className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left hover:bg-muted/50"
-                  onClick={() => selectedProject && openProjectDrilldown(selectedProject, driver, portfolioGroup)}
-                >
-                  <div>
-                    <div className="font-medium">{driver.driver}</div>
-                    <div className="text-sm text-muted-foreground capitalize">{driver.driver_type}</div>
-                  </div>
-                  <Badge variant={driver.impact === "positive" ? "outline" : "destructive"}>
-                    {driver.amount}
-                  </Badge>
-                </button>
-              ))}
-            </div>
-
-            {selectedDriver ? (
-              <Typography variant="p" className="font-medium">
-                {selectedDriver.driver} Details
-              </Typography>
-            ) : null}
-          </div>
-        ) : null}
-      </AnalyticsDrilldownSheet>
     </div>
   );
 };

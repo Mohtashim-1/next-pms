@@ -17,8 +17,17 @@
   "report_name": "Forecast vs Actual Revenue",
   "report_type": "Script Report",
   "roles": [
-    {"role": "System Manager"},
-    {"role": "Projects Manager"},
-    {"role": "Accounts Manager"}
+    {
+      "role": "System Manager"
+    },
+    {
+      "role": "Projects Manager"
+    },
+    {
+      "role": "Accounts Manager"
+    },
+    {
+      "role": "Team Lead"
+    }
   ]
 }

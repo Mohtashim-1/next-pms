@@ -4,11 +4,13 @@
 import { RootState } from "@/store";
 
 export type NestedRoute = {
-  to: string;
+  to?: string;
   label: string;
   key: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   icon?: any;
+  /** Category → report links under Reports */
+  children?: NestedRoute[];
 };
 
 export type Route = {
