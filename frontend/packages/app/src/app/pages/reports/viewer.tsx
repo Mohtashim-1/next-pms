@@ -188,12 +188,19 @@ const ReportViewer = () => {
       const payload: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(source)) {
         if (Array.isArray(value)) {
-          if (value.length) payload[key] = value;
+          // Preserve cleared MultiSelectList values. An empty company list means
+          // "All Companies"; omitting it would restore the backend default company.
+          payload[key] = value;
         } else if (value !== "") {
           payload[key] = value;
         }
       }
-      const res = await runReport({ report_name: reportName, filters: payload });
+      // Stringify filters so nested arrays (e.g. company: []) survive form-urlencoded
+      // POSTs. Raw objects with empty arrays often surface as Frappe "Invalid Request".
+      const res = await runReport({
+        report_name: reportName,
+        filters: JSON.stringify(payload),
+      });
       const message = res?.message || res;
       setColumns(message?.columns || []);
       setRows(message?.result || []);
@@ -870,9 +877,10 @@ const ReportFilter = ({
 
   const [linkSearch, setLinkSearch] = useState("");
 
-  // Preload link options immediately so the selected value renders as a label.
+  // Portal report filters use a dedicated search so HR masters like Skill
+  // remain selectable even when the user lacks Desk read permission on them.
   const { data: linkData, isLoading: linkLoading } = useFrappeGetCall(
-    "frappe.desk.search.search_link",
+    "next_pms.next_pms.api.executive_dashboard.search_filter_options",
     {
       doctype: filter.options,
       txt: linkSearch,

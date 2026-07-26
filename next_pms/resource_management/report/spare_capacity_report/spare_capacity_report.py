@@ -161,8 +161,10 @@ def get_data(filters=None, has_bu_field=False):
                     if child.get(BU_FIELD_NAME) == emp and child.name in employee_map and child.is_employee
                 ]
                 # Calculate % Capacity for root nodes (group)
-                actual_per = (sum(employee_map[c].percentage_capacity_available for c in child_names)) / len(
-                    child_names
+                actual_per = (
+                    (sum(employee_map[c].percentage_capacity_available for c in child_names)) / len(child_names)
+                    if child_names
+                    else root_emp.percentage_capacity_available
                 )
             else:
                 child_names = [
@@ -171,8 +173,10 @@ def get_data(filters=None, has_bu_field=False):
                     if child.designation == emp and child.name in employee_map and child.is_employee
                 ]
                 # Calculate % Capacity for root nodes (group)
-                actual_per = (sum(employee_map[c].percentage_capacity_available for c in child_names)) / len(
-                    child_names
+                actual_per = (
+                    (sum(employee_map[c].percentage_capacity_available for c in child_names)) / len(child_names)
+                    if child_names
+                    else root_emp.percentage_capacity_available
                 )
             hours = sum(employee_map[c].available_capacity for c in child_names)
 
@@ -185,7 +189,7 @@ def get_data(filters=None, has_bu_field=False):
             # Calculate actual unbilled cost for root nodes (group)
             root_emp.actual_unbilled_cost += sum(employee_map[c].actual_unbilled_cost for c in child_names)
 
-            root_emp.percentage_capacity_available = actual_per
+            root_emp.percentage_capacity_available = actual_per if actual_per is not None else 0
 
     return employees
 

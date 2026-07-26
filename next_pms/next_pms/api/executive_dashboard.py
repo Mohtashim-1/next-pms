@@ -121,3 +121,18 @@ def get_report_meta(report_name: str):
 def run_report(report_name: str, filters: dict | str | None = None):
     """Execute a Script/Query report inside Next PMS portal."""
     return run_portal_report(report_name, filters=filters)
+
+
+@whitelist()
+@error_logger
+def search_filter_options(doctype: str, txt: str = "", page_length: int | str = 20):
+    """Link / MultiSelect options for portal report filters.
+
+    Skill (and similar HR masters) are often readable only by HR Manager /
+    System Manager. Portal report users still need to filter by them, so we
+    resolve options here after the usual portal-report access check.
+    """
+    from next_pms.next_pms.utils.portal_report import ensure_portal_report_access, search_portal_filter_options
+
+    ensure_portal_report_access()
+    return search_portal_filter_options(doctype, txt=txt, page_length=page_length)

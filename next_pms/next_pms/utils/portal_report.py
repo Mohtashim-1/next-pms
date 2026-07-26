@@ -27,6 +27,10 @@ _NATIVE_MULTI_COMPANY_REPORTS = {
 	"Project Manager Scorecard",
 	"Project Change Request Log",
 	"Project Risk Register Report",
+	"Bench Cost Analysis",
+	"Planned vs Actual Hours",
+	"Resource Allocation / Capacity Planning",
+	"Skill Matrix and Availability",
 }
 
 
@@ -262,6 +266,52 @@ PORTAL_REPORT_FILTERS: dict[str, list[dict]] = {
 		{"fieldname": "project", "label": "Project", "fieldtype": "Link", "options": "Project"},
 		{"fieldname": "severity", "label": "Severity", "fieldtype": "Select", "options": "\nCritical\nHigh\nMedium\nLow"},
 	],
+	# ——— Resource reports ———
+	"Bench Cost Analysis": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "three_months_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+		{"fieldname": "department", "label": "Department", "fieldtype": "Link", "options": "Department"},
+		{"fieldname": "employee", "label": "Employee", "fieldtype": "Link", "options": "Employee"},
+	],
+	"Planned vs Actual Hours": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "three_months_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+		{"fieldname": "department", "label": "Department", "fieldtype": "Link", "options": "Department"},
+		{"fieldname": "employee", "label": "Employee", "fieldtype": "Link", "options": "Employee"},
+	],
+	"Resource Allocation / Capacity Planning": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "month_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+		{"fieldname": "department", "label": "Department", "fieldtype": "Link", "options": "Department"},
+		{"fieldname": "designation", "label": "Designation", "fieldtype": "Link", "options": "Designation"},
+	],
+	"Skill Matrix and Availability": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "month_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+		{"fieldname": "department", "label": "Department", "fieldtype": "Link", "options": "Department"},
+		{"fieldname": "designation", "label": "Designation", "fieldtype": "Link", "options": "Designation"},
+		{"fieldname": "skill", "label": "Skill", "fieldtype": "MultiSelectList", "options": "Skill"},
+	],
+	"Resource Utilization Report": [
+		# Site timesheet data is historical; a trailing year is a useful landing window.
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "year_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+		{"fieldname": "employee", "label": "Employee", "fieldtype": "Link", "options": "Employee"},
+	],
+	"Spare Capacity Report": [
+		# Stock report defaults from/to to today (a zero-width, weekend-prone window).
+		# Give a forward-looking month so capacity is meaningful.
+		{"fieldname": "from", "label": "From", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "to", "label": "To", "fieldtype": "Date", "default": "month_ahead"},
+		# Flat employee view avoids the stock aggregate divide-by-zero on empty groups.
+		{"fieldname": "group_by", "label": "Group By", "fieldtype": "Select", "options": "employee\nbusiness_unit\ndesignation", "default": "employee"},
+		{"fieldname": "aggregate", "label": "Aggregate", "fieldtype": "Check", "default": 0},
+	],
 }
 
 
@@ -274,6 +324,62 @@ def ensure_portal_report_access():
 			"Reports are available to System Managers, Team Leads, and Project Managers only.",
 			frappe.PermissionError,
 		)
+
+
+# DocTypes whose Link options must remain usable in portal filters even when the
+# calling user lacks Desk read permission (common for HR masters like Skill).
+_PORTAL_FILTER_OPTION_DOCTYPES = {"Skill", "Designation", "Department", "Branch", "Company"}
+
+
+def search_portal_filter_options(doctype: str, txt: str = "", page_length: int | str = 20) -> list[dict]:
+	"""Return [{value, label, description}] for a portal report Link/MultiSelect filter."""
+	if not doctype or not frappe.db.exists("DocType", doctype):
+		return []
+
+	try:
+		limit = max(1, min(int(page_length or 20), 50))
+	except (TypeError, ValueError):
+		limit = 20
+
+	txt = (txt or "").strip()
+
+	# Prefer standard search when the user already has access.
+	try:
+		from frappe.desk.search import search_link
+
+		rows = search_link(doctype, txt, page_length=limit) or []
+		if rows:
+			return rows
+	except Exception:
+		rows = []
+
+	if doctype not in _PORTAL_FILTER_OPTION_DOCTYPES:
+		return rows
+
+	# Fallback for restricted masters (e.g. Skill is HR Manager–only by default).
+	meta = frappe.get_meta(doctype)
+	title_field = meta.title_field or "name"
+	filters = {}
+	or_filters = None
+	if txt:
+		or_filters = [[title_field, "like", f"%{txt}%"], ["name", "like", f"%{txt}%"]]
+		if meta.has_field("skill_name"):
+			or_filters.append(["skill_name", "like", f"%{txt}%"])
+
+	found = frappe.get_all(
+		doctype,
+		filters=filters,
+		or_filters=or_filters,
+		fields=["name", title_field],
+		order_by=f"`tab{doctype}`.modified desc",
+		limit_page_length=limit,
+		ignore_permissions=True,
+	)
+	out = []
+	for row in found:
+		label = row.get(title_field) or row.name
+		out.append({"value": row.name, "label": label, "description": ""})
+	return out
 
 
 def _as_company_list(value) -> list[str]:
@@ -382,6 +488,10 @@ def _resolve_default(value):
 		return add_months(today(), -1)
 	if value == "two_months_ago":
 		return add_months(today(), -2)
+	if value == "three_months_ago":
+		return add_months(today(), -3)
+	if value == "month_ahead":
+		return add_months(today(), 1)
 	if value == "year_ago":
 		return add_months(today(), -12)
 	if value == "company":
@@ -782,32 +892,38 @@ def get_portal_report_meta(report_name: str) -> dict:
 	for f in filters:
 		item = dict(f)
 		default = _resolve_default(item.get("default"))
-		# Auto-fill Company when Link / MultiSelectList options is Company
+		# Auto-fill Company only for single Link fields. MultiSelectList empty = All Companies.
 		if (
 			(default is None or default == "")
-			and item.get("fieldtype") in ("Link", "MultiSelectList")
+			and item.get("fieldtype") == "Link"
 			and item.get("options") == "Company"
 		):
 			default = _resolve_default("company")
 		# MultiSelectList defaults must be arrays for the portal ComboBox.
-		if item.get("fieldtype") == "MultiSelectList" and default not in (None, ""):
-			default = default if isinstance(default, list) else [default]
+		if item.get("fieldtype") == "MultiSelectList":
+			if default in (None, ""):
+				default = []
+			elif not isinstance(default, list):
+				default = [default]
 		item["default"] = default
-		if default is not None and default != "" and default != []:
+		# Include empty MultiSelectList defaults so the UI starts at "All …"
+		# and the payload still sends [] (not omitted → backend single-company fallback).
+		if default is not None and default != "":
 			defaults[item["fieldname"]] = default
 		resolved.append(item)
 
 	# Globally upgrade every Company Link → MultiSelectList (including JS-parsed schemas).
 	resolved = _upgrade_company_filters(resolved)
-	# Re-sync defaults after upgrade (company becomes a list).
+	# Re-sync defaults after upgrade (company becomes a list; empty = All Companies).
 	for item in resolved:
 		if item.get("options") == "Company" and item.get("fieldtype") == "MultiSelectList":
 			default = item.get("default")
-			if default not in (None, "", []):
-				defaults[item["fieldname"]] = default if isinstance(default, list) else [default]
-			elif item["fieldname"] in defaults and not isinstance(defaults[item["fieldname"]], list):
-				defaults[item["fieldname"]] = [defaults[item["fieldname"]]]
-
+			if default in (None, ""):
+				defaults[item["fieldname"]] = []
+			elif isinstance(default, list):
+				defaults[item["fieldname"]] = default
+			else:
+				defaults[item["fieldname"]] = [default]
 	# Only use generic date filters when report truly has none
 	if not resolved:
 		resolved = [
