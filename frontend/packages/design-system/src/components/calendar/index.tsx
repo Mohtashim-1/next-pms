@@ -29,7 +29,7 @@ const CalendarDropdown = ({ value, onChange, caption, children, ...props }: Drop
         value={value}
         onChange={onChange}
         className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-        style={{ colorScheme: "dark" }}
+        style={{ colorScheme: "inherit" }}
       >
         {children}
       </select>

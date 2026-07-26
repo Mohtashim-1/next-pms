@@ -189,6 +189,8 @@ type DashboardPanels = {
   };
 };
 
+export type DashboardPanelsData = DashboardPanels;
+
 const TASK_COLORS = ["bg-emerald-500", "bg-blue-500", "bg-amber-500", "bg-violet-500", "bg-slate-400", "bg-red-500"];
 const RAG_COLORS: Record<string, string> = {
   Green: "bg-emerald-500",
@@ -223,15 +225,17 @@ const PanelCard = ({
   children: React.ReactNode;
   className?: string;
 }) => (
-  <Card className={mergeClassNames("rounded-xl shadow-none", className)}>
-    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-      <CardTitle className="flex items-center gap-2 text-base font-semibold">
-        <Icon className="h-4 w-4" />
+  <Card className={mergeClassNames("overflow-hidden rounded-xl border bg-card shadow-sm", className)}>
+    <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b bg-muted/30 pb-3">
+      <CardTitle className="flex items-center gap-2 text-sm font-semibold sm:text-base">
+        <span className="rounded-md bg-background p-1.5 shadow-sm">
+          <Icon className="h-4 w-4 text-primary" />
+        </span>
         {title}
       </CardTitle>
       {action}
     </CardHeader>
-    <CardContent>{children}</CardContent>
+    <CardContent className="pt-4">{children}</CardContent>
   </Card>
 );
 

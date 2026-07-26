@@ -5,7 +5,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{app_name}}</title>
-
+  <script>
+    // Apply saved theme before first paint to avoid flash between light/dark.
+    (function () {
+      try {
+        var stored = localStorage.getItem("next-pms-ui-theme");
+        var theme = stored || "system";
+        if (theme === "system") {
+          theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.classList.remove("light", "dark");
+        document.documentElement.classList.add(theme === "dark" ? "dark" : "light");
+      } catch (e) {}
+    })();
+  </script>
 </head>
 
 <body>

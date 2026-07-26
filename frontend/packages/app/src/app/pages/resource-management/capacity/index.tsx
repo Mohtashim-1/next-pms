@@ -2,8 +2,17 @@
  * External dependencies.
  */
 import { useMemo, useState } from "react";
-import { Spinner, Typography } from "@next-pms/design-system/components";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Spinner,
+  Typography,
+} from "@next-pms/design-system/components";
 import { useFrappeGetCall } from "frappe-react-sdk";
+import { Download, FileSpreadsheet, FileText, Printer } from "lucide-react";
 
 /**
  * Internal dependencies.
@@ -20,6 +29,7 @@ import type {
   CapacityPeriodMetrics,
   CapacityDemandRow,
 } from "./types";
+import { exportCapacityCsv, exportCapacityExcel, exportCapacityPdf } from "./utils/exportCapacity";
 import { getGapStatusLabel } from "./utils/gapColors";
 
 const defaultFilters: CapacityDemandFilters = {
@@ -65,6 +75,7 @@ const CapacityDemandView = () => {
   );
 
   const response = data?.message as CapacityDemandResponse | undefined;
+  const canExport = !!response && response.rows.length > 0;
 
   const handleCellClick = (
     row: CapacityDemandRow,
@@ -90,10 +101,41 @@ const CapacityDemandView = () => {
               12-month forward view · gap = capacity − demand
             </Typography>
           </div>
-          <div className="flex flex-wrap gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="rounded px-2 py-1 bg-sky-100/90 dark:bg-sky-950/50">Surplus</span>
             <span className="rounded px-2 py-1 bg-success/15">Balanced</span>
             <span className="rounded px-2 py-1 bg-destructive/20">Shortage</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 gap-1.5" disabled={!canExport}>
+                  <Download className="h-3.5 w-3.5" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2"
+                  onClick={() => response && exportCapacityExcel(response)}
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Export as Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2"
+                  onClick={() => response && exportCapacityCsv(response)}
+                >
+                  <FileText className="h-4 w-4" />
+                  Export as CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2"
+                  onClick={() => response && exportCapacityPdf(response)}
+                >
+                  <Printer className="h-4 w-4" />
+                  Export as PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </RootHeader>

@@ -13,6 +13,45 @@ from next_pms.timesheet.api import filter_employees
 from next_pms.timesheet.api.team import get_week_dates
 from next_pms.utils.employee import convert_currency
 
+
+DASH_TTL_SECONDS = 45
+
+
+def _dash_cache() -> dict:
+	"""Per-request memo so expensive helpers run once per dashboard load."""
+	if not hasattr(frappe.local, "_next_pms_dash_cache"):
+		frappe.local._next_pms_dash_cache = {}
+	return frappe.local._next_pms_dash_cache
+
+
+def _cached(key: str, builder):
+	cache = _dash_cache()
+	if key not in cache:
+		cache[key] = builder()
+	return cache[key]
+
+
+def _ttl_cached(key: str, builder, ttl: int = DASH_TTL_SECONDS):
+	"""Cross-request cache for expensive dashboard aggregates."""
+	cache_key = f"next_pms:dash:{key}:{today()}"
+	cached = frappe.cache().get_value(cache_key)
+	if cached is not None:
+		return cached
+	value = builder()
+	frappe.cache().set_value(cache_key, value, expires_in_sec=ttl)
+	return value
+
+
+def get_executive_dashboard_panels(user: str | None = None) -> dict:
+	"""Panels only — avoids rebuilding tile payloads on the progressive second request."""
+	frappe.local._next_pms_dash_cache = {}
+	visible_tiles = get_visible_tiles(user)
+	return {
+		"panels": build_dashboard_panels(visible_tiles, lean=True),
+		"refreshed_at": frappe.utils.now(),
+	}
+
+
 DASHBOARD_ROUTE = "/dashboard"
 ALL_TILES = (
     "utilization",
@@ -807,198 +846,219 @@ def _current_week_period() -> dict:
 
 
 def _week_capacity_metrics() -> dict:
-    period = _current_week_period()
-    periods = [period]
-    employees, _ = filter_employees(
-        None,
-        page_length=5000,
-        start=0,
-        status=["Active"],
-        ignore_permissions=True,
-    )
-    if not employees:
-        return {"capacity_hours": 0, "demand_hours": 0, "gap_hours": 0, "utilization_pct": 0}
+	return _cached("week_capacity", lambda: _ttl_cached("week_capacity", _week_capacity_metrics_uncached))
 
-    employee_names = [employee.name for employee in employees]
-    allocations = get_allocation_list_for_employee_for_given_range(
-        [
-            "name",
-            "employee",
-            "employee_name",
-            "project",
-            "project_name",
-            "allocation_start_date",
-            "allocation_end_date",
-            "hours_allocated_per_day",
-            "is_billable",
-            "status",
-        ],
-        "employee",
-        employee_names,
-        period["start_date"],
-        period["end_date"],
-    )
-    allocation_map: dict[str, list] = {}
-    for allocation in allocations:
-        allocation_map.setdefault(allocation.employee, []).append(allocation)
 
-    rows = build_capacity_demand_rows(employees, allocation_map, periods, group_by="employee")
-    capacity_hours = 0.0
-    demand_hours = 0.0
-    for row in rows:
-        metrics = row.get("periods", {}).get(period["key"], {})
-        capacity_hours += flt(metrics.get("capacity_hours"))
-        demand_hours += flt(metrics.get("demand_hours"))
+def _week_capacity_metrics_uncached() -> dict:
+	period = _current_week_period()
+	periods = [period]
+	employees, _ = filter_employees(
+		None,
+		page_length=5000,
+		start=0,
+		status=["Active"],
+		ignore_permissions=True,
+	)
+	if not employees:
+		return {"capacity_hours": 0, "demand_hours": 0, "gap_hours": 0, "utilization_pct": 0}
 
-    gap_hours = capacity_hours - demand_hours
-    utilization_pct = (demand_hours / capacity_hours * 100) if capacity_hours else 0
-    return {
-        "capacity_hours": flt(capacity_hours, 1),
-        "demand_hours": flt(demand_hours, 1),
-        "gap_hours": flt(gap_hours, 1),
-        "utilization_pct": flt(utilization_pct, 1),
-        "period_label": period["label"],
-        "period_start": period["start_date"],
-        "period_end": period["end_date"],
-    }
+	employee_names = [employee.name for employee in employees]
+	allocations = get_allocation_list_for_employee_for_given_range(
+		[
+			"name",
+			"employee",
+			"employee_name",
+			"project",
+			"project_name",
+			"allocation_start_date",
+			"allocation_end_date",
+			"hours_allocated_per_day",
+			"is_billable",
+			"status",
+		],
+		"employee",
+		employee_names,
+		period["start_date"],
+		period["end_date"],
+	)
+	allocation_map: dict[str, list] = {}
+	for allocation in allocations:
+		allocation_map.setdefault(allocation.employee, []).append(allocation)
+
+	rows = build_capacity_demand_rows(employees, allocation_map, periods, group_by="employee")
+	capacity_hours = 0.0
+	demand_hours = 0.0
+	for row in rows:
+		metrics = row.get("periods", {}).get(period["key"], {})
+		capacity_hours += flt(metrics.get("capacity_hours"))
+		demand_hours += flt(metrics.get("demand_hours"))
+
+	gap_hours = capacity_hours - demand_hours
+	utilization_pct = (demand_hours / capacity_hours * 100) if capacity_hours else 0
+	return {
+		"capacity_hours": flt(capacity_hours, 1),
+		"demand_hours": flt(demand_hours, 1),
+		"gap_hours": flt(gap_hours, 1),
+		"utilization_pct": flt(utilization_pct, 1),
+		"period_label": period["label"],
+		"period_start": period["start_date"],
+		"period_end": period["end_date"],
+	}
 
 
 def _pipeline_metrics() -> dict:
-    period = _current_week_period()
-    next_periods = build_period_buckets(period["start_date"], horizon_months=3, period_type="week")[:4]
+	return _cached("pipeline", lambda: _ttl_cached("pipeline", _pipeline_metrics_uncached))
 
-    employees, _ = filter_employees(
-        None,
-        page_length=2000,
-        start=0,
-        status=["Active"],
-        ignore_permissions=True,
-    )
-    employee_names = [employee.name for employee in employees]
-    if not employee_names or not next_periods:
-        upcoming_demand = 0.0
-    else:
-        allocations = get_allocation_list_for_employee_for_given_range(
-            [
-                "employee",
-                "project",
-                "project_name",
-                "allocation_start_date",
-                "allocation_end_date",
-                "hours_allocated_per_day",
-            ],
-            "employee",
-            employee_names,
-            next_periods[0]["start_date"],
-            next_periods[-1]["end_date"],
-        )
-        allocation_map: dict[str, list] = {}
-        for allocation in allocations:
-            allocation_map.setdefault(allocation.employee, []).append(allocation)
-        rows = build_capacity_demand_rows(employees, allocation_map, next_periods, group_by="employee")
-        upcoming_demand = 0.0
-        for row in rows:
-            for bucket in next_periods:
-                upcoming_demand += flt(row.get("periods", {}).get(bucket["key"], {}).get("demand_hours"))
 
-    open_sales_orders = frappe.db.sql(
-        """
-        SELECT COALESCE(SUM(base_net_total), 0) AS amount, COUNT(*) AS count
-        FROM `tabSales Order`
-        WHERE docstatus = 1
-          AND status NOT IN ('Completed', 'Closed', 'Cancelled')
-        """,
-        as_dict=True,
-    )[0]
+def _pipeline_metrics_uncached() -> dict:
+	period = _current_week_period()
+	next_periods = build_period_buckets(period["start_date"], horizon_months=3, period_type="week")[:4]
 
-    open_projects = frappe.db.count("Project", {"status": "Open"})
-    return {
-        "open_sales_order_value": flt(open_sales_orders.amount, 2),
-        "open_sales_order_count": int(open_sales_orders.count or 0),
-        "upcoming_demand_hours": flt(upcoming_demand, 1),
-        "open_projects": open_projects,
-        "horizon_weeks": len(next_periods),
-    }
+	employees, _ = filter_employees(
+		None,
+		page_length=2000,
+		start=0,
+		status=["Active"],
+		ignore_permissions=True,
+	)
+	employee_names = [employee.name for employee in employees]
+	if not employee_names or not next_periods:
+		upcoming_demand = 0.0
+	else:
+		allocations = get_allocation_list_for_employee_for_given_range(
+			[
+				"employee",
+				"project",
+				"project_name",
+				"allocation_start_date",
+				"allocation_end_date",
+				"hours_allocated_per_day",
+			],
+			"employee",
+			employee_names,
+			next_periods[0]["start_date"],
+			next_periods[-1]["end_date"],
+		)
+		allocation_map: dict[str, list] = {}
+		for allocation in allocations:
+			allocation_map.setdefault(allocation.employee, []).append(allocation)
+		rows = build_capacity_demand_rows(employees, allocation_map, next_periods, group_by="employee")
+		upcoming_demand = 0.0
+		for row in rows:
+			for bucket in next_periods:
+				upcoming_demand += flt(row.get("periods", {}).get(bucket["key"], {}).get("demand_hours"))
+
+	open_sales_orders = frappe.db.sql(
+		"""
+		SELECT COALESCE(SUM(base_net_total), 0) AS amount, COUNT(*) AS count
+		FROM `tabSales Order`
+		WHERE docstatus = 1
+		  AND status NOT IN ('Completed', 'Closed', 'Cancelled')
+		""",
+		as_dict=True,
+	)[0]
+
+	open_projects = frappe.db.count("Project", {"status": "Open"})
+	return {
+		"open_sales_order_value": flt(open_sales_orders.amount, 2),
+		"open_sales_order_count": int(open_sales_orders.count or 0),
+		"upcoming_demand_hours": flt(upcoming_demand, 1),
+		"open_projects": open_projects,
+		"horizon_weeks": len(next_periods),
+	}
 
 
 def _ar_metrics(company: str | None = None) -> dict:
-    company = company or get_default_company()
-    rows = frappe.db.sql(
-        """
-        SELECT outstanding_amount, currency, posting_date, due_date
-        FROM `tabSales Invoice`
-        WHERE docstatus = 1
-          AND outstanding_amount > 0
-          AND company = %s
-        """,
-        company,
-        as_dict=True,
-    )
-    reporting_currency = frappe.db.get_value("Company", company, "default_currency") or "USD"
-    total = 0.0
-    overdue = 0.0
-    today_date = getdate(today())
-    for row in rows:
-        converted = flt(convert_currency(row.outstanding_amount, row.currency, reporting_currency, row.posting_date))
-        total += converted
-        if row.due_date and getdate(row.due_date) < today_date:
-            overdue += converted
+	company = company or get_default_company()
+	return _cached(f"ar:{company}", lambda: _ttl_cached(f"ar:{company}", lambda: _ar_metrics_uncached(company)))
 
-    return {
-        "outstanding_amount": flt(total, 2),
-        "overdue_amount": flt(overdue, 2),
-        "invoice_count": len(rows),
-        "currency": reporting_currency,
-    }
+
+def _ar_metrics_uncached(company: str) -> dict:
+	rows = frappe.db.sql(
+		"""
+		SELECT outstanding_amount, currency, posting_date, due_date
+		FROM `tabSales Invoice`
+		WHERE docstatus = 1
+		  AND outstanding_amount > 0
+		  AND company = %s
+		""",
+		company,
+		as_dict=True,
+	)
+	reporting_currency = frappe.db.get_value("Company", company, "default_currency") or "USD"
+	total = 0.0
+	overdue = 0.0
+	today_date = getdate(today())
+	for row in rows:
+		converted = flt(convert_currency(row.outstanding_amount, row.currency, reporting_currency, row.posting_date))
+		total += converted
+		if row.due_date and getdate(row.due_date) < today_date:
+			overdue += converted
+
+	return {
+		"outstanding_amount": flt(total, 2),
+		"overdue_amount": flt(overdue, 2),
+		"invoice_count": len(rows),
+		"currency": reporting_currency,
+	}
 
 
 def _client_health_metrics() -> dict:
-    projects = frappe.get_all(
-        "Project",
-        filters={"status": "Open"},
-        fields=["name", "customer", "custom_project_rag_status"],
-    )
-    counts = {"Green": 0, "Amber": 0, "Red": 0, "Unrated": 0}
-    for project in projects:
-        status = (project.custom_project_rag_status or "Unrated").strip() or "Unrated"
-        if status not in counts:
-            status = "Unrated"
-        counts[status] += 1
+	return _cached("client_health", lambda: _ttl_cached("client_health", _client_health_metrics_uncached))
 
-    total = len(projects) or 1
-    health_score = flt((counts["Green"] / total) * 100, 1)
-    return {
-        "health_score": health_score,
-        "total_projects": len(projects),
-        "green": counts["Green"],
-        "amber": counts["Amber"],
-        "red": counts["Red"],
-        "unrated": counts["Unrated"],
-    }
+
+def _client_health_metrics_uncached() -> dict:
+	projects = frappe.get_all(
+		"Project",
+		filters={"status": "Open"},
+		fields=["name", "customer", "custom_project_rag_status"],
+	)
+	counts = {"Green": 0, "Amber": 0, "Red": 0, "Unrated": 0}
+	for project in projects:
+		status = (project.custom_project_rag_status or "Unrated").strip() or "Unrated"
+		if status not in counts:
+			status = "Unrated"
+		counts[status] += 1
+
+	total = len(projects) or 1
+	health_score = flt((counts["Green"] / total) * 100, 1)
+	return {
+		"health_score": health_score,
+		"total_projects": len(projects),
+		"green": counts["Green"],
+		"amber": counts["Amber"],
+		"red": counts["Red"],
+		"unrated": counts["Unrated"],
+	}
 
 
 def _margin_metrics() -> dict:
-    month_start = get_first_day(today())
-    month_end = get_last_day(today())
-    portfolio = get_portfolio_margin_view(
-        {
-            "from_date": str(month_start),
-            "to_date": str(month_end),
-            "group_by": "customer",
-        }
-    )
-    summary = portfolio.get("summary", {})
-    return {
-        "recognized_revenue": summary.get("recognized_revenue", 0),
-        "incurred_cost": summary.get("incurred_cost", 0),
-        "actual_margin": summary.get("actual_margin", 0),
-        "actual_margin_pct": summary.get("actual_margin_pct", 0),
-        "planned_margin_pct": summary.get("planned_margin_pct", 0),
-        "margin_variance": summary.get("margin_variance", 0),
-        "currency": portfolio.get("currency"),
-        "period_start": str(month_start),
-        "period_end": str(month_end),
-    }
+	return _cached("margin_mtd", lambda: _ttl_cached("margin_mtd", _margin_metrics_uncached))
+
+
+def _margin_metrics_uncached() -> dict:
+	month_start = get_first_day(today())
+	month_end = get_last_day(today())
+	portfolio = get_portfolio_margin_view(
+		{
+			"from_date": str(month_start),
+			"to_date": str(month_end),
+			"group_by": "customer",
+		}
+	)
+	summary = portfolio.get("summary", {})
+	return {
+		"recognized_revenue": summary.get("recognized_revenue", 0),
+		"incurred_cost": summary.get("incurred_cost", 0),
+		"actual_margin": summary.get("actual_margin", 0),
+		"actual_margin_pct": summary.get("actual_margin_pct", 0),
+		"planned_margin_pct": summary.get("planned_margin_pct", 0),
+		"margin_variance": summary.get("margin_variance", 0),
+		"currency": portfolio.get("currency"),
+		"period_start": str(month_start),
+		"period_end": str(month_end),
+		"_portfolio": portfolio,
+	}
 
 
 def build_tile_payload(tile_key: str) -> dict:
@@ -1284,32 +1344,34 @@ def _tasks_overview() -> dict:
 
 
 def _margin_by_customer(limit: int = 6) -> list[dict]:
-    month_start = get_first_day(today())
-    month_end = get_last_day(today())
-    portfolio = get_portfolio_margin_view(
-        {
-            "from_date": str(month_start),
-            "to_date": str(month_end),
-            "group_by": "customer",
-        }
-    )
-    rows = sorted(
-        portfolio.get("rows") or [],
-        key=lambda row: flt(row.get("actual_margin")),
-        reverse=True,
-    )
-    return [
-        {
-            "key": row.get("key"),
-            "label": row.get("label"),
-            "actual_margin": flt(row.get("actual_margin"), 2),
-            "actual_margin_pct": flt(row.get("actual_margin_pct"), 1),
-            "recognized_revenue": flt(row.get("recognized_revenue"), 2),
-            "incurred_cost": flt(row.get("incurred_cost"), 2),
-            "project_count": int(row.get("project_count") or 0),
-        }
-        for row in rows[:limit]
-    ]
+	portfolio = _margin_metrics().get("_portfolio")
+	if not portfolio:
+		month_start = get_first_day(today())
+		month_end = get_last_day(today())
+		portfolio = get_portfolio_margin_view(
+			{
+				"from_date": str(month_start),
+				"to_date": str(month_end),
+				"group_by": "customer",
+			}
+		)
+	rows = sorted(
+		portfolio.get("rows") or [],
+		key=lambda row: flt(row.get("actual_margin")),
+		reverse=True,
+	)
+	return [
+		{
+			"key": row.get("key"),
+			"label": row.get("label"),
+			"actual_margin": flt(row.get("actual_margin"), 2),
+			"actual_margin_pct": flt(row.get("actual_margin_pct"), 1),
+			"recognized_revenue": flt(row.get("recognized_revenue"), 2),
+			"incurred_cost": flt(row.get("incurred_cost"), 2),
+			"project_count": int(row.get("project_count") or 0),
+		}
+		for row in rows[:limit]
+	]
 
 
 def _ar_aging_buckets() -> dict:
@@ -1851,72 +1913,87 @@ MODULE_SHORTCUTS = [
 ]
 
 
-def build_dashboard_panels(visible_tiles: list[str]) -> dict:
-    tile_set = set(visible_tiles)
-    panels: dict = {
-        "shortcuts": MODULE_SHORTCUTS,
-        "extra_kpis": _build_extra_kpis(visible_tiles),
-    }
+def get_executive_dashboard(user: str | None = None, include_panels: bool = True) -> dict:
+	# Clear request cache for a fresh load
+	frappe.local._next_pms_dash_cache = {}
 
-    if tile_set.intersection({"utilization", "bench", "billable_ratio"}):
-        panels["utilization_trend"] = _utilization_trend()
-        panels["timesheet_week"] = _timesheet_week_summary()
-        panels["timesheet_trend"] = _timesheet_hours_trend()
-        panels["department_utilization"] = _department_utilization()
+	visible_tiles = get_visible_tiles(user)
+	persona = resolve_dashboard_persona()
+	tiles = [build_tile_payload(tile_key) for tile_key in visible_tiles if tile_key in TILE_META]
 
-    if tile_set.intersection({"utilization", "bench", "pipeline"}):
-        panels["capacity_forecast"] = _capacity_forecast()
+	payload = {
+		"tiles": tiles,
+		"panels": {},
+		"available_tiles": [
+			{
+				"key": key,
+				**TILE_META[key],
+				"enabled_by_role": key in get_default_tiles_for_user(),
+			}
+			for key in ALL_TILES
+		],
+		"layout": get_saved_layout(user) or {"tiles": visible_tiles, "order": visible_tiles},
+		"roles": get_user_roles(),
+		"persona": persona,
+		"refreshed_at": frappe.utils.now(),
+	}
 
-    if tile_set.intersection({"margin", "revenue"}):
-        panels["margin_by_customer"] = _margin_by_customer()
-        panels["margin_waterfall"] = _margin_waterfall()
-        panels["margin_by_project_type"] = _margin_by_project_type()
+	if include_panels:
+		# Build a leaner panel set first — skip the most expensive N+1 work
+		payload["panels"] = build_dashboard_panels(visible_tiles, lean=True)
 
-    if tile_set.intersection({"ar"}):
-        panels["ar_aging"] = _ar_aging_buckets()
-
-    if tile_set.intersection({"client_health", "pipeline"}):
-        panels["client_health"] = _client_health_metrics()
-        panels["at_risk_projects"] = _at_risk_projects()
-        panels["project_status"] = _project_status_breakdown()
-
-    panels["tasks_overview"] = _tasks_overview()
-    panels["overdue_tasks"] = _overdue_tasks()
-    panels["top_projects_by_hours"] = _top_projects_by_hours()
-    panels["recent_activity"] = _recent_activity()
-
-    if tile_set.intersection({"approvals"}):
-        panels["approval_summary"] = _approval_summary()
-
-    if tile_set.intersection({"active_allocations", "team_active"}):
-        panels["allocation_summary"] = _allocation_summary()
-
-    if tile_set.intersection({"margin", "pipeline", "client_health"}):
-        panels["budget_alerts"] = _budget_alerts()
-
-    return panels
+	return payload
 
 
-def get_executive_dashboard(user: str | None = None) -> dict:
-    visible_tiles = get_visible_tiles(user)
-    tiles = [build_tile_payload(tile_key) for tile_key in visible_tiles if tile_key in TILE_META]
-    persona = resolve_dashboard_persona()
-    return {
-        "tiles": tiles,
-        "panels": build_dashboard_panels(visible_tiles),
-        "available_tiles": [
-            {
-                "key": key,
-                **TILE_META[key],
-                "enabled_by_role": key in get_default_tiles_for_user(),
-            }
-            for key in ALL_TILES
-        ],
-        "layout": get_saved_layout(user) or {"tiles": visible_tiles, "order": visible_tiles},
-        "roles": get_user_roles(),
-        "persona": persona,
-        "refreshed_at": frappe.utils.now(),
-    }
+def build_dashboard_panels(visible_tiles: list[str], lean: bool = False) -> dict:
+	tile_set = set(visible_tiles)
+	panels: dict = {
+		"shortcuts": MODULE_SHORTCUTS,
+		"extra_kpis": _build_extra_kpis(visible_tiles),
+	}
+
+	if tile_set.intersection({"utilization", "bench", "billable_ratio"}):
+		panels["utilization_trend"] = _utilization_trend(weeks=6 if lean else 8)
+		panels["timesheet_week"] = _timesheet_week_summary()
+		if not lean:
+			panels["timesheet_trend"] = _timesheet_hours_trend()
+			panels["department_utilization"] = _department_utilization()
+
+	if tile_set.intersection({"utilization", "bench", "pipeline"}) and not lean:
+		panels["capacity_forecast"] = _capacity_forecast()
+
+	if tile_set.intersection({"margin", "revenue"}):
+		panels["margin_by_customer"] = _margin_by_customer()
+		panels["margin_waterfall"] = _margin_waterfall()
+		# project_type grouping is a second full portfolio scan — skip in lean mode
+		if not lean:
+			panels["margin_by_project_type"] = _margin_by_project_type()
+
+	if tile_set.intersection({"ar"}):
+		panels["ar_aging"] = _ar_aging_buckets()
+
+	if tile_set.intersection({"client_health", "pipeline"}):
+		panels["client_health"] = _client_health_metrics()
+		panels["at_risk_projects"] = _at_risk_projects()
+		panels["project_status"] = _project_status_breakdown()
+
+	panels["tasks_overview"] = _tasks_overview()
+	panels["overdue_tasks"] = _overdue_tasks()
+	panels["top_projects_by_hours"] = _top_projects_by_hours()
+	if not lean:
+		panels["recent_activity"] = _recent_activity()
+
+	if tile_set.intersection({"approvals"}):
+		panels["approval_summary"] = _approval_summary()
+
+	if tile_set.intersection({"active_allocations", "team_active"}):
+		panels["allocation_summary"] = _allocation_summary()
+
+	# Budget alerts are per-project N+1 — keep off the hot path
+	if (not lean) and tile_set.intersection({"margin", "pipeline", "client_health"}):
+		panels["budget_alerts"] = _budget_alerts()
+
+	return panels
 
 
 def get_personal_timesheet_dashboard() -> dict:

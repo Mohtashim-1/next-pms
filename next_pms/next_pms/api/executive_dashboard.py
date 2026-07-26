@@ -8,6 +8,7 @@ from next_pms.next_pms.utils.executive_dashboard import (
     ALL_TILES,
     REPORT_ACCESS_ROLES,
     get_executive_dashboard,
+    get_executive_dashboard_panels,
     get_personal_timesheet_dashboard,
     get_reports_catalog_for_user,
     get_visible_tiles,
@@ -42,13 +43,31 @@ def _ensure_access(allow_timesheet_user: bool = False):
 
 @whitelist()
 @error_logger
-def get_dashboard():
-    """Role-aware dashboard: executive tiles for managers/leads; personal for Timesheet Users."""
-    _ensure_access(allow_timesheet_user=True)
-    persona = resolve_dashboard_persona()
-    if not persona.get("can_view_executive"):
-        return get_personal_timesheet_dashboard()
-    return get_executive_dashboard()
+def get_dashboard(include_panels: int | str | bool = 1):
+	"""Role-aware dashboard: executive tiles for managers/leads; personal for Timesheet Users.
+
+	Pass include_panels=0 for a fast tiles-only response (panels load in a second call).
+	"""
+	_ensure_access(allow_timesheet_user=True)
+	persona = resolve_dashboard_persona()
+	if not persona.get("can_view_executive"):
+		return get_personal_timesheet_dashboard()
+
+	include = True
+	if isinstance(include_panels, str):
+		include = include_panels.strip().lower() not in {"0", "false", "no"}
+	elif isinstance(include_panels, (int, bool)):
+		include = bool(int(include_panels))
+
+	return get_executive_dashboard(include_panels=include)
+
+
+@whitelist()
+@error_logger
+def get_dashboard_panels():
+	"""Lean insight panels only (progressive load after tiles)."""
+	_ensure_access(allow_timesheet_user=False)
+	return get_executive_dashboard_panels()
 
 
 @whitelist()

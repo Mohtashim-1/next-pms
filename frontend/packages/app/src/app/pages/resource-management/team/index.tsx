@@ -1,9 +1,9 @@
 /**
  * External dependencies.
  */
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getNextDate } from "@next-pms/design-system";
-import { Spinner, useToast } from "@next-pms/design-system/components";
+import { Button, Spinner, Typography, useToast } from "@next-pms/design-system/components";
 import { useInfiniteScroll } from "@next-pms/hooks";
 import { useFrappePostCall } from "frappe-react-sdk";
 import { useContextSelector } from "use-context-selector";
@@ -88,6 +88,8 @@ const ResourceTeamViewComponent = ({
     dialogState: resourceAllocationDialogState,
   } = useContextSelector(ResourceFormContext, (value) => value.state);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const { call: fetchData } = useFrappePostCall(
     "next_pms.resource_management.api.team.get_resource_management_team_view_data",
   );
@@ -130,11 +132,13 @@ const ResourceTeamViewComponent = ({
       try {
         const filterReqBody: ResourceTeamAPIBodyProps = getFilterApiBody(req);
         const res = await fetchData(filterReqBody);
+        setLoadError(null);
         return res.message;
       } catch (err) {
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore: Ignore type checking for parseFrappeErrorMsg
         const error = parseFrappeErrorMsg(err);
+        setLoadError(error || "Unable to load team data.");
         toast({
           variant: "destructive",
           description: error,
@@ -232,7 +236,17 @@ const ResourceTeamViewComponent = ({
 
     const mainThredData = await handleApiCall(req);
 
-    if (!mainThredData) return;
+    if (!mainThredData) {
+      // Clear the loading flag so the view doesn't spin forever on a failed fetch.
+      updateTeamData({
+        data: [],
+        dates: teamData.dates,
+        customer: {},
+        total_count: 0,
+        has_more: false,
+      });
+      return;
+    }
 
     updateTeamData(mainThredData);
 
@@ -246,6 +260,11 @@ const ResourceTeamViewComponent = ({
     teamData.dates,
     updateTeamData,
   ]);
+
+  const retryLoad = useCallback(() => {
+    setLoadError(null);
+    setReFetchData(true);
+  }, [setReFetchData]);
 
   const handleVerticalLoadMore = () => {
     if (!getHasMore()) return;
@@ -334,6 +353,15 @@ const ResourceTeamViewComponent = ({
       <ResourceTeamHeaderSection viewData={viewData} />
       {apiController.isLoading && teamData.data.length == 0 ? (
         <Spinner isFull />
+      ) : loadError && teamData.data.length == 0 ? (
+        <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+          <Typography variant="p" className="text-destructive">
+            {loadError}
+          </Typography>
+          <Button variant="outline" size="sm" onClick={retryLoad}>
+            Retry
+          </Button>
+        </div>
       ) : (
         <ResourceTeamTable
           handleVerticalLoadMore={handleVerticalLoadMore}
