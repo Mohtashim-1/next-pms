@@ -14,12 +14,22 @@ from frappe.utils import add_months, getdate, today
 from next_pms.next_pms.utils.executive_dashboard import REPORT_ACCESS_ROLES, resolve_dashboard_persona
 
 
+# Reports whose execute() already accepts company as a list (or empty = all).
+_NATIVE_MULTI_COMPANY_REPORTS = {
+	"Department / Team Scorecard",
+	"Appraisal Evaluation Report",
+	"Milestone Tracking Report",
+	"Portfolio Summary Dashboard",
+	"Project Completion Trend",
+}
+
+
 # Default filter schemas for portal reports (JS filters are Desk-only).
 PORTAL_REPORT_FILTERS: dict[str, list[dict]] = {
 	"Holiday Timesheet Gap": [
 		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "reqd": 1, "default": "month_ago"},
 		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "reqd": 1, "default": "today"},
-		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
 	],
 	"Timesheet Approval SLA": [
 		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "reqd": 1, "default": "two_months_ago"},
@@ -35,12 +45,12 @@ PORTAL_REPORT_FILTERS: dict[str, list[dict]] = {
 	],
 	"Forecast vs Actual Revenue": [
 		{"fieldname": "months", "label": "Months", "fieldtype": "Int", "default": 6, "reqd": 1},
-		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
 	],
 	"Employee Leave Balance": [
 		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "reqd": 1, "default": "fiscal_year_start"},
 		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "reqd": 1, "default": "fiscal_year_end"},
-		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company", "default": "company"},
 	],
 	"Monthly Attendance Sheet": [
 		# HRMS expects Month | Date Range (NOT Company/Employee) and month as 1–12.
@@ -63,7 +73,7 @@ PORTAL_REPORT_FILTERS: dict[str, list[dict]] = {
 		{"fieldname": "year", "label": "Year", "fieldtype": "Int", "reqd": 1, "default": "year"},
 		{"fieldname": "start_date", "label": "Start Date", "fieldtype": "Date"},
 		{"fieldname": "end_date", "label": "End Date", "fieldtype": "Date"},
-		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company", "reqd": 1},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company", "default": "company"},
 		{
 			"fieldname": "group_by",
 			"label": "Group By",
@@ -72,7 +82,7 @@ PORTAL_REPORT_FILTERS: dict[str, list[dict]] = {
 		},
 	],
 	"Employee Analytics": [
-		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company", "reqd": 1},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company", "default": "company"},
 		{
 			"fieldname": "parameter",
 			"label": "Parameter",
@@ -86,7 +96,7 @@ PORTAL_REPORT_FILTERS: dict[str, list[dict]] = {
 	# Company default is a Desk-session value, and the fiscal-year default window can start
 	# in the future — a trailing 12 months is a more useful landing state in the portal.
 	"Gross Profit": [
-		{"fieldname": "company", "default": "company"},
+		{"fieldname": "company", "fieldtype": "MultiSelectList", "options": "Company", "default": "company"},
 		{"fieldname": "from_date", "default": "year_ago"},
 		{"fieldname": "to_date", "default": "today"},
 	],
@@ -109,7 +119,7 @@ PORTAL_REPORT_FILTERS: dict[str, list[dict]] = {
 	"Milestone Tracking Report": [
 		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "year_ago"},
 		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
-		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company", "default": "company"},
 		{"fieldname": "project", "label": "Project", "fieldtype": "Link", "options": "Project"},
 		{"fieldname": "customer", "label": "Customer", "fieldtype": "Link", "options": "Customer"},
 		{
@@ -122,7 +132,7 @@ PORTAL_REPORT_FILTERS: dict[str, list[dict]] = {
 	"Portfolio Summary Dashboard": [
 		{"fieldname": "from_date", "label": "Hours From", "fieldtype": "Date", "default": "year_ago"},
 		{"fieldname": "to_date", "label": "Hours To", "fieldtype": "Date", "default": "today"},
-		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company", "default": "company"},
 		{"fieldname": "customer", "label": "Customer", "fieldtype": "Link", "options": "Customer"},
 		{
 			"fieldname": "status",
@@ -141,26 +151,33 @@ PORTAL_REPORT_FILTERS: dict[str, list[dict]] = {
 	"Project Completion Trend": [
 		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "year_ago"},
 		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
-		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company", "default": "company"},
 		{"fieldname": "customer", "label": "Customer", "fieldtype": "Link", "options": "Customer"},
 		{"fieldname": "project_type", "label": "Project Type", "fieldtype": "Link", "options": "Project Type"},
 	],
 	"Department / Team Scorecard": [
 		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "month_ago", "reqd": 1},
 		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today", "reqd": 1},
-		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
+		# Multi-select; leave empty to include all companies.
+		{
+			"fieldname": "company",
+			"label": "Company",
+			"fieldtype": "MultiSelectList",
+			"options": "Company",
+			"default": "company",
+		},
 		{"fieldname": "department", "label": "Department", "fieldtype": "Link", "options": "Department"},
 	],
 	"Employees working on a holiday": [
 		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "month_ago"},
 		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
-		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company", "default": "company"},
 	],
 	"Appraisal Evaluation Report": [
 		# Prefer standard from_date / to_date (legacy `from` / `to` still accepted in execute).
 		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "reqd": 1, "default": "month_ago"},
 		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "reqd": 1, "default": "today"},
-		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company", "default": "company"},
 		{"fieldname": "status", "label": "Status", "fieldtype": "Select", "options": "\nActive\nInactive\nLeft", "default": "Active"},
 		{"fieldname": "currency", "label": "Currency", "fieldtype": "Select", "options": "USD\nINR", "default": "USD"},
 	],
@@ -176,6 +193,98 @@ def ensure_portal_report_access():
 			"Reports are available to System Managers, Team Leads, and Project Managers only.",
 			frappe.PermissionError,
 		)
+
+
+def _as_company_list(value) -> list[str]:
+	"""Normalize company filter from string / list / JSON string → list of names."""
+	if value in (None, "", [], ()):
+		return []
+	if isinstance(value, str):
+		raw = value.strip()
+		if not raw:
+			return []
+		if raw.startswith("["):
+			try:
+				parsed = frappe.parse_json(raw)
+				if isinstance(parsed, list):
+					return [str(c).strip() for c in parsed if c]
+			except Exception:
+				pass
+		return [raw]
+	if isinstance(value, (list, tuple)):
+		return [str(c).strip() for c in value if c]
+	return [str(value)]
+
+
+def _upgrade_company_filters(filters: list[dict]) -> list[dict]:
+	"""Force every Company Link filter to MultiSelectList across all portal reports."""
+	out = []
+	for f in filters or []:
+		item = dict(f)
+		if item.get("options") == "Company" and item.get("fieldtype") in ("Link", "MultiSelectList", None):
+			item["fieldtype"] = "MultiSelectList"
+			item["options"] = "Company"
+			# Multi-select is never mandatory — empty means all companies.
+			item.pop("reqd", None)
+			default = item.get("default")
+			if default not in (None, ""):
+				item["default"] = default if isinstance(default, list) else [default]
+		out.append(item)
+	return out
+
+
+def _all_companies() -> list[str]:
+	return frappe.get_all("Company", pluck="name", order_by="name asc")
+
+
+def _merge_company_runs(report, filters: dict, companies: list[str]) -> dict:
+	"""Run a single-company report once per company and concatenate rows."""
+	all_rows: list = []
+	columns = None
+	chart = None
+	summary = None
+	message = None
+	for company in companies:
+		run_filters = dict(filters)
+		run_filters["company"] = company
+		result = _run_script_or_query(report, run_filters)
+		if columns is None:
+			columns = result.get("columns") or []
+			chart = result.get("chart")
+			summary = result.get("report_summary")
+			message = result.get("message")
+		rows = result.get("result") or result.get("data") or []
+		if rows:
+			all_rows.extend(rows)
+	return {
+		"columns": columns or [],
+		"result": all_rows,
+		"chart": chart,
+		"report_summary": summary,
+		"message": message,
+	}
+
+
+def _run_with_company_filter(report, report_name: str, filters: dict) -> dict:
+	"""Dispatch execute() with multi-company support for every portal report."""
+	companies = _as_company_list(filters.get("company"))
+	run_filters = dict(filters)
+
+	# Native reports accept list / empty (= all) directly.
+	if report_name in _NATIVE_MULTI_COMPANY_REPORTS:
+		run_filters["company"] = companies
+		return _run_script_or_query(report, run_filters)
+
+	# Stock / single-company scripts: 0 → all, 1 → string, N → merge runs.
+	if not companies:
+		companies = _all_companies()
+	if not companies:
+		run_filters.pop("company", None)
+		return _run_script_or_query(report, run_filters)
+	if len(companies) == 1:
+		run_filters["company"] = companies[0]
+		return _run_script_or_query(report, run_filters)
+	return _merge_company_runs(report, run_filters, companies)
 
 
 def _safe_report_folder(report_name: str) -> str:
@@ -462,10 +571,9 @@ def _normalize_portal_filters(report_name: str, filters: dict) -> dict:
 	elif report_name == "Employee Analytics":
 		if not out.get("parameter"):
 			out["parameter"] = "Department"
-		if not out.get("company"):
-			out["company"] = _resolve_default("company")
-		if not out.get("company"):
-			frappe.throw("Company is required for Employee Analytics.")
+		# Company may be a list; empty is allowed (runner expands to all).
+		companies = _as_company_list(out.get("company"))
+		out["company"] = companies
 
 	elif report_name == "Appraisal Evaluation Report":
 		# Accept either naming convention; prefer from_date / to_date in the payload.
@@ -480,6 +588,11 @@ def _normalize_portal_filters(report_name: str, filters: dict) -> dict:
 		# Drop legacy aliases so they never show as empty mandatory filters.
 		out.pop("from", None)
 		out.pop("to", None)
+		out["company"] = _as_company_list(out.get("company"))
+
+	# Always normalize company to a list when present so MultiSelectList values survive.
+	if "company" in out:
+		out["company"] = _as_company_list(out.get("company"))
 
 	return out
 
@@ -543,17 +656,31 @@ def get_portal_report_meta(report_name: str) -> dict:
 	for f in filters:
 		item = dict(f)
 		default = _resolve_default(item.get("default"))
-		# Auto-fill Company when Link options is Company
+		# Auto-fill Company when Link / MultiSelectList options is Company
 		if (
 			(default is None or default == "")
-			and item.get("fieldtype") == "Link"
+			and item.get("fieldtype") in ("Link", "MultiSelectList")
 			and item.get("options") == "Company"
 		):
 			default = _resolve_default("company")
+		# MultiSelectList defaults must be arrays for the portal ComboBox.
+		if item.get("fieldtype") == "MultiSelectList" and default not in (None, ""):
+			default = default if isinstance(default, list) else [default]
 		item["default"] = default
-		if default is not None and default != "":
+		if default is not None and default != "" and default != []:
 			defaults[item["fieldname"]] = default
 		resolved.append(item)
+
+	# Globally upgrade every Company Link → MultiSelectList (including JS-parsed schemas).
+	resolved = _upgrade_company_filters(resolved)
+	# Re-sync defaults after upgrade (company becomes a list).
+	for item in resolved:
+		if item.get("options") == "Company" and item.get("fieldtype") == "MultiSelectList":
+			default = item.get("default")
+			if default not in (None, "", []):
+				defaults[item["fieldname"]] = default if isinstance(default, list) else [default]
+			elif item["fieldname"] in defaults and not isinstance(defaults[item["fieldname"]], list):
+				defaults[item["fieldname"]] = [defaults[item["fieldname"]]]
 
 	# Only use generic date filters when report truly has none
 	if not resolved:
@@ -573,12 +700,12 @@ def get_portal_report_meta(report_name: str) -> dict:
 			{
 				"fieldname": "company",
 				"label": "Company",
-				"fieldtype": "Link",
+				"fieldtype": "MultiSelectList",
 				"options": "Company",
-				"default": _resolve_default("company"),
+				"default": [_resolve_default("company")] if _resolve_default("company") else [],
 			},
 		]
-		defaults = {f["fieldname"]: f["default"] for f in resolved if f.get("default") not in (None, "")}
+		defaults = {f["fieldname"]: f["default"] for f in resolved if f.get("default") not in (None, "", [])}
 
 	letter_heads = frappe.get_all(
 		"Letter Head",
@@ -616,11 +743,12 @@ def run_portal_report(report_name: str, filters: dict | str | None = None) -> di
 
 	meta = get_portal_report_meta(report_name)
 	merged = dict(meta.get("defaults") or {})
+	# Keep empty lists (cleared MultiSelect = all companies); only drop None / "".
 	merged.update({k: v for k, v in filters.items() if v not in (None, "")})
 	merged = _normalize_portal_filters(report_name, merged)
 
 	try:
-		result = _run_script_or_query(report, merged)
+		result = _run_with_company_filter(report, report_name, merged)
 	except Exception as e:
 		# Surface a clear message to the portal UI (not generic "There was an error.")
 		frappe.log_error(title=f"Portal report failed: {report_name}")

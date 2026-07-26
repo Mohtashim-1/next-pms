@@ -932,7 +932,11 @@ const ReportFilter = ({
         <ComboBox
           label={
             !arrayValue.length
-              ? `Select ${filter.label}`
+              ? isMulti && !filter.reqd
+                ? filter.options === "Company"
+                  ? "All Companies"
+                  : `All ${filter.label}`
+                : `Select ${filter.label}`
               : isMulti
                 ? `${arrayValue.length} selected`
                 : linkOptions.find((option) => option.value === arrayValue[0])?.label || arrayValue[0]
