@@ -9,7 +9,7 @@ import re
 
 import frappe
 from frappe.modules import get_module_path, scrub
-from frappe.utils import add_months, today
+from frappe.utils import add_months, getdate, today
 
 from next_pms.next_pms.utils.executive_dashboard import REPORT_ACCESS_ROLES, resolve_dashboard_persona
 
@@ -38,25 +38,49 @@ PORTAL_REPORT_FILTERS: dict[str, list[dict]] = {
 		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company"},
 	],
 	"Employee Leave Balance": [
-		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "reqd": 1, "default": "month_ago"},
-		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "reqd": 1, "default": "today"},
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "reqd": 1, "default": "fiscal_year_start"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "reqd": 1, "default": "fiscal_year_end"},
 		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
 	],
 	"Monthly Attendance Sheet": [
-		{"fieldname": "month", "label": "Month", "fieldtype": "Select", "options": "\nJan\nFeb\nMar\nApr\nMay\nJun\nJul\nAug\nSep\nOct\nNov\nDec", "reqd": 1},
-		{"fieldname": "year", "label": "Year", "fieldtype": "Int", "reqd": 1, "default": "year"},
+		# HRMS expects Month | Date Range (NOT Company/Employee) and month as 1–12.
 		{
 			"fieldname": "filter_based_on",
 			"label": "Filter Based On",
 			"fieldtype": "Select",
-			"options": "\nEmployee\nCompany\nDepartment\nBranch",
+			"options": "Month\nDate Range",
 			"reqd": 1,
-			"default": "Company",
+			"default": "Month",
 		},
-		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
+		{
+			"fieldname": "month",
+			"label": "Month",
+			"fieldtype": "Select",
+			"options": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12",
+			"reqd": 1,
+			"default": "current_month",
+		},
+		{"fieldname": "year", "label": "Year", "fieldtype": "Int", "reqd": 1, "default": "year"},
+		{"fieldname": "start_date", "label": "Start Date", "fieldtype": "Date"},
+		{"fieldname": "end_date", "label": "End Date", "fieldtype": "Date"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company", "reqd": 1},
+		{
+			"fieldname": "group_by",
+			"label": "Group By",
+			"fieldtype": "Select",
+			"options": "\nBranch\nGrade\nDepartment\nDesignation",
+		},
 	],
 	"Employee Analytics": [
 		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company", "reqd": 1},
+		{
+			"fieldname": "parameter",
+			"label": "Parameter",
+			"fieldtype": "Select",
+			"options": "Branch\nGrade\nDepartment\nDesignation\nEmployment Type",
+			"default": "Department",
+			"reqd": 1,
+		},
 	],
 	# Gross Profit keeps its own JS schema (company / dates / group_by / dimensions).
 	# Company default is a Desk-session value, and the fiscal-year default window can start
@@ -82,15 +106,63 @@ PORTAL_REPORT_FILTERS: dict[str, list[dict]] = {
 		{"fieldname": "from_date", "default": "year_ago"},
 		{"fieldname": "to_date", "default": "today"},
 	],
+	"Milestone Tracking Report": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "year_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
+		{"fieldname": "project", "label": "Project", "fieldtype": "Link", "options": "Project"},
+		{"fieldname": "customer", "label": "Customer", "fieldtype": "Link", "options": "Customer"},
+		{
+			"fieldname": "status",
+			"label": "Status",
+			"fieldtype": "Select",
+			"options": "\nOpen\nWorking\nPending Review\nOverdue\nTemplate\nCompleted\nCancelled",
+		},
+	],
+	"Portfolio Summary Dashboard": [
+		{"fieldname": "from_date", "label": "Hours From", "fieldtype": "Date", "default": "year_ago"},
+		{"fieldname": "to_date", "label": "Hours To", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
+		{"fieldname": "customer", "label": "Customer", "fieldtype": "Link", "options": "Customer"},
+		{
+			"fieldname": "status",
+			"label": "Status",
+			"fieldtype": "Select",
+			"options": "\nOpen\nCompleted\nCancelled",
+		},
+		{"fieldname": "project_type", "label": "Project Type", "fieldtype": "Link", "options": "Project Type"},
+		{
+			"fieldname": "rag_status",
+			"label": "RAG",
+			"fieldtype": "Select",
+			"options": "\nGreen\nAmber\nRed",
+		},
+	],
+	"Project Completion Trend": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "year_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
+		{"fieldname": "customer", "label": "Customer", "fieldtype": "Link", "options": "Customer"},
+		{"fieldname": "project_type", "label": "Project Type", "fieldtype": "Link", "options": "Project Type"},
+	],
+	"Department / Team Scorecard": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "month_ago", "reqd": 1},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today", "reqd": 1},
+		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
+		{"fieldname": "department", "label": "Department", "fieldtype": "Link", "options": "Department"},
+	],
 	"Employees working on a holiday": [
 		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "month_ago"},
 		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
 		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
 	],
 	"Appraisal Evaluation Report": [
-		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "reqd": 1, "default": "month_ago"},
-		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "reqd": 1, "default": "today"},
+		# Script uses fieldnames `from` / `to` (not from_date / to_date).
+		{"fieldname": "from", "label": "From Date", "fieldtype": "Date", "reqd": 1, "default": "month_ago"},
+		{"fieldname": "to", "label": "To Date", "fieldtype": "Date", "reqd": 1, "default": "today"},
 		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
+		{"fieldname": "status", "label": "Status", "fieldtype": "Select", "options": "\nActive\nInactive\nLeft", "default": "Active"},
+		{"fieldname": "currency", "label": "Currency", "fieldtype": "Select", "options": "USD\nINR", "default": "USD"},
 	],
 }
 
@@ -125,7 +197,9 @@ def _resolve_default(value):
 	if value == "company":
 		return frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
 	if value == "year":
-		return frappe.utils.getdate(today()).year
+		return getdate(today()).year
+	if value == "current_month":
+		return getdate(today()).month
 	if value in ("fiscal_year_start", "fiscal_year_end"):
 		try:
 			from erpnext.accounts.utils import get_fiscal_year
@@ -212,10 +286,12 @@ def _parse_filters_from_js(report_name: str, module: str | None) -> list[dict]:
 				item["options"] = opt2.group(1).replace("\\n", "\n")
 
 		# Array-of-values / array-of-objects options (Select)
+		# Supports both value: "x" and bare numeric value: 1 (HRMS month picker).
 		if "options" not in item:
 			arr = re.search(r"options\s*:\s*\[([\s\S]*?)\]", block)
 			if arr:
-				values = re.findall(r"value\s*:\s*[\"']([^\"']*)[\"']", arr.group(1))
+				values = re.findall(r"value\s*:\s*(?:[\"']([^\"']*)[\"']|(\d+))", arr.group(1))
+				values = [a or b for a, b in values if (a or b) != ""]
 				if not values:
 					values = re.findall(r"[\"']([^\"']+)[\"']", arr.group(1))
 				values = [v for v in values if v != ""]
@@ -322,6 +398,89 @@ def _run_script_or_query(report, filters: dict) -> dict:
 		}
 
 
+def _normalize_portal_filters(report_name: str, filters: dict) -> dict:
+	"""Coerce portal filter values into what each report's execute() expects."""
+	out = dict(filters or {})
+
+	if report_name == "Monthly Attendance Sheet":
+		# Portal used to send filter_based_on=Company which makes PyPika crash with nodes_.
+		if out.get("filter_based_on") not in ("Month", "Date Range"):
+			out["filter_based_on"] = "Month"
+
+		month = out.get("month")
+		month_map = {
+			"jan": 1,
+			"january": 1,
+			"feb": 2,
+			"february": 2,
+			"mar": 3,
+			"march": 3,
+			"apr": 4,
+			"april": 4,
+			"may": 5,
+			"jun": 6,
+			"june": 6,
+			"jul": 7,
+			"july": 7,
+			"aug": 8,
+			"august": 8,
+			"sep": 9,
+			"sept": 9,
+			"september": 9,
+			"oct": 10,
+			"october": 10,
+			"nov": 11,
+			"november": 11,
+			"dec": 12,
+			"december": 12,
+		}
+		if isinstance(month, str):
+			key = month.strip().lower()
+			if key in month_map:
+				out["month"] = month_map[key]
+			elif re.match(r"^\d{4}-\d{2}-\d{2}", key):
+				out["month"] = getdate(key).month
+			elif key.isdigit():
+				out["month"] = int(key)
+		elif month is not None:
+			try:
+				out["month"] = int(month)
+			except (TypeError, ValueError):
+				out["month"] = getdate(today()).month
+
+		if out.get("year") is not None:
+			try:
+				out["year"] = int(out["year"])
+			except (TypeError, ValueError):
+				out["year"] = getdate(today()).year
+
+		# Checkboxes often arrive as "0"/"1" strings — leave them; HRMS handles that.
+		if out.get("filter_based_on") == "Date Range":
+			if not out.get("start_date") or not out.get("end_date"):
+				frappe.throw("Start Date and End Date are required when Filter Based On is Date Range.")
+
+	elif report_name == "Employee Analytics":
+		if not out.get("parameter"):
+			out["parameter"] = "Department"
+		if not out.get("company"):
+			out["company"] = _resolve_default("company")
+		if not out.get("company"):
+			frappe.throw("Company is required for Employee Analytics.")
+
+	elif report_name == "Appraisal Evaluation Report":
+		# Accept either naming convention from the portal UI.
+		if not out.get("from") and out.get("from_date"):
+			out["from"] = out["from_date"]
+		if not out.get("to") and out.get("to_date"):
+			out["to"] = out["to_date"]
+		if not out.get("from"):
+			out["from"] = add_months(today(), -1)
+		if not out.get("to"):
+			out["to"] = today()
+
+	return out
+
+
 def get_portal_report_meta(report_name: str) -> dict:
 	ensure_portal_report_access()
 	if not frappe.db.exists("Report", report_name):
@@ -415,6 +574,7 @@ def run_portal_report(report_name: str, filters: dict | str | None = None) -> di
 	meta = get_portal_report_meta(report_name)
 	merged = dict(meta.get("defaults") or {})
 	merged.update({k: v for k, v in filters.items() if v not in (None, "")})
+	merged = _normalize_portal_filters(report_name, merged)
 
 	try:
 		result = _run_script_or_query(report, merged)
@@ -454,11 +614,20 @@ def run_portal_report(report_name: str, filters: dict | str | None = None) -> di
 			"next": normalized[0].get("next"),
 		}
 
+	message = result.get("message")
+	# HRMS Monthly Attendance returns no columns when there are zero attendance rows —
+	# surface a clear empty-state message instead of a blank viewer.
+	if report_name == "Monthly Attendance Sheet" and not normalized and not columns:
+		message = message or (
+			"No attendance records found for the selected month/year and company. "
+			"Try another period, or confirm Attendance has been marked in HR."
+		)
+
 	return {
 		"name": report_name,
 		"columns": columns,
 		"result": normalized,
-		"message": result.get("message"),
+		"message": message,
 		"chart": result.get("chart"),
 		"report_summary": result.get("report_summary"),
 		"placeholder": placeholder,

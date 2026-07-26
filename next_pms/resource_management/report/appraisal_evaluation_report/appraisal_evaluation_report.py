@@ -47,7 +47,10 @@ def execute(filters=None):
             title=_("Error in Appraisal Evaluation Report"),
             message=frappe.get_traceback(),
         )
-        return
+        # Don't return None — portal needs columns or it looks "blank".
+        frappe.throw(
+            _("Appraisal Evaluation Report failed while loading employee data. Check Error Log for details.")
+        )
 
     return columns, data, None, None
 

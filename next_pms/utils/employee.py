@@ -145,29 +145,36 @@ def employee_age_in_company(employee, end_date):
     from frappe import get_all
     from frappe.utils import month_diff
 
-    all_comapines = get_all("Company", pluck="name")
+    joining = getattr(employee, "date_of_joining", None)
+    if not joining:
+        return "—"
 
-    all_work_history = get_all(
-        "Employee Internal Work History",
-        filters={
-            "parent": employee.employee,
-            "custom_company": ["in", all_comapines],
-        },
-        fields=["custom_company", "from_date", "to_date"],
-    )
+    total_age = month_diff(end_date, joining) or 0
 
-    total_age = month_diff(end_date, employee.date_of_joining)
-
-    for work_history in all_work_history:
-        if not work_history.from_date or not work_history.to_date:
-            continue
-
-        if work_history.from_date <= employee.date_of_joining <= work_history.to_date:
-            continue
-
-        total_age += month_diff(work_history.to_date, work_history.from_date)
+    # Optional: include internal transfers when the child table + custom_company exist.
+    try:
+        meta = frappe.get_meta("Employee Internal Work History")
+        if meta.has_field("custom_company"):
+            all_companies = get_all("Company", pluck="name")
+            parent = getattr(employee, "employee", None) or getattr(employee, "name", None)
+            all_work_history = get_all(
+                "Employee Internal Work History",
+                filters={
+                    "parent": parent,
+                    "custom_company": ["in", all_companies],
+                },
+                fields=["custom_company", "from_date", "to_date"],
+            )
+            for work_history in all_work_history:
+                if not work_history.from_date or not work_history.to_date:
+                    continue
+                if work_history.from_date <= joining <= work_history.to_date:
+                    continue
+                total_age += month_diff(work_history.to_date, work_history.from_date) or 0
+    except Exception:
+        # Child table / custom field may not exist on this site — tenure from joining date is enough.
+        pass
 
     years = int(total_age / 12)
     remaining_months = int(total_age % 12)
-
     return f"{years} years {remaining_months} months" if years > 0 else f"{remaining_months} months"
