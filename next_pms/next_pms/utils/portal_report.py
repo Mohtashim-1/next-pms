@@ -21,6 +21,12 @@ _NATIVE_MULTI_COMPANY_REPORTS = {
 	"Milestone Tracking Report",
 	"Portfolio Summary Dashboard",
 	"Project Completion Trend",
+	"Earned Value Management (EVM)",
+	"Project Expense Report",
+	"Project Health Dashboard",
+	"Project Manager Scorecard",
+	"Project Change Request Log",
+	"Project Risk Register Report",
 }
 
 
@@ -38,6 +44,46 @@ PORTAL_REPORT_FILTERS: dict[str, list[dict]] = {
 	"Task Burndown": [
 		{"fieldname": "project", "label": "Project", "fieldtype": "Link", "options": "Project"},
 		{"fieldname": "as_of", "label": "As Of", "fieldtype": "Date", "default": "today"},
+	],
+	"Delayed Tasks Summary": [
+		{"fieldname": "project", "label": "Project", "fieldtype": "Link", "options": "Project"},
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date"},
+		{
+			"fieldname": "priority",
+			"label": "Priority",
+			"fieldtype": "Select",
+			"options": "\nLow\nMedium\nHigh\nUrgent",
+		},
+		# Stock report includes Completed for historical delay — keep it selectable,
+		# but portal defaults to open work so "Delayed" isn't flooded with done tasks.
+		{
+			"fieldname": "status",
+			"label": "Status",
+			"fieldtype": "Select",
+			"options": "\nOpen\nWorking\nPending Review\nOverdue\nCompleted",
+			"default": "Open",
+		},
+	],
+	"Project Summary": [
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+		{
+			"fieldname": "project",
+			"label": "Project",
+			"fieldtype": "MultiSelectList",
+			"options": "Project",
+		},
+		# No default Status / Is Active — "All" so Completed & Cancelled are visible.
+		{"fieldname": "is_active", "label": "Is Active", "fieldtype": "Select", "options": "\nYes\nNo", "default": ""},
+		{
+			"fieldname": "status",
+			"label": "Status",
+			"fieldtype": "Select",
+			"options": "\nOpen\nCompleted\nCancelled",
+			"default": "",
+		},
+		{"fieldname": "project_type", "label": "Project Type", "fieldtype": "Link", "options": "Project Type"},
+		{"fieldname": "priority", "label": "Priority", "fieldtype": "Select", "options": "\nLow\nMedium\nHigh"},
 	],
 	"Retainer vs Consumed Hours": [
 		{"fieldname": "as_of", "label": "As Of", "fieldtype": "Date", "default": "today"},
@@ -180,6 +226,41 @@ PORTAL_REPORT_FILTERS: dict[str, list[dict]] = {
 		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company", "default": "company"},
 		{"fieldname": "status", "label": "Status", "fieldtype": "Select", "options": "\nActive\nInactive\nLeft", "default": "Active"},
 		{"fieldname": "currency", "label": "Currency", "fieldtype": "Select", "options": "USD\nINR", "default": "USD"},
+	],
+	"Earned Value Management (EVM)": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "year_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+		{"fieldname": "project", "label": "Project", "fieldtype": "Link", "options": "Project"},
+		{"fieldname": "customer", "label": "Customer", "fieldtype": "Link", "options": "Customer"},
+		{"fieldname": "status", "label": "Status", "fieldtype": "Select", "options": "\nOpen\nCompleted\nCancelled"},
+	],
+	"Project Expense Report": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "year_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+		{"fieldname": "project", "label": "Project", "fieldtype": "Link", "options": "Project"},
+	],
+	"Project Health Dashboard": [
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+		{"fieldname": "project", "label": "Project", "fieldtype": "Link", "options": "Project"},
+		{"fieldname": "status", "label": "Status", "fieldtype": "Select", "options": "\nOpen\nCompleted\nCancelled"},
+		{"fieldname": "rag_status", "label": "RAG", "fieldtype": "Select", "options": "\nGreen\nAmber\nRed"},
+	],
+	"Project Manager Scorecard": [
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+		{"fieldname": "project_manager", "label": "Project Manager", "fieldtype": "Data"},
+	],
+	"Project Change Request Log": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "year_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+		{"fieldname": "project", "label": "Project", "fieldtype": "Link", "options": "Project"},
+	],
+	"Project Risk Register Report": [
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+		{"fieldname": "project", "label": "Project", "fieldtype": "Link", "options": "Project"},
+		{"fieldname": "severity", "label": "Severity", "fieldtype": "Select", "options": "\nCritical\nHigh\nMedium\nLow"},
 	],
 }
 
@@ -590,8 +671,53 @@ def _normalize_portal_filters(report_name: str, filters: dict) -> dict:
 		out.pop("to", None)
 		out["company"] = _as_company_list(out.get("company"))
 
+	elif report_name == "Project Summary":
+		# Stock execute() passes filters straight into frappe.db.get_all("Project").
+		# Map portal "project" → Project.name; drop empty Status / Is Active (= All).
+		projects = out.pop("project", None)
+		if isinstance(projects, str) and projects.strip().startswith("["):
+			try:
+				parsed = frappe.parse_json(projects)
+				if isinstance(parsed, list):
+					projects = parsed
+			except Exception:
+				pass
+		if projects in (None, "", [], ()):
+			pass
+		elif isinstance(projects, (list, tuple)):
+			names = [str(p) for p in projects if p]
+			if len(names) == 1:
+				out["name"] = names[0]
+			elif names:
+				out["name"] = ["in", names]
+		else:
+			out["name"] = str(projects)
+		for key in ("status", "is_active", "project_type", "priority"):
+			if out.get(key) in (None, "", [], ()):
+				out.pop(key, None)
+		# Keep company as a plain list; runner passes 1 as string or merges N companies.
+		out["company"] = _as_company_list(out.get("company"))
+		# When specific projects are selected with All Companies, infer their companies.
+		# This avoids running the stock report once for every company.
+		if not out["company"] and out.get("name"):
+			name_filter = out["name"]
+			selected_names = (
+				name_filter[1]
+				if isinstance(name_filter, list) and len(name_filter) == 2 and name_filter[0] == "in"
+				else [name_filter]
+			)
+			out["company"] = list(
+				dict.fromkeys(
+					frappe.get_all(
+						"Project",
+						filters={"name": ["in", selected_names]},
+						pluck="company",
+					)
+				)
+			)
+
 	# Always normalize company to a list when present so MultiSelectList values survive.
-	if "company" in out:
+	if "company" in out and report_name != "Project Summary":
 		out["company"] = _as_company_list(out.get("company"))
 
 	return out
