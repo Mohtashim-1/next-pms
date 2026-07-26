@@ -34,6 +34,12 @@ _NATIVE_MULTI_COMPANY_REPORTS = {
 	"Capacity Planning",
 	"Employee Billability",
 	"Over Capacity",
+	"Timesheet Approval Bottleneck",
+	"Timesheet Compliance Report",
+	"Overtime and Burnout Risk",
+	"Realization Rate Report",
+	"WIP Aging",
+	"Unbilled Hours / Revenue Leakage",
 }
 
 
@@ -318,6 +324,50 @@ PORTAL_REPORT_FILTERS: dict[str, list[dict]] = {
 		{"fieldname": "from", "label": "From Date", "fieldtype": "Date", "default": "month_ago"},
 		{"fieldname": "to", "label": "To Date", "fieldtype": "Date", "default": "today"},
 		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+	],
+	# ——— Timesheet reports ———
+	"Timesheet Approval Bottleneck": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "two_months_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+	],
+	"Timesheet Compliance Report": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "month_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+	],
+	"Overtime and Burnout Risk": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "month_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+	],
+	"Realization Rate Report": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "three_months_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+	],
+	"WIP Aging": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "year_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+	],
+	"Unbilled Hours / Revenue Leakage": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "year_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+	],
+	"Daily Timesheet Summary": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "year_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+	],
+	"Employee Hours Utilization Based On Timesheet": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "year_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+	],
+	"Employee Billable Hour": [
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "year_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
 	],
 	"Resource Utilization Report": [
 		# Site timesheet data is historical; a trailing year is a useful landing window.
