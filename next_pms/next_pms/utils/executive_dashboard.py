@@ -2007,144 +2007,397 @@ def build_dashboard_panels(visible_tiles: list[str], lean: bool = False) -> dict
 
 
 def get_personal_timesheet_dashboard() -> dict:
-    """Self-scoped dashboard for Timesheet Users (and anyone without executive access)."""
-    from next_pms.timesheet.api.employee import get_employee_from_user
+	"""Self-scoped dashboard for Timesheet Users (and anyone without executive access)."""
+	from next_pms.timesheet.api.employee import get_employee_from_user
+	from next_pms.timesheet.utils.time_log import strip_input_mode_marker
 
-    employee = get_employee_from_user(throw_exception=False)
-    week = _current_week_period()
-    start, end = week["start_date"], week["end_date"]
+	employee = get_employee_from_user(throw_exception=False)
+	week = _current_week_period()
+	start, end = week["start_date"], week["end_date"]
+	today = getdate(nowdate())
+	month_start = getdate(f"{today.year}-{today.month:02d}-01")
+	lookback_start = add_days(getdate(start), -56)
 
-    hours = 0.0
-    billable = 0.0
-    draft_weeks = 0
-    pending_weeks = 0
-    if employee:
-        rows = frappe.db.sql(
-            """
-            SELECT td.hours, IFNULL(td.is_billable, 0) AS is_billable
-            FROM `tabTimesheet Detail` td
-            INNER JOIN `tabTimesheet` t ON t.name = td.parent
-            WHERE t.employee=%s
-              AND t.docstatus < 2
-              AND DATE(td.from_time) BETWEEN %s AND %s
-            """,
-            (employee, start, end),
-            as_dict=True,
-        )
-        for row in rows:
-            hrs = flt(row.hours)
-            hours += hrs
-            if row.is_billable:
-                billable += hrs
+	hours = billable = 0.0
+	month_hours = month_billable = 0.0
+	draft_weeks = pending_weeks = approved_weeks = 0
+	today_hours = 0.0
+	entries_week = 0
+	entries_month = 0
 
-        sheets = frappe.get_all(
-            "Timesheet",
-            filters={
-                "employee": employee,
-                "docstatus": ["<", 2],
-                "start_date": [">=", add_days(getdate(start), -21)],
-            },
-            fields=["name", "status", "start_date", "end_date"],
-            limit=20,
-        )
-        for sheet in sheets:
-            status = (sheet.status or "").lower()
-            if status in ("draft", ""):
-                draft_weeks += 1
-            elif "pending" in status or "approval" in status:
-                pending_weeks += 1
+	daily_map: dict[str, dict] = {}
+	weekly_map: dict[str, dict] = {}
+	project_map: dict[str, dict] = {}
+	activity_map: dict[str, float] = {}
+	recent_entries: list[dict] = []
+	working_hours = 8.0
 
-    open_tasks = 0
-    overdue_tasks = 0
-    user = frappe.session.user
-    if user and user != "Guest":
-        open_tasks = frappe.db.count(
-            "Task",
-            {
-                "status": ["not in", ["Completed", "Cancelled"]],
-                "_assign": ["like", f"%{user}%"],
-            },
-        )
-        overdue_tasks = frappe.db.count(
-            "Task",
-            {
-                "status": ["not in", ["Completed", "Cancelled"]],
-                "exp_end_date": ["<", nowdate()],
-                "_assign": ["like", f"%{user}%"],
-            },
-        )
+	if employee:
+		emp_row = frappe.db.get_value(
+			"Employee",
+			employee,
+			["employee_name", "department", "company", "holiday_list"],
+			as_dict=True,
+		) or {}
+		# Prefer standard working hours if present on Employee
+		wh = frappe.db.get_value("Employee", employee, "custom_working_hours")
+		if wh:
+			working_hours = flt(wh) or 8.0
 
-    billable_pct = (billable / hours * 100.0) if hours else 0.0
-    persona = resolve_dashboard_persona()
-    tiles = [
-        {
-            "key": "my_hours",
-            "label": "My Hours (This Week)",
-            "description": f"{week.get('label') or 'This week'}",
-            "display_value": f"{flt(hours, 1)}h",
-            "value": flt(hours, 2),
-            "unit": "hours",
-            "status": "healthy" if hours >= 1 else "warning",
-            "route": "/timesheet",
-            "details": {"billable": flt(billable, 1), "non_billable": flt(hours - billable, 1)},
-        },
-        {
-            "key": "my_billable",
-            "label": "My Billable Mix",
-            "description": "Share of billable hours this week",
-            "display_value": f"{flt(billable_pct, 0)}%",
-            "value": flt(billable_pct, 1),
-            "unit": "%",
-            "status": "healthy" if billable_pct >= 60 else "neutral",
-            "route": "/work-entries",
-        },
-        {
-            "key": "my_drafts",
-            "label": "Draft Weeks",
-            "description": "Timesheets still in draft (last ~3 weeks)",
-            "display_value": draft_weeks,
-            "value": draft_weeks,
-            "status": "warning" if draft_weeks else "healthy",
-            "route": "/timesheet",
-        },
-        {
-            "key": "my_pending",
-            "label": "Awaiting Approval",
-            "description": "Submitted weeks pending manager approval",
-            "display_value": pending_weeks,
-            "value": pending_weeks,
-            "status": "neutral",
-            "route": "/timesheet",
-        },
-        {
-            "key": "my_tasks",
-            "label": "Open Tasks",
-            "description": "Tasks assigned to me",
-            "display_value": open_tasks,
-            "value": open_tasks,
-            "status": "neutral",
-            "route": "/task",
-        },
-        {
-            "key": "my_overdue",
-            "label": "Overdue Tasks",
-            "description": "My tasks past expected end date",
-            "display_value": overdue_tasks,
-            "value": overdue_tasks,
-            "status": "critical" if overdue_tasks else "healthy",
-            "route": "/task",
-        },
-    ]
-    return {
-        "tiles": tiles,
-        "panels": {},
-        "available_tiles": [],
-        "layout": {"tiles": [t["key"] for t in tiles]},
-        "roles": get_user_roles(),
-        "persona": persona,
-        "mode": "personal",
-        "refreshed_at": frappe.utils.now(),
-    }
+		detail_rows = frappe.db.sql(
+			"""
+			SELECT
+				DATE(td.from_time) AS d,
+				IFNULL(td.hours, 0) AS hours,
+				IFNULL(td.is_billable, 0) AS is_billable,
+				IFNULL(td.project, '') AS project,
+				IFNULL(td.project_name, '') AS project_name,
+				IFNULL(td.activity_type, '') AS activity_type,
+				IFNULL(td.description, '') AS description,
+				IFNULL(td.task, '') AS task
+			FROM `tabTimesheet Detail` td
+			INNER JOIN `tabTimesheet` t ON t.name = td.parent
+			WHERE t.employee=%s
+			  AND t.docstatus < 2
+			  AND DATE(td.from_time) BETWEEN %s AND %s
+			ORDER BY td.from_time DESC
+			""",
+			(employee, lookback_start, end),
+			as_dict=True,
+		)
+
+		for row in detail_rows:
+			hrs = flt(row.hours)
+			d = str(row.d)
+			is_bill = 1 if row.is_billable else 0
+			if getdate(d) >= month_start:
+				entries_month += 1
+
+			bucket = daily_map.setdefault(d, {"logged": 0.0, "billable": 0.0})
+			bucket["logged"] += hrs
+			if is_bill:
+				bucket["billable"] += hrs
+
+			wd = getdate(d)
+			iso = wd.isocalendar()
+			wk = f"{iso[0]}-W{iso[1]:02d}"
+			wbucket = weekly_map.setdefault(wk, {"logged": 0.0, "billable": 0.0, "label": wk})
+			wbucket["logged"] += hrs
+			if is_bill:
+				wbucket["billable"] += hrs
+
+			proj = row.project or "Unassigned"
+			pname = row.project_name or proj or "Unassigned"
+			pb = project_map.setdefault(
+				proj, {"project": proj, "project_name": pname, "hours": 0.0, "billable": 0.0}
+			)
+			pb["hours"] += hrs
+			if is_bill:
+				pb["billable"] += hrs
+
+			act = row.activity_type or "Other"
+			activity_map[act] = activity_map.get(act, 0.0) + hrs
+
+			if getdate(start) <= getdate(d) <= getdate(end):
+				hours += hrs
+				entries_week += 1
+				if is_bill:
+					billable += hrs
+			if getdate(d) >= month_start:
+				month_hours += hrs
+				if is_bill:
+					month_billable += hrs
+			if d == str(today):
+				today_hours += hrs
+
+			if len(recent_entries) < 12:
+				recent_entries.append(
+					{
+						"date": d,
+						"hours": flt(hrs, 2),
+						"is_billable": bool(is_bill),
+						"project": proj,
+						"project_name": pname,
+						"activity_type": act,
+						"task": row.task,
+						"description": (strip_input_mode_marker(row.description) or "")[:120],
+					}
+				)
+
+		sheets = frappe.get_all(
+			"Timesheet",
+			filters={
+				"employee": employee,
+				"docstatus": ["<", 2],
+				"start_date": [">=", add_days(getdate(start), -42)],
+			},
+			fields=["name", "status", "start_date", "end_date", "total_hours", "custom_approval_status"],
+			limit=40,
+			order_by="start_date desc",
+		)
+		for sheet in sheets:
+			status = (sheet.status or "").lower()
+			approval = (sheet.get("custom_approval_status") or "").lower()
+			if status in ("draft", "") or approval in ("not submitted", "draft", ""):
+				draft_weeks += 1
+			elif "pending" in status or "pending" in approval or "approval" in status:
+				pending_weeks += 1
+			elif "approved" in status or "approved" in approval:
+				approved_weeks += 1
+	else:
+		emp_row = {}
+
+	open_tasks = overdue_tasks = completed_tasks = 0
+	user = frappe.session.user
+	if user and user != "Guest":
+		open_tasks = frappe.db.count(
+			"Task",
+			{"status": ["not in", ["Completed", "Cancelled"]], "_assign": ["like", f"%{user}%"]},
+		)
+		overdue_tasks = frappe.db.count(
+			"Task",
+			{
+				"status": ["not in", ["Completed", "Cancelled"]],
+				"exp_end_date": ["<", nowdate()],
+				"_assign": ["like", f"%{user}%"],
+			},
+		)
+		completed_tasks = frappe.db.count(
+			"Task",
+			{"status": "Completed", "_assign": ["like", f"%{user}%"], "modified": [">=", add_days(today, -30)]},
+		)
+
+	billable_pct = (billable / hours * 100.0) if hours else 0.0
+	month_billable_pct = (month_billable / month_hours * 100.0) if month_hours else 0.0
+	target_week = working_hours * 5
+	utilization = (hours / target_week * 100.0) if target_week else 0.0
+	remaining = max(target_week - hours, 0.0)
+	avg_daily = hours / 5.0 if hours else 0.0
+	non_billable = max(hours - billable, 0.0)
+
+	# Daily series last 14 days
+	daily_trend = []
+	for i in range(13, -1, -1):
+		d = add_days(today, -i)
+		key = str(d)
+		b = daily_map.get(key, {"logged": 0.0, "billable": 0.0})
+		daily_trend.append(
+			{
+				"date": key,
+				"label": d.strftime("%b %d"),
+				"logged_hours": flt(b["logged"], 2),
+				"billable_hours": flt(b["billable"], 2),
+				"non_billable_hours": flt(max(b["logged"] - b["billable"], 0), 2),
+			}
+		)
+
+	weekly_trend = []
+	for key in sorted(weekly_map.keys())[-8:]:
+		b = weekly_map[key]
+		logged = flt(b["logged"], 2)
+		bill = flt(b["billable"], 2)
+		weekly_trend.append(
+			{
+				"label": key,
+				"logged_hours": logged,
+				"billable_hours": bill,
+				"non_billable_hours": flt(max(logged - bill, 0), 2),
+				"billable_ratio": flt((bill / logged * 100) if logged else 0, 1),
+			}
+		)
+
+	by_project = sorted(project_map.values(), key=lambda x: x["hours"], reverse=True)[:10]
+	for p in by_project:
+		p["hours"] = flt(p["hours"], 2)
+		p["billable"] = flt(p["billable"], 2)
+		p["billable_pct"] = flt((p["billable"] / p["hours"] * 100) if p["hours"] else 0, 1)
+
+	by_activity = [
+		{"activity_type": k, "hours": flt(v, 2)}
+		for k, v in sorted(activity_map.items(), key=lambda x: x[1], reverse=True)[:8]
+	]
+
+	persona = resolve_dashboard_persona()
+	emp_name = emp_row.get("employee_name") or frappe.db.get_value("User", user, "full_name") or user
+
+	def tile(key, label, display, value, description, route, status="neutral", details=None, unit=None):
+		return {
+			"key": key,
+			"label": label,
+			"description": description,
+			"display_value": display,
+			"value": value,
+			"unit": unit,
+			"status": status,
+			"route": route,
+			"details": details or {},
+		}
+
+	tiles = [
+		tile(
+			"my_hours",
+			"My Hours (This Week)",
+			f"{flt(hours, 1)}h",
+			flt(hours, 2),
+			week.get("label") or "This week",
+			"/timesheet",
+			"healthy" if hours >= 1 else "warning",
+			{"billable": flt(billable, 1), "non_billable": flt(non_billable, 1)},
+			"hours",
+		),
+		tile(
+			"my_billable",
+			"Billable Mix (Week)",
+			f"{flt(billable_pct, 0)}%",
+			flt(billable_pct, 1),
+			f"{flt(billable, 1)}h billable",
+			"/work-entries",
+			"healthy" if billable_pct >= 60 else "neutral",
+			unit="%",
+		),
+		tile(
+			"my_utilization",
+			"Week Utilization",
+			f"{flt(utilization, 0)}%",
+			flt(utilization, 1),
+			f"Target {flt(target_week, 0)}h",
+			"/timesheet",
+			"healthy" if utilization >= 80 else ("warning" if utilization >= 50 else "critical"),
+			unit="%",
+		),
+		tile(
+			"my_today",
+			"Today's Hours",
+			f"{flt(today_hours, 1)}h",
+			flt(today_hours, 2),
+			"Logged today",
+			"/timesheet",
+			"healthy" if today_hours > 0 else "warning",
+			unit="hours",
+		),
+		tile(
+			"my_month_hours",
+			"Hours This Month",
+			f"{flt(month_hours, 1)}h",
+			flt(month_hours, 2),
+			f"{flt(month_billable_pct, 0)}% billable",
+			"/work-entries",
+			"healthy" if month_hours > 0 else "neutral",
+			unit="hours",
+		),
+		tile(
+			"my_remaining",
+			"Hours Remaining",
+			f"{flt(remaining, 1)}h",
+			flt(remaining, 2),
+			"To hit weekly target",
+			"/timesheet",
+			"warning" if remaining > working_hours else "healthy",
+			unit="hours",
+		),
+		tile(
+			"my_avg_daily",
+			"Avg Daily (Week)",
+			f"{flt(avg_daily, 1)}h",
+			flt(avg_daily, 2),
+			"Across 5 workdays",
+			"/timesheet",
+			"healthy" if avg_daily >= working_hours * 0.8 else "neutral",
+			unit="hours",
+		),
+		tile(
+			"my_entries",
+			"Entries This Week",
+			entries_week,
+			entries_week,
+			f"{entries_month} this month",
+			"/work-entries",
+			"healthy" if entries_week else "warning",
+		),
+		tile(
+			"my_drafts",
+			"Draft Weeks",
+			draft_weeks,
+			draft_weeks,
+			"Last ~6 weeks",
+			"/timesheet",
+			"warning" if draft_weeks else "healthy",
+		),
+		tile(
+			"my_pending",
+			"Awaiting Approval",
+			pending_weeks,
+			pending_weeks,
+			f"{approved_weeks} approved recently",
+			"/timesheet",
+			"neutral",
+		),
+		tile(
+			"my_tasks",
+			"Open Tasks",
+			open_tasks,
+			open_tasks,
+			f"{completed_tasks} completed (30d)",
+			"/task",
+			"neutral",
+		),
+		tile(
+			"my_overdue",
+			"Overdue Tasks",
+			overdue_tasks,
+			overdue_tasks,
+			"Past expected end date",
+			"/task",
+			"critical" if overdue_tasks else "healthy",
+		),
+	]
+
+	panels = {
+		"personal": True,
+		"employee": {
+			"name": employee,
+			"employee_name": emp_name,
+			"department": emp_row.get("department"),
+			"company": emp_row.get("company"),
+			"working_hours": working_hours,
+		},
+		"week": {
+			"label": week.get("label"),
+			"start_date": str(start),
+			"end_date": str(end),
+			"logged_hours": flt(hours, 2),
+			"billable_hours": flt(billable, 2),
+			"non_billable_hours": flt(non_billable, 2),
+			"target_hours": flt(target_week, 2),
+			"utilization_pct": flt(utilization, 1),
+		},
+		"daily_trend": daily_trend,
+		"weekly_trend": weekly_trend,
+		"by_project": by_project,
+		"by_activity": by_activity,
+		"recent_entries": recent_entries,
+		"billable_split": {
+			"billable": flt(billable, 2),
+			"non_billable": flt(non_billable, 2),
+		},
+		"shortcuts": [
+			{"key": "timesheet", "label": "Timesheet", "description": "Log hours for this week", "route": "/timesheet"},
+			{"key": "work-entries", "label": "Work Entries", "description": "Browse all your time logs", "route": "/work-entries"},
+			{"key": "tasks", "label": "My Tasks", "description": "Open and overdue work", "route": "/task"},
+		],
+	}
+
+	return {
+		"tiles": tiles,
+		"panels": panels,
+		"available_tiles": [],
+		"layout": {"tiles": [t["key"] for t in tiles]},
+		"roles": get_user_roles(),
+		"persona": persona,
+		"mode": "personal",
+		"refreshed_at": frappe.utils.now(),
+	}
+
 
 
 def get_reports_catalog_for_user() -> dict:

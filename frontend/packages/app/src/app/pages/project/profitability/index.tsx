@@ -306,8 +306,14 @@ const ProjectProfitability = () => {
         acc.ma += p.total_consumed_material_cost || 0;
         acc.estimated += p.estimated_costing || 0;
         if ((p.gross_profit || 0) < 0) acc.lossMaking += 1;
+        if ((p.gross_profit || 0) > 0) acc.profitMaking += 1;
+        if ((p.profit_margin || 0) >= 30) acc.highMargin += 1;
+        if ((p.profit_margin || 0) > 0 && (p.profit_margin || 0) < 15) acc.thinMargin += 1;
+        if (!(p.total_billed_amount || 0)) acc.zeroRevenue += 1;
         if ((p.status || "").toLowerCase() === "open") acc.open += 1;
         if ((p.status || "").toLowerCase() === "completed") acc.completed += 1;
+        if (p.customer) acc.customers.add(p.customer);
+        if (p.company) acc.companies.add(p.company);
         return acc;
       },
       {
@@ -321,8 +327,14 @@ const ProjectProfitability = () => {
         ma: 0,
         estimated: 0,
         lossMaking: 0,
+        profitMaking: 0,
+        highMargin: 0,
+        thinMargin: 0,
+        zeroRevenue: 0,
         open: 0,
         completed: 0,
+        customers: new Set<string>(),
+        companies: new Set<string>(),
       }
     );
   }, [projects]);
@@ -338,6 +350,16 @@ const ProjectProfitability = () => {
   const billableShare = apiKpis?.logged_hours
     ? ((apiKpis.billable_hours || 0) / apiKpis.logged_hours) * 100
     : 0;
+  const costRatio = totals.rev ? (totals.cost / totals.rev) * 100 : 0;
+  const tsShare = totals.cost ? (totals.ts / totals.cost) * 100 : 0;
+  const purchaseShare = totals.cost ? (totals.pu / totals.cost) * 100 : 0;
+  const avgProfit = projects.length ? totals.profit / projects.length : 0;
+  const topProject = useMemo(() => {
+    return [...projects].sort((a, b) => (b.total_billed_amount || 0) - (a.total_billed_amount || 0))[0];
+  }, [projects]);
+  const topProjectShare = totals.rev && topProject ? ((topProject.total_billed_amount || 0) / totals.rev) * 100 : 0;
+  const realization = totals.estimated ? (totals.rev / totals.estimated) * 100 : 0;
+  const profitablePct = projects.length ? (totals.profitMaking / projects.length) * 100 : 0;
 
   const gradient = (top: string, bot: string, horizontal = false) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -888,6 +910,337 @@ const ProjectProfitability = () => {
     };
   }, [projects]);
 
+  const costMixOption = useMemo(() => {
+    const theme = getChartTheme();
+    const data = [
+      { name: "Timesheet", value: totals.ts, itemStyle: { color: "#4f86f7" } },
+      { name: "Purchase", value: totals.pu, itemStyle: { color: "#fb923c" } },
+      { name: "Expense", value: totals.ex, itemStyle: { color: "#a855f7" } },
+      { name: "Material", value: totals.ma, itemStyle: { color: "#10b981" } },
+    ].filter((d) => d.value > 0);
+    if (!data.length) return null;
+    return {
+      tooltip: {
+        trigger: "item",
+        ...tooltipDark(theme),
+        formatter: (p: { name: string; marker: string; value: number; percent: number }) =>
+          `${p.marker} ${p.name}: <b>${money(p.value)}</b> (${p.percent}%)`,
+      },
+      legend: { bottom: 0, ...legendStyle(theme) },
+      series: [
+        {
+          type: "pie",
+          radius: ["45%", "70%"],
+          center: ["50%", "46%"],
+          data,
+          label: { show: false },
+          labelLine: { show: false },
+        },
+      ],
+    };
+  }, [totals]);
+
+  const profitLeadersOption = useMemo(() => {
+    const theme = getChartTheme();
+    const winners = [...projects].sort((a, b) => b.gross_profit - a.gross_profit).slice(0, 8);
+    const losers = [...projects].sort((a, b) => a.gross_profit - b.gross_profit).slice(0, 8);
+    if (!winners.length) return null;
+    return {
+      tooltip: { trigger: "axis", ...tooltipDark(theme) },
+      legend: { top: 0, ...legendStyle(theme) },
+      grid: [
+        { left: "4%", right: "54%", top: 40, bottom: 24, containLabel: true },
+        { left: "54%", right: "4%", top: 40, bottom: 24, containLabel: true },
+      ],
+      xAxis: [
+        {
+          type: "value",
+          gridIndex: 0,
+          inverse: true,
+          axisLabel: { ...axisLabel(theme), formatter: (v: number) => money(v, true) },
+          splitLine: { lineStyle: { color: theme.split } },
+        },
+        {
+          type: "value",
+          gridIndex: 1,
+          axisLabel: { ...axisLabel(theme), formatter: (v: number) => money(v, true) },
+          splitLine: { lineStyle: { color: theme.split } },
+        },
+      ],
+      yAxis: [
+        {
+          type: "category",
+          gridIndex: 0,
+          position: "right",
+          data: winners.map((p) => p.project_name).reverse(),
+          axisLabel: { ...axisLabel(theme), width: 100, overflow: "truncate", fontSize: 10 },
+        },
+        {
+          type: "category",
+          gridIndex: 1,
+          data: losers.map((p) => p.project_name).reverse(),
+          axisLabel: { ...axisLabel(theme), width: 100, overflow: "truncate", fontSize: 10 },
+        },
+      ],
+      series: [
+        {
+          name: "Top Profit",
+          type: "bar",
+          xAxisIndex: 0,
+          yAxisIndex: 0,
+          data: winners.map((p) => p.gross_profit).reverse(),
+          itemStyle: { color: "#10b981", borderRadius: [4, 0, 0, 4] },
+        },
+        {
+          name: "Lowest Profit",
+          type: "bar",
+          xAxisIndex: 1,
+          yAxisIndex: 1,
+          data: losers.map((p) => p.gross_profit).reverse(),
+          itemStyle: { color: "#f43f5e", borderRadius: [0, 4, 4, 0] },
+        },
+      ],
+    };
+  }, [projects]);
+
+  const marginBucketsOption = useMemo(() => {
+    const theme = getChartTheme();
+    if (!projects.length) return null;
+    const buckets = [
+      { name: "< 0%", min: -Infinity, max: 0, color: "#f43f5e" },
+      { name: "0–15%", min: 0, max: 15, color: "#f97316" },
+      { name: "15–30%", min: 15, max: 30, color: "#fbbf24" },
+      { name: "30–50%", min: 30, max: 50, color: "#34d399" },
+      { name: "50%+", min: 50, max: Infinity, color: "#10b981" },
+    ];
+    const counts = buckets.map((b) => ({
+      name: b.name,
+      value: projects.filter((p) => {
+        const m = p.profit_margin || 0;
+        return m >= b.min && m < b.max;
+      }).length,
+      itemStyle: { color: b.color },
+    }));
+    return {
+      tooltip: { trigger: "axis", ...tooltipDark(theme) },
+      grid: { left: 12, right: 16, top: 24, bottom: 28, containLabel: true },
+      xAxis: { type: "category", data: counts.map((c) => c.name), axisLabel: axisLabel(theme) },
+      yAxis: {
+        type: "value",
+        name: "Projects",
+        nameTextStyle: { color: theme.muted },
+        axisLabel: axisLabel(theme),
+        splitLine: { lineStyle: { color: theme.split } },
+      },
+      series: [{ type: "bar", barMaxWidth: 42, data: counts, label: { show: true, position: "top", color: theme.text } }],
+    };
+  }, [projects]);
+
+  const unbilledOption = useMemo(() => {
+    const theme = getChartTheme();
+    const rows = [...projects]
+      .map((p) => ({
+        ...p,
+        gap: Math.max((p.total_billable_amount || 0) - (p.total_billed_amount || 0), 0),
+      }))
+      .filter((p) => p.gap > 0)
+      .sort((a, b) => b.gap - a.gap)
+      .slice(0, 12);
+    if (!rows.length) return null;
+    return {
+      tooltip: { trigger: "axis", ...tooltipDark(theme) },
+      grid: { left: 8, right: 32, top: 16, bottom: 8, containLabel: true },
+      xAxis: {
+        type: "value",
+        axisLabel: { ...axisLabel(theme), formatter: (v: number) => money(v, true) },
+        splitLine: { lineStyle: { color: theme.split } },
+      },
+      yAxis: {
+        type: "category",
+        data: rows.map((p) => p.project_name).reverse(),
+        axisLabel: { ...axisLabel(theme), width: 120, overflow: "truncate", fontSize: 10 },
+      },
+      series: [
+        {
+          type: "bar",
+          data: rows.map((p) => p.gap).reverse(),
+          itemStyle: { color: gradient("#e879f9", "#a21caf", true), borderRadius: [0, 4, 4, 0] },
+          label: { show: true, position: "right", formatter: (p: { value: number }) => money(p.value, true), color: theme.text, fontSize: 10 },
+        },
+      ],
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects, echartsReady]);
+
+  const budgetVsActualOption = useMemo(() => {
+    const theme = getChartTheme();
+    const rows = [...projects]
+      .filter((p) => (p.estimated_costing || 0) > 0)
+      .sort((a, b) => (b.estimated_costing || 0) - (a.estimated_costing || 0))
+      .slice(0, 12);
+    if (!rows.length) return null;
+    return {
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, ...tooltipDark(theme) },
+      legend: { top: 0, ...legendStyle(theme) },
+      grid: { left: 8, right: 16, top: 36, bottom: 48, containLabel: true },
+      xAxis: {
+        type: "category",
+        data: rows.map((p) => p.project_name),
+        axisLabel: { ...axisLabel(theme), rotate: 30, fontSize: 10, width: 90, overflow: "truncate" },
+      },
+      yAxis: {
+        type: "value",
+        axisLabel: { ...axisLabel(theme), formatter: (v: number) => money(v, true) },
+        splitLine: { lineStyle: { color: theme.split } },
+      },
+      series: [
+        { name: "Estimated Cost", type: "bar", data: rows.map((p) => p.estimated_costing), itemStyle: { color: "#64748b" } },
+        { name: "Actual Cost", type: "bar", data: rows.map((p) => p.total_cost), itemStyle: { color: "#f97316" } },
+        { name: "Billed Revenue", type: "line", data: rows.map((p) => p.total_billed_amount), itemStyle: { color: "#10b981" }, lineStyle: { width: 3 } },
+      ],
+    };
+  }, [projects]);
+
+  const revenueParetoOption = useMemo(() => {
+    const theme = getChartTheme();
+    const sorted = [...projects]
+      .filter((p) => (p.total_billed_amount || 0) > 0)
+      .sort((a, b) => b.total_billed_amount - a.total_billed_amount)
+      .slice(0, 15);
+    if (!sorted.length) return null;
+    const total = sorted.reduce((s, p) => s + p.total_billed_amount, 0) || 1;
+    let running = 0;
+    const cumulative = sorted.map((p) => {
+      running += p.total_billed_amount;
+      return Number(((running / total) * 100).toFixed(1));
+    });
+    return {
+      tooltip: { trigger: "axis", ...tooltipDark(theme) },
+      legend: { top: 0, ...legendStyle(theme) },
+      grid: { left: 8, right: 24, top: 36, bottom: 48, containLabel: true },
+      xAxis: {
+        type: "category",
+        data: sorted.map((p) => p.project_name),
+        axisLabel: { ...axisLabel(theme), rotate: 30, fontSize: 10, width: 90, overflow: "truncate" },
+      },
+      yAxis: [
+        {
+          type: "value",
+          name: "Revenue",
+          nameTextStyle: { color: theme.muted },
+          axisLabel: { ...axisLabel(theme), formatter: (v: number) => money(v, true) },
+          splitLine: { lineStyle: { color: theme.split } },
+        },
+        {
+          type: "value",
+          name: "Cumulative %",
+          min: 0,
+          max: 100,
+          nameTextStyle: { color: theme.muted },
+          axisLabel: { ...axisLabel(theme), formatter: "{value}%" },
+        },
+      ],
+      series: [
+        {
+          name: "Revenue",
+          type: "bar",
+          data: sorted.map((p) => p.total_billed_amount),
+          itemStyle: { color: "#38bdf8", borderRadius: [4, 4, 0, 0] },
+        },
+        {
+          name: "Cumulative %",
+          type: "line",
+          yAxisIndex: 1,
+          smooth: true,
+          data: cumulative,
+          itemStyle: { color: "#a78bfa" },
+          lineStyle: { width: 3 },
+        },
+      ],
+    };
+  }, [projects]);
+
+  const companyOption = useMemo(() => {
+    const theme = getChartTheme();
+    const map = new Map<string, { revenue: number; cost: number; profit: number; count: number }>();
+    for (const p of projects) {
+      const key = p.company || "Unknown";
+      const cur = map.get(key) || { revenue: 0, cost: 0, profit: 0, count: 0 };
+      cur.revenue += p.total_billed_amount || 0;
+      cur.cost += p.total_cost || 0;
+      cur.profit += p.gross_profit || 0;
+      cur.count += 1;
+      map.set(key, cur);
+    }
+    const rows = [...map.entries()]
+      .map(([name, v]) => ({ name, ...v }))
+      .sort((a, b) => b.revenue - a.revenue);
+    if (rows.length < 2) return null;
+    return {
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, ...tooltipDark(theme) },
+      legend: { top: 0, ...legendStyle(theme) },
+      grid: { left: 8, right: 16, top: 36, bottom: 40, containLabel: true },
+      xAxis: {
+        type: "category",
+        data: rows.map((r) => r.name),
+        axisLabel: { ...axisLabel(theme), rotate: 20, fontSize: 10, width: 100, overflow: "truncate" },
+      },
+      yAxis: {
+        type: "value",
+        axisLabel: { ...axisLabel(theme), formatter: (v: number) => money(v, true) },
+        splitLine: { lineStyle: { color: theme.split } },
+      },
+      series: [
+        { name: "Revenue", type: "bar", data: rows.map((r) => r.revenue), itemStyle: { color: "#38bdf8" } },
+        { name: "Cost", type: "bar", data: rows.map((r) => r.cost), itemStyle: { color: "#fb923c" } },
+        { name: "Profit", type: "bar", data: rows.map((r) => r.profit), itemStyle: { color: "#34d399" } },
+      ],
+    };
+  }, [projects]);
+
+  const monthlyCostMixOption = useMemo(() => {
+    if (!monthly.length) return null;
+    const theme = getChartTheme();
+    return {
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, ...tooltipDark(theme) },
+      legend: { top: 0, ...legendStyle(theme) },
+      grid: { left: 12, right: 16, top: 36, bottom: 28, containLabel: true },
+      xAxis: {
+        type: "category",
+        data: monthly.map((r) => fmtMonth(r.month)),
+        axisLabel: axisLabel(theme),
+      },
+      yAxis: {
+        type: "value",
+        axisLabel: { ...axisLabel(theme), formatter: (v: number) => money(v, true) },
+        splitLine: { lineStyle: { color: theme.split } },
+      },
+      series: [
+        {
+          name: "Timesheet Cost",
+          type: "bar",
+          stack: "cost",
+          data: monthly.map((r) => r.ts_cost),
+          itemStyle: { color: "#4f86f7" },
+        },
+        {
+          name: "Purchase Cost",
+          type: "bar",
+          stack: "cost",
+          data: monthly.map((r) => r.purchase_cost),
+          itemStyle: { color: "#fb923c" },
+        },
+        {
+          name: "Revenue",
+          type: "line",
+          data: monthly.map((r) => r.revenue),
+          itemStyle: { color: "#10b981" },
+          lineStyle: { width: 3 },
+        },
+      ],
+    };
+  }, [monthly]);
+
   const refresh = () => {
     setRefreshKey((k) => k + 1);
     mutateProjects();
@@ -968,6 +1321,66 @@ const ProjectProfitability = () => {
       value: `${budgetVariance >= 0 ? "+" : ""}${budgetVariance.toFixed(1)}%`,
       sub: totals.estimated ? `Est. ${money(totals.estimated, true)}` : "No estimates",
       className: budgetVariance <= 0 ? "from-emerald-800 to-lime-500" : "from-orange-800 to-amber-400",
+    },
+    {
+      label: "Cost / Revenue",
+      value: `${costRatio.toFixed(1)}%`,
+      sub: "Lower is better",
+      className: "from-orange-700 to-yellow-500",
+    },
+    {
+      label: "Timesheet Cost Share",
+      value: `${tsShare.toFixed(1)}%`,
+      sub: "Of total cost",
+      className: "from-blue-800 to-indigo-400",
+    },
+    {
+      label: "Purchase Cost Share",
+      value: `${purchaseShare.toFixed(1)}%`,
+      sub: "Of total cost",
+      className: "from-amber-800 to-orange-400",
+    },
+    {
+      label: "Avg Profit / Project",
+      value: money(avgProfit),
+      sub: `${totals.profitMaking} profitable`,
+      className: "from-emerald-700 to-green-400",
+    },
+    {
+      label: "Customers",
+      value: String(totals.customers.size),
+      sub: `${totals.companies.size} companies`,
+      className: "from-cyan-800 to-sky-400",
+    },
+    {
+      label: "High Margin (≥30%)",
+      value: String(totals.highMargin),
+      sub: `${totals.thinMargin} thin (0–15%)`,
+      className: "from-lime-700 to-emerald-400",
+    },
+    {
+      label: "Zero Revenue",
+      value: String(totals.zeroRevenue),
+      sub: "Projects not billed yet",
+      className: "from-zinc-700 to-zinc-500",
+    },
+    {
+      label: "Top Project Share",
+      value: `${topProjectShare.toFixed(1)}%`,
+      sub: topProject?.project_name || "n/a",
+      className: "from-purple-800 to-fuchsia-400",
+    },
+    {
+      label: "Realization",
+      value: totals.estimated ? `${realization.toFixed(1)}%` : "—",
+      sub: totals.estimated ? "Billed / Estimated" : "No estimates",
+      className: "from-rose-700 to-pink-400",
+    },
+    {
+      label: "Profitable Mix",
+      value: `${profitablePct.toFixed(0)}%`,
+      sub: `${totals.profitMaking} of ${projects.length}`,
+      className: "from-green-800 to-teal-400",
     },
   ];
 
@@ -1053,7 +1466,7 @@ const ProjectProfitability = () => {
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
           {loading && !projects.length
-            ? Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)
+            ? Array.from({ length: 24 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)
             : kpis.map((kpi) => (
                 <div
                   key={kpi.label}
@@ -1088,6 +1501,24 @@ const ProjectProfitability = () => {
                   Monthly Profit
                 </Typography>
                 <ChartBox option={monthlyProfitOption} />
+              </CardContent>
+            </Card>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardContent className="pt-4">
+                <Typography variant="small" className="mb-2 font-medium">
+                  Monthly Cost Mix vs Revenue
+                </Typography>
+                <ChartBox option={monthlyCostMixOption} height={320} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <Typography variant="small" className="mb-2 font-medium">
+                  Cost Mix (Portfolio)
+                </Typography>
+                <ChartBox option={costMixOption} height={320} />
               </CardContent>
             </Card>
           </div>
@@ -1201,6 +1632,64 @@ const ProjectProfitability = () => {
               <ChartBox option={customerOption} height={360} />
             </CardContent>
           </Card>
+        </section>
+
+        <section className="space-y-2">
+          <Typography variant="small" className="font-semibold uppercase tracking-wide text-muted-foreground">
+            Deeper Analytics
+          </Typography>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card className="lg:col-span-2">
+              <CardContent className="pt-4">
+                <Typography variant="small" className="mb-2 font-medium">
+                  Top vs Lowest Profit Projects
+                </Typography>
+                <ChartBox option={profitLeadersOption} height={400} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <Typography variant="small" className="mb-2 font-medium">
+                  Margin Distribution
+                </Typography>
+                <ChartBox option={marginBucketsOption} height={320} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <Typography variant="small" className="mb-2 font-medium">
+                  Unbilled Gap by Project
+                </Typography>
+                <ChartBox option={unbilledOption} height={320} empty="No unbilled amounts" />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <Typography variant="small" className="mb-2 font-medium">
+                  Budget vs Actual Cost
+                </Typography>
+                <ChartBox option={budgetVsActualOption} height={340} empty="No estimated costing on projects" />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <Typography variant="small" className="mb-2 font-medium">
+                  Revenue Pareto (Top Projects)
+                </Typography>
+                <ChartBox option={revenueParetoOption} height={340} />
+              </CardContent>
+            </Card>
+            {companyOption ? (
+              <Card className="lg:col-span-2">
+                <CardContent className="pt-4">
+                  <Typography variant="small" className="mb-2 font-medium">
+                    Company Comparison
+                  </Typography>
+                  <ChartBox option={companyOption} height={340} />
+                </CardContent>
+              </Card>
+            ) : null}
+          </div>
         </section>
 
         <section className="space-y-2">

@@ -25,6 +25,7 @@ import {
   Briefcase,
   CheckCircle2,
   ClipboardList,
+  Clock,
   DollarSign,
   HeartPulse,
   LayoutDashboard,
@@ -41,6 +42,8 @@ import {
  */
 import { DashboardPanels } from "@/app/pages/dashboard/dashboardPanels";
 import type { DashboardPanelsData } from "@/app/pages/dashboard/dashboardPanels";
+import { PersonalDashboardPanels } from "@/app/pages/dashboard/personalPanels";
+import type { PersonalPanels } from "@/app/pages/dashboard/personalPanels";
 import { Header as RootHeader } from "@/app/layout/root";
 import { BASE_ROUTE } from "@/lib/constant";
 import { mergeClassNames, parseFrappeErrorMsg } from "@/lib/utils";
@@ -59,7 +62,7 @@ type DashboardTile = {
 
 type DashboardResponse = {
   tiles: DashboardTile[];
-  panels?: DashboardPanelsData;
+  panels?: DashboardPanelsData | PersonalPanels;
   available_tiles: Array<{ key: string; label: string; description?: string; enabled_by_role?: boolean }>;
   layout?: { tiles?: string[] };
   refreshed_at?: string;
@@ -80,6 +83,18 @@ const TILE_ICONS: Record<string, typeof Activity> = {
   overdue_tasks: AlertTriangle,
   team_active: UserCheck,
   active_allocations: CheckCircle2,
+  my_hours: Activity,
+  my_billable: PieChart,
+  my_utilization: LineChart,
+  my_today: Clock,
+  my_month_hours: Activity,
+  my_remaining: AlertTriangle,
+  my_avg_daily: LineChart,
+  my_entries: ClipboardList,
+  my_drafts: Briefcase,
+  my_pending: ClipboardList,
+  my_tasks: CheckCircle2,
+  my_overdue: AlertTriangle,
 };
 
 const ACCENT: Record<string, string> = {
@@ -97,6 +112,12 @@ const ACCENT: Record<string, string> = {
   active_allocations: "bg-cyan-500",
   my_hours: "bg-sky-500",
   my_billable: "bg-teal-500",
+  my_utilization: "bg-indigo-500",
+  my_today: "bg-cyan-500",
+  my_month_hours: "bg-blue-500",
+  my_remaining: "bg-amber-500",
+  my_avg_daily: "bg-violet-500",
+  my_entries: "bg-sky-600",
   my_drafts: "bg-amber-500",
   my_pending: "bg-orange-500",
   my_tasks: "bg-blue-500",
@@ -136,13 +157,17 @@ const ExecutiveDashboard = () => {
     }
   );
 
-  // After tiles paint, load lean panels
+  const summaryPreview = summaryData?.message as DashboardResponse | undefined;
+  const isPersonalPreview =
+    summaryPreview?.mode === "personal" || summaryPreview?.persona?.can_view_executive === false;
+
+  // After tiles paint, load lean executive panels (skip for Timesheet User personal mode)
   useEffect(() => {
-    if (summaryData?.message && !loadPanels) {
+    if (summaryData?.message && !loadPanels && !isPersonalPreview) {
       const timer = window.setTimeout(() => setLoadPanels(true), 50);
       return () => window.clearTimeout(timer);
     }
-  }, [loadPanels, summaryData]);
+  }, [loadPanels, summaryData, isPersonalPreview]);
 
   const {
     data: panelsData,
@@ -152,7 +177,7 @@ const ExecutiveDashboard = () => {
   } = useFrappeGetCall(
     "next_pms.next_pms.api.executive_dashboard.get_dashboard_panels",
     undefined,
-    loadPanels ? "dashboard-panels" : null,
+    loadPanels && !isPersonalPreview ? "dashboard-panels" : null,
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: true,
@@ -169,11 +194,12 @@ const ExecutiveDashboard = () => {
   const panelsPayload = panelsData?.message as { panels?: DashboardPanelsData; refreshed_at?: string } | undefined;
   const response = summary;
   const tiles = summary?.tiles ?? [];
-  const panels = panelsPayload?.panels;
   const isPersonal = response?.mode === "personal" || response?.persona?.can_view_executive === false;
+  const panels = panelsPayload?.panels;
+  const personalPanels = isPersonal ? (summary?.panels as PersonalPanels | undefined) : undefined;
   const dashboardTitle = response?.persona?.title || (isPersonal ? "My Timesheet Dashboard" : "Executive Dashboard");
   const personaLabel = response?.persona?.persona;
-  const isValidating = summaryValidating || panelsValidating;
+  const isValidating = summaryValidating || (!isPersonal && panelsValidating);
 
   const refresh = () => {
     mutateSummary();
@@ -262,7 +288,7 @@ const ExecutiveDashboard = () => {
 
             {summaryLoading ? (
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-                {Array.from({ length: 6 }).map((_, index) => (
+                {Array.from({ length: isPersonalPreview ? 12 : 6 }).map((_, index) => (
                   <Skeleton key={index} className="h-28 w-full rounded-xl" />
                 ))}
               </div>
@@ -340,6 +366,23 @@ const ExecutiveDashboard = () => {
                 </Typography>
               </CardContent>
             </Card>
+          ) : null}
+
+          {isPersonal && tiles.length ? (
+            <section className="space-y-3">
+              <Typography variant="p" className="text-sm font-semibold tracking-wide text-muted-foreground">
+                My insights
+              </Typography>
+              {personalPanels ? (
+                <PersonalDashboardPanels panels={personalPanels} />
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {Array.from({ length: 6 }).map((_, index) => (
+                    <Skeleton key={index} className="h-48 w-full rounded-xl" />
+                  ))}
+                </div>
+              )}
+            </section>
           ) : null}
 
           {!isPersonal && tiles.length ? (
