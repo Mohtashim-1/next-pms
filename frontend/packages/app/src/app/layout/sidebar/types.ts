@@ -9,6 +9,8 @@ export type NestedRoute = {
   key: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   icon?: any;
+  /** Open outside the Next PMS SPA (e.g. Desk pages) */
+  external?: boolean;
   /** Category → report links under Reports */
   children?: NestedRoute[];
 };

@@ -33,7 +33,7 @@ def get_work_entries(
     if range_start > range_end:
         range_start, range_end = range_end, range_start
 
-    page_length = min(cint(page_length) or 50, 200)
+    page_length = min(cint(page_length) or 50, 5000)
     start = cint(start) or 0
     search = (search or "").strip()
 
@@ -58,6 +58,7 @@ def get_work_entries(
             | (task.subject.like(like))
             | (project.project_name.like(like))
             | (detail.task.like(like))
+            | (detail.project.like(like))
             | (detail.activity_type.like(like))
         )
 
@@ -68,7 +69,7 @@ def get_work_entries(
         .left_join(task)
         .on(detail.task == task.name)
         .left_join(project)
-        .on(task.project == project.name)
+        .on(detail.project == project.name)
         .where(filters)
     )
     count_query = _apply_search(count_query)
@@ -81,7 +82,7 @@ def get_work_entries(
         .left_join(task)
         .on(detail.task == task.name)
         .left_join(project)
-        .on(task.project == project.name)
+        .on(detail.project == project.name)
         .where(filters)
     )
     rows_query = _apply_search(rows_query)
@@ -95,11 +96,11 @@ def get_work_entries(
             detail.description,
             detail.activity_type,
             detail.task,
+            detail.project,
             detail.is_billable,
             detail.custom_entry_approval_status.as_("entry_approval_status"),
             timesheet.custom_approval_status.as_("timesheet_status"),
             task.subject.as_("task_subject"),
-            task.project,
             project.project_name,
         )
         .orderby(detail.from_time, order=frappe.qb.desc)

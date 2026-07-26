@@ -22,7 +22,6 @@ import {
   GanttChartSquareIcon,
   Home,
   LayoutDashboard,
-  FileBarChart,
   Search,
   UserCircle2,
   Users,
@@ -34,13 +33,11 @@ import {
   DASHBOARD,
   HOME,
   PROJECT,
-  REPORTS,
   RESOURCE_MANAGEMENT,
   PM_ACCESS_ROLES,
   REPORT_ACCESS_ROLES,
   TASK,
   TEAM,
-  TEAM_APPROVALS,
   TIMESHEET,
   WORK_ENTRIES,
 } from "@/lib/constant";
@@ -54,6 +51,15 @@ import ViewLoader from "./viewLoader";
 import { RootState } from "../../../store";
 import type { ViewData } from "../../../store/view";
 
+const isExternalUrl = (url?: string) =>
+  Boolean(url && (url.startsWith("/desk") || url.startsWith("http://") || url.startsWith("https://")));
+
+const toSidebarPath = (url: string) => {
+  if (isExternalUrl(url)) return url;
+  if (url.startsWith("/next-pms/")) return url.replace(/^\/next-pms/, "") || "/";
+  return url;
+};
+
 const Sidebar = () => {
   const user = useSelector((state: RootState) => state.user);
   const viewInfo = useSelector((state: RootState) => state.view);
@@ -61,7 +67,7 @@ const Sidebar = () => {
   const location = useLocation();
 
   const [openRoutes, setOpenRoutes] = useState<{ [key: string]: boolean }>({
-    reports: false,
+    "dashboards-tools": true,
   });
 
   const hasPmRole = user.roles.some((role: string) => PM_ACCESS_ROLES.includes(role));
@@ -78,20 +84,17 @@ const Sidebar = () => {
   const { data: reportsCatalogData } = useFrappeGetCall(
     "next_pms.next_pms.api.executive_dashboard.get_reports_catalog",
     undefined,
-    hasReportAccess ? "sidebar-reports-catalog" : null,
+    hasReportAccess ? "sidebar-tools-catalog" : null,
     { revalidateOnFocus: false }
   );
-  const reportCategories =
-    (reportsCatalogData?.message?.by_category as
-      | { category: string; reports: { name: string; url: string }[] }[]
-      | undefined) || [];
-
-  // Keep Reports expanded while browsing report pages
-  useEffect(() => {
-    if (location.pathname.includes("/reports")) {
-      setOpenRoutes((prev) => ({ ...prev, reports: true }));
-    }
-  }, [location.pathname]);
+  const tools =
+    (reportsCatalogData?.message?.tools as { name: string; url: string; kind?: string }[] | undefined) ||
+    (
+      reportsCatalogData?.message?.by_category as
+        | { category: string; is_tools?: boolean; reports: { name: string; url: string; kind?: string }[] }[]
+        | undefined
+    )?.find((cat) => cat.is_tools || cat.category === "Dashboards & Tools")?.reports ||
+    [];
 
   const approvalQueueCount = approvalCountData?.message?.count ?? 0;
   const privateViews = viewInfo.views.filter(
@@ -159,6 +162,12 @@ const Sidebar = () => {
           key: "portfolio-margin",
           icon: BarChart3,
         },
+        {
+          to: `${PROJECT}/profitability`,
+          label: "Profitability Dashboard",
+          key: "project-profitability",
+          icon: PieChart,
+        },
       ],
     },
     {
@@ -169,43 +178,27 @@ const Sidebar = () => {
       isPmRoute: false,
     },
   ];
-  if (hasReportAccess) {
-    const reportChildren: NestedRoute[] = [
-      {
-        to: `/${REPORTS}`,
-        label: "All reports",
-        key: "reports-library",
-        icon: FileBarChart,
-      },
-      ...reportCategories.map((cat) => ({
-        label: cat.category,
-        key: `reports-cat-${cat.category}`,
-        icon: FileBarChart,
-        children: cat.reports.map((report) => {
-          // Catalog returns absolute /next-pms/... ; NavLink is under basename /next-pms
-          const to = report.url.startsWith("/next-pms/")
-            ? report.url.replace(/^\/next-pms/, "") || "/"
-            : report.url;
-          return {
-            to,
-            label: report.name,
-            key: `report-${report.name}`,
-          };
-        }),
-      })),
-    ];
+  if (hasReportAccess && tools.length) {
     routes.splice(1, 0, {
-      to: `/${REPORTS}`,
-      icon: FileBarChart,
-      label: "Reports",
-      key: "reports",
+      to: DASHBOARD,
+      icon: PieChart,
+      label: "Dashboards & Tools",
+      key: "dashboards-tools",
       isPmRoute: false,
-      children: reportChildren,
+      children: tools.map((tool) => {
+        const path = toSidebarPath(tool.url);
+        return {
+          to: path,
+          label: tool.name,
+          key: `tool-${tool.name}`,
+          external: isExternalUrl(tool.url) || tool.kind === "desk",
+        };
+      }),
     });
   }
   if (
     hasPmRole &&
-    (!user.roles.includes("Contractor") || user.userName == "Administrator")
+    (!user.roles.includes("Contractor") || user.user === "Administrator")
   ) {
     routes.push({
       to: RESOURCE_MANAGEMENT,
@@ -405,41 +398,56 @@ const Sidebar = () => {
                       }
 
                       if (!child.to) return null;
+                      const isExternal = child.external || isExternalUrl(child.to);
                       const isChildActive =
-                        child.to === location.pathname || location.pathname.startsWith(`${child.to}/`);
-                      return (
-                        <NavLink
-                          to={child.to}
-                          key={child.key}
-                          title={child.label}
-                          className="group flex h-9 items-center"
+                        !isExternal &&
+                        (child.to === location.pathname || location.pathname.startsWith(`${child.to}/`));
+                      const linkClassName = "group flex h-9 items-center";
+                      const inner = (
+                        <div
+                          className={mergeClassNames(
+                            "flex w-full items-center gap-x-2 rounded-lg p-2 text-foreground hover:bg-accent max-md:justify-center",
+                            isChildActive && "border-l-2 border-primary bg-accent shadow-md",
+                            !user.isSidebarCollapsed && "pl-3"
+                          )}
                         >
-                          <div
+                          {child.icon && (
+                            <child.icon
+                              className={mergeClassNames(
+                                "h-4 w-4 shrink-0 stroke-foreground",
+                                isChildActive && "stroke-primary"
+                              )}
+                            />
+                          )}
+                          <Typography
+                            variant="p"
                             className={mergeClassNames(
-                              "flex w-full items-center gap-x-2 rounded-lg p-2 text-foreground hover:bg-accent max-md:justify-center",
-                              isChildActive && "border-l-2 border-primary bg-accent shadow-md",
-                              !user.isSidebarCollapsed && "pl-3"
+                              "truncate text-foreground",
+                              isChildActive && "text-foreground",
+                              user.isSidebarCollapsed && "hidden"
                             )}
                           >
-                            {child.icon && (
-                              <child.icon
-                                className={mergeClassNames(
-                                  "h-4 w-4 shrink-0 stroke-foreground",
-                                  isChildActive && "stroke-primary"
-                                )}
-                              />
-                            )}
-                            <Typography
-                              variant="p"
-                              className={mergeClassNames(
-                                "truncate text-foreground",
-                                isChildActive && "text-foreground",
-                                user.isSidebarCollapsed && "hidden"
-                              )}
-                            >
-                              {child.label}
-                            </Typography>
-                          </div>
+                            {child.label}
+                          </Typography>
+                        </div>
+                      );
+                      if (isExternal) {
+                        return (
+                          <a
+                            href={child.to}
+                            key={child.key}
+                            title={child.label}
+                            className={linkClassName}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {inner}
+                          </a>
+                        );
+                      }
+                      return (
+                        <NavLink to={child.to} key={child.key} title={child.label} className={linkClassName}>
+                          {inner}
                         </NavLink>
                       );
                     })}

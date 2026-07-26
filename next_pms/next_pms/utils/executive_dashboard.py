@@ -559,6 +559,16 @@ REPORT_CATALOG = (
 # In-app analytics (not Desk reports) — opened inside Next PMS
 REPORT_APP_LINKS = (
     {
+        "name": "Project Profitability Dashboard",
+        "description": "Revenue, cost, and margin analytics for the project portfolio",
+        "audience": ["System Manager", "Projects Manager", "Accounts Manager", "Team Lead"],
+        "category": "Finance",
+        "detail": "deep",
+        "tags": ["margins", "profitability", "live"],
+        "url": "/next-pms/project/profitability",
+        "kind": "app",
+    },
+    {
         "name": "Portfolio Margins",
         "description": "Interactive margin analytics across the project portfolio",
         "audience": ["System Manager", "Projects Manager"],
@@ -2185,12 +2195,10 @@ def get_reports_catalog_for_user() -> dict:
             seen.add(r["category"])
             categories.append(r["category"])
 
-    # Nested menu for sidebar:
-    #   query reports (kind=portal) grouped by their category,
-    #   live boards/dashboards (kind=app) collected under a single "Dashboards & Tools" heading
+    # Nested menu for sidebar: live boards/dashboards only under "Dashboards & Tools"
+    # (query reports are intentionally not listed in the sidebar menu)
     TOOLS_HEADING = "Dashboards & Tools"
-    query_reports = [r for r in reports if r.get("kind") != "app"]
-    tool_reports = [r for r in reports if r.get("kind") == "app"]
+    tool_reports = [r for r in reports if r.get("kind") in ("app", "desk")]
 
     def _link(r: dict) -> dict:
         return {
@@ -2201,11 +2209,6 @@ def get_reports_catalog_for_user() -> dict:
         }
 
     by_category = []
-    for cat in categories:
-        cat_reports = [_link(r) for r in query_reports if r.get("category") == cat]
-        if cat_reports:
-            by_category.append({"category": cat, "reports": cat_reports})
-
     if tool_reports:
         by_category.append(
             {
@@ -2220,6 +2223,7 @@ def get_reports_catalog_for_user() -> dict:
         "reports": reports,
         "categories": categories,
         "by_category": by_category,
+        "tools": [_link(r) for r in tool_reports],
         "persona": persona,
         "counts": {
             "total": len(reports),

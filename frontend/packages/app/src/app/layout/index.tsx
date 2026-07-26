@@ -47,6 +47,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, error]);
 
+  // Always render main content. Gating on employee left System Managers /
+  // users without a linked Employee record on a blank sidebar-only screen
+  // (dashboards, reports, Approval Queue, etc. never appeared).
   return (
     <ErrorFallback>
       <div className="flex flex-row h-screen w-full min-h-0">
@@ -54,16 +57,18 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           <Sidebar />
         </ErrorFallback>
         <div className="flex min-h-0 flex-1 w-full flex-col overflow-hidden">
-          {(user.employee || user.user == "Administrator") && (
-            <>
-              <RunningTimerBar employee={user.employee} />
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                <Suspense fallback={<></>}>
-                  <ErrorFallback>{children}</ErrorFallback>
-                </Suspense>
-              </div>
-            </>
-          )}
+          {user.employee ? <RunningTimerBar employee={user.employee} /> : null}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <Suspense
+              fallback={
+                <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
+                  Loading…
+                </div>
+              }
+            >
+              <ErrorFallback>{children}</ErrorFallback>
+            </Suspense>
+          </div>
         </div>
       </div>
       <Toaster />

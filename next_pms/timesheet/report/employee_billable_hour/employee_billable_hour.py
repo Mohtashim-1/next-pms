@@ -57,14 +57,22 @@ def get_columns():
 
 
 def get_data(filters):
+    from frappe.utils import get_datetime, getdate
+    from datetime import timedelta
+
     timesheet = DocType("Timesheet")
     timesheet_details = DocType("Timesheet Detail")
     task = DocType("Task")
+    from_dt = get_datetime(filters.get("from_date"))
+    to_dt = get_datetime(getdate(filters.get("to_date")) + timedelta(days=1))
+    # LEFT JOIN Task: most entries here have no task linked.
+    # Filter by detail from_time (not strict timesheet start/end containment)
+    # so weekly sheets that overlap the window still appear.
     query = (
         frappe.qb.from_(timesheet)
         .inner_join(timesheet_details)
         .on(timesheet_details.parent == timesheet.name)
-        .inner_join(task)
+        .left_join(task)
         .on(task.name == timesheet_details.task)
         .select(
             timesheet.start_date.as_("from_date"),
@@ -75,8 +83,8 @@ def get_data(filters):
             timesheet_details.hours,
             timesheet_details.description,
         )
-        .where(timesheet.start_date >= filters.get("from_date"))
-        .where(timesheet.end_date <= filters.get("to_date"))
+        .where(timesheet_details.from_time >= from_dt)
+        .where(timesheet_details.from_time < to_dt)
         .where(timesheet_details.is_billable == 1)
         .where(timesheet.docstatus.isin([0, 1]))
     )

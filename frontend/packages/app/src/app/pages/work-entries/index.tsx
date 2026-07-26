@@ -7,6 +7,10 @@ import {
   Badge,
   Button,
   DatePicker,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   Input,
   Spinner,
   Table,
@@ -16,35 +20,25 @@ import {
   TableHeader,
   TableRow,
   Typography,
+  useToast,
 } from "@next-pms/design-system/components";
 import { getFormatedDate, getTodayDate, getUTCDateTime, normalizeDate, prettyDate } from "@next-pms/design-system/date";
 import { floatToTime } from "@next-pms/design-system/utils";
 import { addDays } from "date-fns";
-import { useFrappeGetCall } from "frappe-react-sdk";
-import { ListChecks, Search } from "lucide-react";
+import { useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
+import { Download, FileSpreadsheet, FileText, ListChecks, LoaderCircle, Search } from "lucide-react";
 
 import { Header, Main } from "@/app/layout/root";
 import { formatRangeLabel, getEntryDate } from "@/lib/timesheetTime";
 import { parseFrappeErrorMsg } from "@/lib/utils";
 import type { RootState } from "@/store";
+import {
+  exportWorkEntriesCsv,
+  exportWorkEntriesExcel,
+  type WorkEntryRow,
+} from "./exportWorkEntries";
 
-type WorkEntry = {
-  name: string;
-  parent: string;
-  date: string;
-  from_time?: string;
-  to_time?: string;
-  hours: number;
-  activity_type?: string;
-  task?: string;
-  task_subject?: string;
-  project?: string;
-  project_name?: string;
-  description?: string;
-  is_billable?: boolean;
-  entry_approval_status?: string;
-  timesheet_status?: string;
-};
+type WorkEntry = WorkEntryRow;
 
 const today = getTodayDate();
 const defaultStart = getFormatedDate(addDays(getUTCDateTime(today), -90));
@@ -69,12 +63,14 @@ function statusVariant(status?: string) {
 
 function WorkEntries() {
   const user = useSelector((state: RootState) => state.user);
+  const { toast } = useToast();
   const [startDate, setStartDate] = useState(defaultStart);
   const [endDate, setEndDate] = useState(today);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [pageStart, setPageStart] = useState(0);
   const [entries, setEntries] = useState<WorkEntry[]>([]);
+  const [exporting, setExporting] = useState(false);
   const pageLength = 50;
 
   const queryKey = useMemo(
@@ -94,6 +90,8 @@ function WorkEntries() {
     },
     user.employee ? queryKey : null
   );
+
+  const { call: fetchEntries } = useFrappePostCall("next_pms.timesheet.api.work_entries.get_work_entries");
 
   const response = data?.message;
   const totalCount = response?.total_count ?? 0;
@@ -132,7 +130,48 @@ function WorkEntries() {
     setEntries([]);
   };
 
+  const rangeLabel = `${startDate}_to_${endDate}`;
+
+  const handleExport = async (format: "excel" | "csv") => {
+    if (!user.employee) {
+      toast({ variant: "destructive", description: "No employee linked to your user." });
+      return;
+    }
+    setExporting(true);
+    try {
+      const res = await fetchEntries({
+        employee: user.employee,
+        start_date: startDate,
+        end_date: endDate,
+        search: debouncedSearch || undefined,
+        page_length: 5000,
+        start: 0,
+      });
+      const rows = (res?.message?.data || []) as WorkEntry[];
+      if (!rows.length) {
+        toast({ variant: "destructive", description: "Nothing to export for this filter." });
+        return;
+      }
+      if (format === "excel") {
+        exportWorkEntriesExcel(rows, rangeLabel);
+      } else {
+        exportWorkEntriesCsv(rows, rangeLabel);
+      }
+      toast({
+        variant: "success",
+        description: `Exported ${rows.length} work entr${rows.length === 1 ? "y" : "ies"} as ${
+          format === "excel" ? "Excel" : "CSV"
+        }.`,
+      });
+    } catch (err) {
+      toast({ variant: "destructive", description: parseFrappeErrorMsg(err as Error) });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const rows = entries;
+  const canExport = Boolean(user.employee) && (totalCount > 0 || rows.length > 0) && !exporting;
 
   return (
     <>
@@ -141,9 +180,41 @@ function WorkEntries() {
           <ListChecks className="h-5 w-5 text-primary" />
           <Typography variant="h5">Work Entries</Typography>
         </div>
-        <Typography variant="small" className="text-muted-foreground">
-          {totalCount} entries
-        </Typography>
+        <div className="flex items-center gap-3">
+          <Typography variant="small" className="text-muted-foreground">
+            {totalCount} entries
+          </Typography>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 gap-1.5" disabled={!canExport}>
+                {exporting ? (
+                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem
+                className="cursor-pointer gap-2"
+                disabled={exporting}
+                onClick={() => void handleExport("excel")}
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                Export as Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer gap-2"
+                disabled={exporting}
+                onClick={() => void handleExport("csv")}
+              >
+                <FileText className="h-4 w-4" />
+                Export as CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </Header>
 
       <Main className="py-4 gap-4">
