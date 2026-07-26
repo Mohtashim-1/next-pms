@@ -68,14 +68,14 @@ frappe.query_reports["Appraisal Evaluation Report"] = {
 
 const setup_filters = () => {
   frappe.query_reports["Appraisal Evaluation Report"].filters.push({
-    fieldname: "from",
+    fieldname: "from_date",
     label: __("From Date"),
     fieldtype: "Date",
     default: frappe.datetime.add_months(frappe.datetime.month_start(), -1),
     reqd: 1,
   });
   frappe.query_reports["Appraisal Evaluation Report"].filters.push({
-    fieldname: "to",
+    fieldname: "to_date",
     label: __("To Date"),
     fieldtype: "Date",
     default: frappe.datetime.add_days(frappe.datetime.month_start(), -1),

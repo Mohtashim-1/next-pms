@@ -143,6 +143,8 @@ const ReportViewer = () => {
     const next: Record<string, FilterValue> = {};
     const byName = new Map((meta?.filters || []).map((f) => [f.fieldname, f]));
     for (const [key, value] of Object.entries(meta?.defaults || {})) {
+      // Skip aliases that are not part of the visible filter schema.
+      if (!byName.has(key)) continue;
       const def = byName.get(key);
       if (def?.fieldtype === "MultiSelectList") {
         next[key] = value == null || value === "" ? [] : Array.isArray(value) ? value : [String(value)];
@@ -152,20 +154,23 @@ const ReportViewer = () => {
     }
     for (const f of meta?.filters || []) {
       if (!(f.fieldname in next)) {
-        next[f.fieldname] = f.fieldtype === "MultiSelectList" ? [] : "";
+        next[f.fieldname] = f.fieldtype === "MultiSelectList" ? [] : f.default != null && f.default !== "" ? String(f.default) : "";
       }
     }
     return next;
   }, [meta?.defaults, meta?.filters]);
 
   useEffect(() => {
-    if (!meta || initializedReport === reportName) return;
+    if (!meta || !reportName) return;
+    // Always re-sync defaults when meta arrives / changes for this report so
+    // required dates are never left blank while a second alias is filled.
     setFilters(defaults);
     setInitializedReport(reportName);
     setRows([]);
     setColumns([]);
     setSummary([]);
     setPlaceholder(null);
+    setRunError(null);
     setSearch("");
     setPage(1);
     setHiddenColumns(new Set());
@@ -173,14 +178,15 @@ const ReportViewer = () => {
       ...prev,
       letterHead: meta.default_letter_head || prev.letterHead,
     }));
-  }, [defaults, initializedReport, meta, reportName]);
+  }, [defaults, meta, reportName]);
 
-  const execute = useCallback(async () => {
+  const execute = useCallback(async (overrideFilters?: Record<string, FilterValue>) => {
     if (!reportName) return;
     setRunError(null);
     try {
+      const source = overrideFilters || filters;
       const payload: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(filters)) {
+      for (const [key, value] of Object.entries(source)) {
         if (Array.isArray(value)) {
           if (value.length) payload[key] = value;
         } else if (value !== "") {
@@ -205,9 +211,12 @@ const ReportViewer = () => {
   }, [filters, reportName, runReport]);
 
   useEffect(() => {
-    if (initializedReport === reportName && reportName) void execute();
+    if (initializedReport === reportName && reportName && Object.keys(defaults).length) {
+      // Pass defaults directly so we don't race setFilters state.
+      void execute(defaults);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initializedReport, reportName]);
+  }, [initializedReport, reportName, defaults]);
 
   const colKeys = useMemo(
     () =>
@@ -921,7 +930,13 @@ const ReportFilter = ({
         />
       ) : isLink ? (
         <ComboBox
-          label={arrayValue.length ? `${arrayValue.length} selected` : `Select ${filter.label}`}
+          label={
+            !arrayValue.length
+              ? `Select ${filter.label}`
+              : isMulti
+                ? `${arrayValue.length} selected`
+                : linkOptions.find((option) => option.value === arrayValue[0])?.label || arrayValue[0]
+          }
           className="w-full min-w-[11rem]"
           value={arrayValue}
           data={linkOptions}
@@ -942,7 +957,8 @@ const ReportFilter = ({
           value={stringValue}
           onChange={(event) => onChange(event.target.value)}
         >
-          <option value="">All</option>
+          {/* A required Select must not offer a blank "All" choice. */}
+          {filter.reqd ? null : <option value="">All</option>}
           {selectOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}

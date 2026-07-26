@@ -164,8 +164,8 @@ def get_columns(filters=None):
 
 
 def get_data(filters=None, has_bu_field=False):
-    start_date = filters.get("from")
-    end_date = filters.get("to")
+    start_date = filters.get("from_date") or filters.get("from")
+    end_date = filters.get("to_date") or filters.get("to")
     aggregate = filters.get("aggregate", False)
     group_by = filters.get("group_by", "")
     currency = filters.get("currency") or "USD"
@@ -403,14 +403,22 @@ def sort_by_business_unit(employees, has_bu_field=False, currency="USD"):
 
 
 def validate_filters(filters):
-    if not filters.get("from") or not filters.get("to"):
+    start = filters.get("from_date") or filters.get("from")
+    end = filters.get("to_date") or filters.get("to")
+    if not start or not end:
         frappe.throw(_("Both From and To dates must be provided."))
 
-    start_date = getdate(filters.get("from"))
-    end_date = getdate(filters.get("to"))
+    start_date = getdate(start)
+    end_date = getdate(end)
 
     if start_date > end_date:
         frappe.throw(_("The From date should be than the To date."))
+
+    # Normalize aliases so the rest of the report can rely on from_date / to_date.
+    filters["from_date"] = start_date
+    filters["to_date"] = end_date
+    filters["from"] = start_date
+    filters["to"] = end_date
 
 
 def get_employee_id_appraisal_cycle(appraisal_cycle):

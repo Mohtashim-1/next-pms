@@ -157,9 +157,9 @@ PORTAL_REPORT_FILTERS: dict[str, list[dict]] = {
 		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
 	],
 	"Appraisal Evaluation Report": [
-		# Script uses fieldnames `from` / `to` (not from_date / to_date).
-		{"fieldname": "from", "label": "From Date", "fieldtype": "Date", "reqd": 1, "default": "month_ago"},
-		{"fieldname": "to", "label": "To Date", "fieldtype": "Date", "reqd": 1, "default": "today"},
+		# Prefer standard from_date / to_date (legacy `from` / `to` still accepted in execute).
+		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "reqd": 1, "default": "month_ago"},
+		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "reqd": 1, "default": "today"},
 		{"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "default": "company"},
 		{"fieldname": "status", "label": "Status", "fieldtype": "Select", "options": "\nActive\nInactive\nLeft", "default": "Active"},
 		{"fieldname": "currency", "label": "Currency", "fieldtype": "Select", "options": "USD\nINR", "default": "USD"},
@@ -468,17 +468,59 @@ def _normalize_portal_filters(report_name: str, filters: dict) -> dict:
 			frappe.throw("Company is required for Employee Analytics.")
 
 	elif report_name == "Appraisal Evaluation Report":
-		# Accept either naming convention from the portal UI.
-		if not out.get("from") and out.get("from_date"):
-			out["from"] = out["from_date"]
-		if not out.get("to") and out.get("to_date"):
-			out["to"] = out["to_date"]
-		if not out.get("from"):
-			out["from"] = add_months(today(), -1)
-		if not out.get("to"):
-			out["to"] = today()
+		# Accept either naming convention; prefer from_date / to_date in the payload.
+		if not out.get("from_date") and out.get("from"):
+			out["from_date"] = out["from"]
+		if not out.get("to_date") and out.get("to"):
+			out["to_date"] = out["to"]
+		if not out.get("from_date"):
+			out["from_date"] = add_months(today(), -1)
+		if not out.get("to_date"):
+			out["to_date"] = today()
+		# Drop legacy aliases so they never show as empty mandatory filters.
+		out.pop("from", None)
+		out.pop("to", None)
 
 	return out
+
+
+def _dedupe_report_filters(report_name: str, filters: list[dict]) -> list[dict]:
+	"""Remove conflicting / legacy filter aliases that confuse the portal UI."""
+	if not filters:
+		return filters
+
+	by_name = {f["fieldname"]: f for f in filters}
+	order = [f["fieldname"] for f in filters]
+
+	if report_name == "Appraisal Evaluation Report":
+		# Never show both `from` and `from_date` (same for to / to_date).
+		if "from_date" in by_name and "from" in by_name:
+			order = [name for name in order if name != "from"]
+			by_name.pop("from", None)
+		if "to_date" in by_name and "to" in by_name:
+			order = [name for name in order if name != "to"]
+			by_name.pop("to", None)
+		# If only legacy names exist, rename them for the portal.
+		if "from" in by_name and "from_date" not in by_name:
+			legacy = by_name.pop("from")
+			legacy["fieldname"] = "from_date"
+			by_name["from_date"] = legacy
+			order = ["from_date" if name == "from" else name for name in order]
+		if "to" in by_name and "to_date" not in by_name:
+			legacy = by_name.pop("to")
+			legacy["fieldname"] = "to_date"
+			by_name["to_date"] = legacy
+			order = ["to_date" if name == "to" else name for name in order]
+
+	# Stable unique order
+	seen = set()
+	unique = []
+	for name in order:
+		if name in seen or name not in by_name:
+			continue
+		seen.add(name)
+		unique.append(by_name[name])
+	return unique
 
 
 def get_portal_report_meta(report_name: str) -> dict:
@@ -494,6 +536,7 @@ def get_portal_report_meta(report_name: str) -> dict:
 	# Overrides must never drop filters the report script depends on (e.g. Gross Profit's `group_by`).
 	filters = _filters_from_report_doc(report) or _parse_filters_from_js(report_name, report.module)
 	filters = _merge_filter_defs(filters, PORTAL_REPORT_FILTERS.get(report_name))
+	filters = _dedupe_report_filters(report_name, filters)
 
 	resolved = []
 	defaults = {}
