@@ -9,7 +9,7 @@ import re
 
 import frappe
 from frappe.modules import get_module_path, scrub
-from frappe.utils import add_months, getdate, today
+from frappe.utils import add_months, flt, getdate, today
 
 from next_pms.next_pms.utils.executive_dashboard import REPORT_ACCESS_ROLES, resolve_dashboard_persona
 
@@ -31,6 +31,9 @@ _NATIVE_MULTI_COMPANY_REPORTS = {
 	"Planned vs Actual Hours",
 	"Resource Allocation / Capacity Planning",
 	"Skill Matrix and Availability",
+	"Capacity Planning",
+	"Employee Billability",
+	"Over Capacity",
 }
 
 
@@ -292,9 +295,29 @@ PORTAL_REPORT_FILTERS: dict[str, list[dict]] = {
 		{"fieldname": "from_date", "label": "From Date", "fieldtype": "Date", "default": "month_ago"},
 		{"fieldname": "to_date", "label": "To Date", "fieldtype": "Date", "default": "today"},
 		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+		{"fieldname": "employee", "label": "Employee", "fieldtype": "MultiSelectList", "options": "Employee"},
 		{"fieldname": "department", "label": "Department", "fieldtype": "Link", "options": "Department"},
 		{"fieldname": "designation", "label": "Designation", "fieldtype": "Link", "options": "Designation"},
-		{"fieldname": "skill", "label": "Skill", "fieldtype": "MultiSelectList", "options": "Skill"},
+		{"fieldname": "skill", "label": "Skills", "fieldtype": "MultiSelectList", "options": "Skill"},
+	],
+	"Capacity Planning": [
+		{"fieldname": "status", "label": "Employee Status", "fieldtype": "Select", "options": "\nActive\nInactive\nSuspended\nLeft", "default": "Active"},
+		{"fieldname": "from", "label": "From Date", "fieldtype": "Date", "default": "month_ago"},
+		{"fieldname": "to", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+	],
+	"Employee Billability": [
+		{"fieldname": "status", "label": "Employee Status", "fieldtype": "Select", "options": "\nActive\nInactive\nSuspended\nLeft", "default": "Active"},
+		{"fieldname": "from", "label": "From Date", "fieldtype": "Date", "default": "month_ago"},
+		{"fieldname": "to", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
+		{"fieldname": "designation", "label": "Designation", "fieldtype": "MultiSelectList", "options": "Designation"},
+	],
+	"Over Capacity": [
+		{"fieldname": "status", "label": "Employee Status", "fieldtype": "Select", "options": "\nActive\nInactive\nSuspended\nLeft", "default": "Active"},
+		{"fieldname": "from", "label": "From Date", "fieldtype": "Date", "default": "month_ago"},
+		{"fieldname": "to", "label": "To Date", "fieldtype": "Date", "default": "today"},
+		{"fieldname": "company", "label": "Company", "fieldtype": "MultiSelectList", "options": "Company"},
 	],
 	"Resource Utilization Report": [
 		# Site timesheet data is historical; a trailing year is a useful landing window.
@@ -328,7 +351,14 @@ def ensure_portal_report_access():
 
 # DocTypes whose Link options must remain usable in portal filters even when the
 # calling user lacks Desk read permission (common for HR masters like Skill).
-_PORTAL_FILTER_OPTION_DOCTYPES = {"Skill", "Designation", "Department", "Branch", "Company"}
+_PORTAL_FILTER_OPTION_DOCTYPES = {
+	"Skill",
+	"Designation",
+	"Department",
+	"Branch",
+	"Company",
+	"Employee",
+}
 
 
 def search_portal_filter_options(doctype: str, txt: str = "", page_length: int | str = 20) -> list[dict]:
@@ -343,43 +373,66 @@ def search_portal_filter_options(doctype: str, txt: str = "", page_length: int |
 
 	txt = (txt or "").strip()
 
-	# Prefer standard search when the user already has access.
-	try:
-		from frappe.desk.search import search_link
+	# Skill is HR-only by default — always resolve via ignore_permissions for portal users.
+	use_fallback_first = doctype in {"Skill"}
 
-		rows = search_link(doctype, txt, page_length=limit) or []
-		if rows:
-			return rows
-	except Exception:
-		rows = []
+	rows: list = []
+	if not use_fallback_first:
+		try:
+			from frappe.desk.search import search_link
 
-	if doctype not in _PORTAL_FILTER_OPTION_DOCTYPES:
+			rows = search_link(doctype, txt, page_length=limit) or []
+			if rows:
+				return rows
+		except Exception:
+			rows = []
+
+	if doctype not in _PORTAL_FILTER_OPTION_DOCTYPES and not use_fallback_first:
 		return rows
 
 	# Fallback for restricted masters (e.g. Skill is HR Manager–only by default).
 	meta = frappe.get_meta(doctype)
-	title_field = meta.title_field or "name"
-	filters = {}
+	title_field = meta.title_field or ("employee_name" if doctype == "Employee" else "name")
+	if not meta.has_field(title_field):
+		title_field = "name"
+
+	filters: dict = {}
+	if doctype == "Employee":
+		filters["status"] = "Active"
+
 	or_filters = None
 	if txt:
-		or_filters = [[title_field, "like", f"%{txt}%"], ["name", "like", f"%{txt}%"]]
+		or_filters = [["name", "like", f"%{txt}%"]]
+		if title_field != "name":
+			or_filters.append([title_field, "like", f"%{txt}%"])
 		if meta.has_field("skill_name"):
 			or_filters.append(["skill_name", "like", f"%{txt}%"])
+		if meta.has_field("employee_name") and title_field != "employee_name":
+			or_filters.append(["employee_name", "like", f"%{txt}%"])
+
+	fields = ["name"]
+	if title_field != "name":
+		fields.append(title_field)
 
 	found = frappe.get_all(
 		doctype,
 		filters=filters,
 		or_filters=or_filters,
-		fields=["name", title_field],
+		fields=fields,
 		order_by=f"`tab{doctype}`.modified desc",
 		limit_page_length=limit,
 		ignore_permissions=True,
 	)
 	out = []
 	for row in found:
-		label = row.get(title_field) or row.name
-		out.append({"value": row.name, "label": label, "description": ""})
-	return out
+		if doctype == "Employee" and row.get("employee_name"):
+			label = row.employee_name
+			description = row.name
+		else:
+			label = row.get(title_field) or row.name
+			description = row.name if title_field != "name" and label != row.name else ""
+		out.append({"value": row.name, "label": label, "description": description})
+	return out or rows
 
 
 def _as_company_list(value) -> list[str]:
@@ -424,13 +477,80 @@ def _all_companies() -> list[str]:
 	return frappe.get_all("Company", pluck="name", order_by="name asc")
 
 
+def _is_total_row(row) -> bool:
+	"""True for auto-added / manual Total footer rows."""
+	if isinstance(row, dict):
+		for key in ("employee", "employee_name", "name", "account", "particulars", "id"):
+			val = row.get(key)
+			if val is not None and str(val).strip().lower() == "total":
+				return True
+		return False
+	if isinstance(row, (list, tuple)) and row:
+		return str(row[0]).strip().lower() == "total"
+	return False
+
+
+def _sum_total_row(columns: list, data_rows: list) -> dict | list | None:
+	"""Build a single Total row by summing numeric columns across data rows."""
+	if not data_rows or not columns:
+		return None
+
+	numeric_types = {"Float", "Int", "Currency", "Percent"}
+	fieldnames = []
+	for col in columns:
+		if isinstance(col, dict):
+			fieldnames.append(
+				(
+					col.get("fieldname") or col.get("label"),
+					col.get("fieldtype") or "Data",
+				)
+			)
+		else:
+			parts = str(col).split(":")
+			fieldnames.append((parts[0].strip().lower().replace(" ", "_"), parts[1] if len(parts) > 1 else "Data"))
+
+	sample = data_rows[0]
+	if isinstance(sample, dict):
+		total: dict = {}
+		label_set = False
+		for fieldname, fieldtype in fieldnames:
+			if not fieldname:
+				continue
+			if not label_set and fieldtype not in numeric_types:
+				total[fieldname] = "Total"
+				label_set = True
+			elif fieldtype in numeric_types:
+				total[fieldname] = sum(flt(r.get(fieldname)) for r in data_rows if isinstance(r, dict))
+			else:
+				total[fieldname] = ""
+		return total
+
+	# List/tuple rows
+	total_list = []
+	label_set = False
+	for idx, (_, fieldtype) in enumerate(fieldnames):
+		if not label_set and fieldtype not in numeric_types:
+			total_list.append("Total")
+			label_set = True
+		elif fieldtype in numeric_types:
+			total_list.append(sum(flt(r[idx]) for r in data_rows if isinstance(r, (list, tuple)) and len(r) > idx))
+		else:
+			total_list.append("")
+	return total_list
+
+
 def _merge_company_runs(report, filters: dict, companies: list[str]) -> dict:
-	"""Run a single-company report once per company and concatenate rows."""
+	"""Run a single-company report once per company and concatenate rows.
+
+	Each company run may include an `add_total_row` Total footer — keep only one
+	combined Total at the end so the portal never shows 6 duplicate Totals.
+	"""
 	all_rows: list = []
 	columns = None
 	chart = None
 	summary = None
 	message = None
+	saw_total = False
 	for company in companies:
 		run_filters = dict(filters)
 		run_filters["company"] = company
@@ -441,8 +561,17 @@ def _merge_company_runs(report, filters: dict, companies: list[str]) -> dict:
 			summary = result.get("report_summary")
 			message = result.get("message")
 		rows = result.get("result") or result.get("data") or []
-		if rows:
-			all_rows.extend(rows)
+		for row in rows or []:
+			if _is_total_row(row):
+				saw_total = True
+				continue
+			all_rows.append(row)
+
+	if saw_total and all_rows:
+		combined = _sum_total_row(columns or [], all_rows)
+		if combined is not None:
+			all_rows.append(combined)
+
 	return {
 		"columns": columns or [],
 		"result": all_rows,
@@ -1013,6 +1142,13 @@ def run_portal_report(report_name: str, filters: dict | str | None = None) -> di
 			normalized.append({col_keys[i]: row[i] for i in range(min(len(col_keys), len(row)))})
 		else:
 			normalized.append({"value": row})
+
+	# Safety net: never show more than one Total footer (multi-company merges used to).
+	total_rows = [r for r in normalized if _is_total_row(r)]
+	if len(total_rows) > 1:
+		data_only = [r for r in normalized if not _is_total_row(r)]
+		combined = _sum_total_row(columns, data_only)
+		normalized = data_only + ([combined] if combined is not None else [])
 
 	# Detect scaffolded/not-implemented reports so the UI can show a clean notice
 	placeholder = None

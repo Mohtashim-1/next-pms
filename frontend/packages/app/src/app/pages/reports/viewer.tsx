@@ -943,7 +943,11 @@ const ReportFilter = ({
               ? isMulti && !filter.reqd
                 ? filter.options === "Company"
                   ? "All Companies"
-                  : `All ${filter.label}`
+                  : filter.options === "Skill"
+                    ? "All Skills"
+                    : filter.options === "Employee"
+                      ? "All Employees"
+                      : `All ${filter.label}`
                 : `Select ${filter.label}`
               : isMulti
                 ? `${arrayValue.length} selected`

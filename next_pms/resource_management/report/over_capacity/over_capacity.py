@@ -36,7 +36,16 @@ def get_data(filters, meta):
     if filters.get("status"):
         emp_filters = {"status": filters.get("status")}
     else:
-        emp_filters = {}
+        emp_filters = {"status": "Active"}
+    company = filters.get("company")
+    if company:
+        if isinstance(company, str):
+            company = [company] if company else []
+        elif not isinstance(company, (list, tuple)):
+            company = [company]
+        company = [c for c in company if c]
+        if company:
+            emp_filters["company"] = ["in", company]
     employees = get_all("Employee", fields=fields, filters=emp_filters, order_by="employee_name ASC")
     logged_hours = get_logged_hours(employees, start_date, end_date)
 
