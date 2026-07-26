@@ -59,7 +59,7 @@ def _get_running_timer_user_key(user: str | None = None):
     return f"{EMP_TIMESHEET}::running_timer_user::{user or frappe.session.user}"
 
 
-def _get_open_timesheet(employee: str, date, project: str | None = None):
+def _find_open_timesheet_name(employee: str, date, project: str | None = None):
     filters = {
         "employee": employee,
         "start_date": [">=", getdate(date)],
@@ -68,15 +68,32 @@ def _get_open_timesheet(employee: str, date, project: str | None = None):
     }
     if project:
         filters["parent_project"] = project
-        parent = frappe.db.get_value("Timesheet", filters, "name")
-    else:
-        rows = frappe.get_all("Timesheet", filters=filters, fields=["name", "parent_project"], limit_page_length=20)
-        parent = next((row.name for row in rows if not row.parent_project), None)
+        return frappe.db.get_value("Timesheet", filters, "name")
 
+    rows = frappe.get_all(
+        "Timesheet", filters=filters, fields=["name", "parent_project"], limit_page_length=20
+    )
+    return next((row.name for row in rows if not row.parent_project), None)
+
+
+def _get_open_timesheet(employee: str, date, project: str | None = None):
+    """Return draft/open timesheet for employee+day, creating one if needed.
+
+    Concurrent Add Time autosaves can otherwise race and create two identical
+    Timesheet parents (overlapping hours → approval fails).
+    """
+    from frappe.utils.synchronization import filelock
+
+    parent = _find_open_timesheet_name(employee, date, project)
     if parent:
         return frappe.get_doc("Timesheet", parent)
 
-    return frappe.get_doc({"doctype": "Timesheet", "employee": employee})
+    lock_name = f"next_pms_open_ts_{employee}_{getdate(date)}_{project or 'none'}"
+    with filelock(lock_name, timeout=15):
+        parent = _find_open_timesheet_name(employee, date, project)
+        if parent:
+            return frappe.get_doc("Timesheet", parent)
+        return frappe.get_doc({"doctype": "Timesheet", "employee": employee})
 
 
 def _mark_draft_save(timesheet):

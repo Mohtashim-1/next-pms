@@ -9,7 +9,7 @@ import { useContextSelector } from "use-context-selector";
 /**
  * Internal dependencies.
  */
-import { TIMESHEET, HOME, /* DASHBOARD, */ TEAM, TASK, PROJECT, RESOURCE_MANAGEMENT, ROLES, PM_ACCESS_ROLES, WORK_ENTRIES } from "@/lib/constant";
+import { TIMESHEET, HOME, DASHBOARD, REPORTS, TEAM, TASK, PROJECT, RESOURCE_MANAGEMENT, PM_ACCESS_ROLES, REPORT_ACCESS_ROLES, WORK_ENTRIES } from "@/lib/constant";
 import { UserContext } from "@/lib/UserProvider";
 import { default as Layout } from "./app/layout";
 import { RootState } from "./store";
@@ -38,7 +38,8 @@ const ProjectDetail = lazy(() => import("@/app/pages/project/project-detail"));
 const ClientInvoicing = lazy(() => import("@/app/pages/project/invoicing"));
 const PortfolioMargins = lazy(() => import("@/app/pages/project/margins"));
 const BudgetBurnShare = lazy(() => import("@/app/pages/project/budget-burn-share"));
-// const ExecutiveDashboard = lazy(() => import("@/app/pages/dashboard")); // Dashboard hidden for now
+const ExecutiveDashboard = lazy(() => import("@/app/pages/dashboard"));
+const Reports = lazy(() => import("@/app/pages/reports"));
 const NotFound = lazy(() => import("@/app/pages/404"));
 
 export function Router() {
@@ -46,12 +47,14 @@ export function Router() {
     <Route>
       <Route path="/share/budget-burn/:token" element={<BudgetBurnShare />} />
       <Route element={<AuthenticatedRoute />}>
-        <Route path="/" element={<Navigate to={TIMESHEET} replace />} />
+        <Route path="/" element={<Navigate to={DASHBOARD} replace />} />
+        <Route path={DASHBOARD} element={<ExecutiveDashboard />} />
         <Route path={TIMESHEET} element={<Timesheet />} />
         <Route path={WORK_ENTRIES} element={<WorkEntries />} />
+        <Route element={<ReportsRoute />}>
+          <Route path={REPORTS} element={<Reports />} />
+        </Route>
         <Route element={<PmRoute />}>
-          {/* Dashboard hidden for now */}
-          {/* <Route path={DASHBOARD} element={<ExecutiveDashboard />} /> */}
           <Route path={HOME} element={<Home />} />
           <Route path={TEAM}>
             <Route path={`${TEAM}/`} element={<Team />} />
@@ -109,7 +112,7 @@ const AuthenticatedRoute = () => {
   if (isLoading) {
     return <></>;
   } else if (!currentUser || currentUser === "Guest") {
-    window.location.replace("/login?redirect-to=/next-pms/timesheet");
+    window.location.replace("/login?redirect-to=/next-pms/dashboard");
   }
 
   if (!isLoading && currentUser && currentUser !== "Guest") {
@@ -129,5 +132,18 @@ const PmRoute = () => {
     return <Navigate to={TIMESHEET} />;
   }
 
+  return <Outlet />;
+};
+
+const ReportsRoute = () => {
+  const user = useSelector((state: RootState) => state.user);
+  // Wait until roles are loaded to avoid bouncing Timesheet Users incorrectly.
+  if (!user.roles?.length) {
+    return <></>;
+  }
+  const hasAccess = user.roles.some((role: string) => REPORT_ACCESS_ROLES.includes(role));
+  if (!hasAccess) {
+    return <Navigate to={DASHBOARD} />;
+  }
   return <Outlet />;
 };

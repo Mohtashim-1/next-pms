@@ -88,6 +88,8 @@ const AddTime = ({
   const [submitting, setSubmitting] = useState(false);
   const [draftSaveStatus, setDraftSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const autoSaveRequestRef = useRef(0);
+  const autoSaveInFlightRef = useRef(false);
+  const pendingAutoSaveRef = useRef<z.infer<typeof TimesheetDraftSchema> | null>(null);
   const [timerSubmitting, setTimerSubmitting] = useState(false);
   const [timerTick, setTimerTick] = useState(Date.now());
   const [isTaskLoading, setIsTaskLoading] = useState(false);
@@ -304,6 +306,13 @@ const AddTime = ({
         return false;
       }
 
+      // Serialize autosaves — parallel create races spawn duplicate Timesheet docs.
+      if (autoSaveInFlightRef.current && !closeOnSuccess) {
+        pendingAutoSaveRef.current = parsed.data;
+        debugAddTime("persist queued (in flight)", { data: parsed.data });
+        return false;
+      }
+
       const requestId = ++autoSaveRequestRef.current;
       setDraftSaveStatus("saving");
       const payload = buildSavePayload(parsed.data);
@@ -313,6 +322,7 @@ const AddTime = ({
         payload,
       });
 
+      autoSaveInFlightRef.current = true;
       try {
         const res = await save(payload);
         debugAddTime("persist response", {
@@ -360,6 +370,13 @@ const AddTime = ({
           }
         }
         return false;
+      } finally {
+        autoSaveInFlightRef.current = false;
+        const pending = pendingAutoSaveRef.current;
+        pendingAutoSaveRef.current = null;
+        if (pending && !closeOnSuccess) {
+          void persistDraft(pending, false);
+        }
       }
     },
     [save, onSuccess, closeDialog, toast]

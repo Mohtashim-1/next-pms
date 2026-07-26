@@ -31,6 +31,7 @@ ALL_TILES = (
 
 ROLE_TILE_DEFAULTS: dict[str, list[str]] = {
     "Administrator": list(ALL_TILES),
+    "System Manager": list(ALL_TILES),
     "Projects Manager": list(ALL_TILES),
     "Accounts Manager": ["margin", "ar", "pipeline", "client_health", "revenue", "overdue_tasks"],
     "Timesheet Manager": [
@@ -44,8 +45,501 @@ ROLE_TILE_DEFAULTS: dict[str, list[str]] = {
         "team_active",
         "active_allocations",
     ],
+    "Team Lead": [
+        "utilization",
+        "approvals",
+        "billable_ratio",
+        "overdue_tasks",
+        "team_active",
+        "client_health",
+    ],
     "Projects User": ["utilization", "pipeline", "client_health", "overdue_tasks", "billable_ratio"],
+    # Timesheet User uses the personal dashboard (no executive tiles).
+    "Timesheet User": [],
 }
+
+# Persona priority (first match wins for UI title / default landing).
+PERSONA_PRIORITY = (
+    "System Manager",
+    "Administrator",
+    "Projects Manager",
+    "Timesheet Manager",
+    "Team Lead",
+    "Accounts Manager",
+    "Projects User",
+    "Timesheet User",
+)
+
+REPORT_ACCESS_ROLES = {
+    "System Manager",
+    "Administrator",
+    "Team Lead",
+    "Projects Manager",
+}
+
+REPORT_CATALOG = (
+    # ——— Timesheet compliance & detail ———
+    {
+        "name": "Timesheet Overview",
+        "description": "Weekly hours by employee, project, and work type with filters",
+        "audience": ["System Manager", "Team Lead", "Projects Manager"],
+        "category": "Timesheet",
+        "detail": "high",
+        "tags": ["hours", "weekly", "work type"],
+    },
+    {
+        "name": "Employee Billable Hour",
+        "description": "Billable vs non-billable hours broken down by employee",
+        "audience": ["System Manager", "Team Lead", "Projects Manager"],
+        "category": "Timesheet",
+        "detail": "high",
+        "tags": ["billable", "employee"],
+    },
+    {
+        "name": "Timesheet Compliance Report",
+        "description": "Who submitted late, missed weeks, or has incomplete timesheets",
+        "audience": ["System Manager", "Team Lead", "Projects Manager"],
+        "category": "Timesheet",
+        "detail": "deep",
+        "tags": ["compliance", "missing", "late"],
+    },
+    {
+        "name": "Timesheet Approval Bottleneck",
+        "description": "Pending approvals aging — where timesheets are stuck with managers",
+        "audience": ["System Manager", "Team Lead", "Projects Manager"],
+        "category": "Timesheet",
+        "detail": "deep",
+        "tags": ["approvals", "aging", "managers"],
+    },
+    {
+        "name": "Daily Timesheet Summary",
+        "description": "Day-by-day timesheet entries across the organization",
+        "audience": ["System Manager", "Team Lead", "Projects Manager"],
+        "category": "Timesheet",
+        "detail": "high",
+        "tags": ["daily", "detail"],
+    },
+    {
+        "name": "Timesheet Billing Summary",
+        "description": "Billable timesheet lines ready for client invoicing",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Timesheet",
+        "detail": "deep",
+        "tags": ["billing", "invoice"],
+    },
+    {
+        "name": "Employee Hours Utilization Based On Timesheet",
+        "description": "Utilization % from logged hours vs expected working hours",
+        "audience": ["System Manager", "Team Lead", "Projects Manager"],
+        "category": "Timesheet",
+        "detail": "deep",
+        "tags": ["utilization", "hours"],
+    },
+    {
+        "name": "Overtime and Burnout Risk",
+        "description": "Employees logging sustained overtime — burnout risk signals",
+        "audience": ["System Manager", "Team Lead"],
+        "category": "Timesheet",
+        "detail": "deep",
+        "tags": ["overtime", "risk", "people"],
+    },
+    {
+        "name": "Realization Rate Report",
+        "description": "Logged vs billable vs realized hours and rates",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Timesheet",
+        "detail": "deep",
+        "tags": ["realization", "rates"],
+    },
+    {
+        "name": "Unbilled Hours / Revenue Leakage",
+        "description": "Billable work not yet invoiced — revenue leakage finder",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Timesheet",
+        "detail": "deep",
+        "tags": ["unbilled", "leakage", "revenue"],
+    },
+    {
+        "name": "WIP Aging",
+        "description": "Work-in-progress hours aged by bucket (0–30 / 30–60 / 60+)",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Timesheet",
+        "detail": "deep",
+        "tags": ["wip", "aging"],
+    },
+    {
+        "name": "Timesheet Profitability Summary",
+        "description": "Profit contribution from timesheet cost vs billing",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Timesheet",
+        "detail": "deep",
+        "tags": ["profit", "cost"],
+    },
+    # ——— Resource / capacity ———
+    {
+        "name": "Employee Billability",
+        "description": "Utilization and billability trends by employee over time",
+        "audience": ["System Manager", "Team Lead", "Projects Manager"],
+        "category": "Resource",
+        "detail": "high",
+        "tags": ["billability", "trend"],
+    },
+    {
+        "name": "Capacity Planning",
+        "description": "Capacity vs demand forecast across teams",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Resource",
+        "detail": "high",
+        "tags": ["capacity", "demand"],
+    },
+    {
+        "name": "Spare Capacity Report",
+        "description": "Available bench / spare hours by reporting hierarchy",
+        "audience": ["System Manager", "Projects Manager", "Team Lead"],
+        "category": "Resource",
+        "detail": "high",
+        "tags": ["bench", "spare"],
+    },
+    {
+        "name": "Over Capacity",
+        "description": "People allocated or logging above capacity",
+        "audience": ["System Manager", "Projects Manager", "Team Lead"],
+        "category": "Resource",
+        "detail": "high",
+        "tags": ["overload"],
+    },
+    {
+        "name": "Resource Utilization Report",
+        "description": "Detailed allocation vs actual utilization by person and project",
+        "audience": ["System Manager", "Projects Manager", "Team Lead"],
+        "category": "Resource",
+        "detail": "deep",
+        "tags": ["allocation", "actual"],
+    },
+    {
+        "name": "Resource Allocation / Capacity Planning",
+        "description": "Project staffing plan vs available capacity",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Resource",
+        "detail": "deep",
+        "tags": ["staffing", "plan"],
+    },
+    {
+        "name": "Skill Matrix and Availability",
+        "description": "Skills inventory with who is free / partially available",
+        "audience": ["System Manager", "Projects Manager", "Team Lead"],
+        "category": "Resource",
+        "detail": "deep",
+        "tags": ["skills", "availability"],
+    },
+    {
+        "name": "Bench Cost Analysis",
+        "description": "Cost of unallocated / bench time by employee and dept",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Resource",
+        "detail": "deep",
+        "tags": ["bench", "cost"],
+    },
+    {
+        "name": "Planned vs Actual Hours",
+        "description": "Allocation plan compared to hours actually logged",
+        "audience": ["System Manager", "Projects Manager", "Team Lead"],
+        "category": "Resource",
+        "detail": "deep",
+        "tags": ["planned", "actual", "variance"],
+    },
+    # ——— Project delivery ———
+    {
+        "name": "Project Health Dashboard",
+        "description": "RAG health, budget burn, and risk signals per project",
+        "audience": ["System Manager", "Projects Manager", "Team Lead"],
+        "category": "Project",
+        "detail": "deep",
+        "tags": ["health", "rag", "risk"],
+    },
+    {
+        "name": "Portfolio Summary Dashboard",
+        "description": "Portfolio-wide status, margin, and delivery snapshot",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Project",
+        "detail": "deep",
+        "tags": ["portfolio"],
+    },
+    {
+        "name": "Budget vs Actual Variance",
+        "description": "Budgeted cost/hours vs actuals with variance %",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Project",
+        "detail": "deep",
+        "tags": ["budget", "variance"],
+    },
+    {
+        "name": "Earned Value Management (EVM)",
+        "description": "PV / EV / AC, SPI and CPI for delivery control",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Project",
+        "detail": "deep",
+        "tags": ["evm", "spi", "cpi"],
+    },
+    {
+        "name": "Milestone Tracking Report",
+        "description": "Milestone due dates, completion, and slippage",
+        "audience": ["System Manager", "Projects Manager", "Team Lead"],
+        "category": "Project",
+        "detail": "deep",
+        "tags": ["milestones", "tasks"],
+    },
+    {
+        "name": "Delayed Tasks Summary",
+        "description": "Open tasks past expected end date by project/owner",
+        "audience": ["System Manager", "Projects Manager", "Team Lead"],
+        "category": "Project",
+        "detail": "high",
+        "tags": ["tasks", "overdue"],
+    },
+    {
+        "name": "Project Completion Trend",
+        "description": "Completion velocity and trend lines by project",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Project",
+        "detail": "deep",
+        "tags": ["completion", "trend"],
+    },
+    {
+        "name": "Project Expense Report",
+        "description": "Expense bookings against projects (detail lines)",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Project",
+        "detail": "deep",
+        "tags": ["expense"],
+    },
+    {
+        "name": "Project Risk Register Report",
+        "description": "Open risks, owners, severity, and mitigation status",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Project",
+        "detail": "deep",
+        "tags": ["risk"],
+    },
+    {
+        "name": "Project Change Request Log",
+        "description": "Scope change requests and approval outcomes",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Project",
+        "detail": "deep",
+        "tags": ["change", "scope"],
+    },
+    {
+        "name": "Project Manager Scorecard",
+        "description": "PM performance across delivery, margin, and compliance",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Project",
+        "detail": "deep",
+        "tags": ["scorecard", "pm"],
+    },
+    {
+        "name": "Project Summary",
+        "description": "Classic ERPNext project roll-up summary",
+        "audience": ["System Manager", "Projects Manager", "Team Lead"],
+        "category": "Project",
+        "detail": "high",
+        "tags": ["summary"],
+    },
+    # ——— Finance / client ———
+    {
+        "name": "Profit Report",
+        "description": "Timesheet-based profit overview",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Finance",
+        "detail": "high",
+        "tags": ["profit"],
+    },
+    {
+        "name": "Client Profitability",
+        "description": "Client-level profitability across Next PMS projects",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Finance",
+        "detail": "high",
+        "tags": ["client", "profit"],
+    },
+    {
+        "name": "Client Profitability Report",
+        "description": "Deep client P&L with project roll-ups",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Finance",
+        "detail": "deep",
+        "tags": ["client", "pnl"],
+    },
+    {
+        "name": "Project Profitability Report",
+        "description": "Project-level revenue, cost, and margin detail",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Finance",
+        "detail": "deep",
+        "tags": ["project", "margin"],
+    },
+    {
+        "name": "Service Line / Department Profitability",
+        "description": "Profitability by department or service line",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Finance",
+        "detail": "deep",
+        "tags": ["department", "service line"],
+    },
+    {
+        "name": "Invoice Aging by Project",
+        "description": "AR aging split by project / client invoice",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Finance",
+        "detail": "deep",
+        "tags": ["ar", "aging"],
+    },
+    {
+        "name": "Overhead Allocation Report",
+        "description": "How overhead is allocated onto projects",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Finance",
+        "detail": "deep",
+        "tags": ["overhead"],
+    },
+    {
+        "name": "Accounts Receivable",
+        "description": "Standard AR outstanding by customer / invoice",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Finance",
+        "detail": "high",
+        "tags": ["ar"],
+    },
+    {
+        "name": "Gross Profit",
+        "description": "Gross profit analysis on sales invoices",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Finance",
+        "detail": "high",
+        "tags": ["gross profit"],
+    },
+    # ——— People / HR ———
+    {
+        "name": "Appraisal Evaluation Report",
+        "description": "Allocation-based appraisal evaluation inputs",
+        "audience": ["System Manager", "Team Lead", "Projects Manager"],
+        "category": "People",
+        "detail": "high",
+        "tags": ["appraisal"],
+    },
+    {
+        "name": "Department / Team Scorecard",
+        "description": "Team KPIs: utilization, delivery, compliance",
+        "audience": ["System Manager", "Team Lead", "Projects Manager"],
+        "category": "People",
+        "detail": "deep",
+        "tags": ["scorecard", "team"],
+    },
+    {
+        "name": "Employee Leave Balance",
+        "description": "Leave balances by leave type for each employee",
+        "audience": ["System Manager", "Team Lead"],
+        "category": "People",
+        "detail": "high",
+        "tags": ["leave"],
+    },
+    {
+        "name": "Monthly Attendance Sheet",
+        "description": "Attendance matrix by employee for a month",
+        "audience": ["System Manager", "Team Lead"],
+        "category": "People",
+        "detail": "high",
+        "tags": ["attendance"],
+    },
+    {
+        "name": "Employees working on a holiday",
+        "description": "Who worked on holiday-list dates (for OT / exceptions)",
+        "audience": ["System Manager", "Team Lead"],
+        "category": "People",
+        "detail": "high",
+        "tags": ["holiday", "ot"],
+    },
+    {
+        "name": "Employee Analytics",
+        "description": "Headcount and workforce analytics",
+        "audience": ["System Manager"],
+        "category": "People",
+        "detail": "high",
+        "tags": ["headcount"],
+    },
+    {
+        "name": "Appraisal Overview",
+        "description": "Appraisal cycle status overview",
+        "audience": ["System Manager", "Team Lead"],
+        "category": "People",
+        "detail": "high",
+        "tags": ["appraisal"],
+    },
+)
+
+# In-app analytics (not Desk reports) — opened inside Next PMS
+REPORT_APP_LINKS = (
+    {
+        "name": "Portfolio Margins",
+        "description": "Interactive margin analytics across the project portfolio",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Finance",
+        "detail": "deep",
+        "tags": ["margins", "live"],
+        "url": "/next-pms/project/margins",
+        "kind": "app",
+    },
+    {
+        "name": "Client Invoicing Pipeline",
+        "description": "Draft and ready-to-invoice client billing from timesheets",
+        "audience": ["System Manager", "Projects Manager"],
+        "category": "Finance",
+        "detail": "deep",
+        "tags": ["invoicing", "live"],
+        "url": "/next-pms/project/invoicing",
+        "kind": "app",
+    },
+    {
+        "name": "Capacity Demand View",
+        "description": "Live capacity vs demand planning board",
+        "audience": ["System Manager", "Projects Manager", "Team Lead"],
+        "category": "Resource",
+        "detail": "deep",
+        "tags": ["capacity", "live"],
+        "url": "/next-pms/resource-management/capacity",
+        "kind": "app",
+    },
+    {
+        "name": "Time Allocation Board",
+        "description": "Confirmed and tentative resource assignments",
+        "audience": ["System Manager", "Projects Manager", "Team Lead"],
+        "category": "Resource",
+        "detail": "deep",
+        "tags": ["allocation", "live"],
+        "url": "/next-pms/resource-management/time-allocation",
+        "kind": "app",
+    },
+    {
+        "name": "Approval Queue",
+        "description": "Live timesheet approval queue for managers",
+        "audience": ["System Manager", "Team Lead", "Projects Manager"],
+        "category": "Timesheet",
+        "detail": "high",
+        "tags": ["approvals", "live"],
+        "url": "/next-pms/team/approvals",
+        "kind": "app",
+    },
+    {
+        "name": "Team Hours Grid",
+        "description": "Two-week compact hours view across the team",
+        "audience": ["System Manager", "Team Lead", "Projects Manager"],
+        "category": "Timesheet",
+        "detail": "high",
+        "tags": ["team", "hours", "live"],
+        "url": "/next-pms/home",
+        "kind": "app",
+    },
+)
 
 TILE_META = {
     "utilization": {
@@ -122,7 +616,68 @@ def get_default_tiles_for_user() -> list[str]:
         for tile in ROLE_TILE_DEFAULTS.get(role, []):
             if tile not in tiles:
                 tiles.append(tile)
-    return tiles or list(ROLE_TILE_DEFAULTS["Projects Manager"])
+    if tiles:
+        return tiles
+    # Pure Timesheet User (or unknown) — no executive tiles.
+    if "Timesheet User" in roles and not set(roles).intersection(
+        {
+            "System Manager",
+            "Administrator",
+            "Projects Manager",
+            "Timesheet Manager",
+            "Team Lead",
+            "Accounts Manager",
+            "Projects User",
+        }
+    ):
+        return []
+    return list(ROLE_TILE_DEFAULTS.get("Projects Manager", ALL_TILES))
+
+
+def resolve_dashboard_persona(roles: list[str] | None = None) -> dict:
+    """Pick primary persona for dashboard title and landing."""
+    roles = roles or get_user_roles()
+    role_set = set(roles)
+    persona = "Timesheet User"
+    for candidate in PERSONA_PRIORITY:
+        if candidate == "Administrator" and "Administrator" in role_set:
+            persona = "System Manager"
+            break
+        if candidate in role_set:
+            persona = candidate
+            break
+
+    # People with direct reports act as Team Lead if they have no higher PM persona.
+    if persona == "Timesheet User":
+        emp = frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
+        if emp and frappe.db.exists("Employee", {"reports_to": emp, "status": "Active"}):
+            persona = "Team Lead"
+
+    titles = {
+        "System Manager": "System Manager Dashboard",
+        "Projects Manager": "Project Manager Dashboard",
+        "Timesheet Manager": "Timesheet Manager Dashboard",
+        "Team Lead": "Team Lead Dashboard",
+        "Accounts Manager": "Accounts Dashboard",
+        "Projects User": "Projects Dashboard",
+        "Timesheet User": "My Timesheet Dashboard",
+    }
+    return {
+        "persona": persona,
+        "title": titles.get(persona, "Dashboard"),
+        "can_view_executive": persona
+        in {
+            "System Manager",
+            "Projects Manager",
+            "Timesheet Manager",
+            "Team Lead",
+            "Accounts Manager",
+            "Projects User",
+        },
+        "can_view_reports": bool(role_set.intersection(REPORT_ACCESS_ROLES))
+        or persona == "Team Lead",
+        "roles": roles,
+    }
 
 
 def get_saved_layout(user: str | None = None) -> dict | None:
@@ -1305,6 +1860,7 @@ def build_dashboard_panels(visible_tiles: list[str]) -> dict:
 def get_executive_dashboard(user: str | None = None) -> dict:
     visible_tiles = get_visible_tiles(user)
     tiles = [build_tile_payload(tile_key) for tile_key in visible_tiles if tile_key in TILE_META]
+    persona = resolve_dashboard_persona()
     return {
         "tiles": tiles,
         "panels": build_dashboard_panels(visible_tiles),
@@ -1318,5 +1874,208 @@ def get_executive_dashboard(user: str | None = None) -> dict:
         ],
         "layout": get_saved_layout(user) or {"tiles": visible_tiles, "order": visible_tiles},
         "roles": get_user_roles(),
+        "persona": persona,
         "refreshed_at": frappe.utils.now(),
+    }
+
+
+def get_personal_timesheet_dashboard() -> dict:
+    """Self-scoped dashboard for Timesheet Users (and anyone without executive access)."""
+    from next_pms.timesheet.api.employee import get_employee_from_user
+
+    employee = get_employee_from_user(throw_exception=False)
+    week = _current_week_period()
+    start, end = week["start_date"], week["end_date"]
+
+    hours = 0.0
+    billable = 0.0
+    draft_weeks = 0
+    pending_weeks = 0
+    if employee:
+        rows = frappe.db.sql(
+            """
+            SELECT td.hours, IFNULL(td.is_billable, 0) AS is_billable
+            FROM `tabTimesheet Detail` td
+            INNER JOIN `tabTimesheet` t ON t.name = td.parent
+            WHERE t.employee=%s
+              AND t.docstatus < 2
+              AND DATE(td.from_time) BETWEEN %s AND %s
+            """,
+            (employee, start, end),
+            as_dict=True,
+        )
+        for row in rows:
+            hrs = flt(row.hours)
+            hours += hrs
+            if row.is_billable:
+                billable += hrs
+
+        sheets = frappe.get_all(
+            "Timesheet",
+            filters={
+                "employee": employee,
+                "docstatus": ["<", 2],
+                "start_date": [">=", add_days(getdate(start), -21)],
+            },
+            fields=["name", "status", "start_date", "end_date"],
+            limit=20,
+        )
+        for sheet in sheets:
+            status = (sheet.status or "").lower()
+            if status in ("draft", ""):
+                draft_weeks += 1
+            elif "pending" in status or "approval" in status:
+                pending_weeks += 1
+
+    open_tasks = 0
+    overdue_tasks = 0
+    user = frappe.session.user
+    if user and user != "Guest":
+        open_tasks = frappe.db.count(
+            "Task",
+            {
+                "status": ["not in", ["Completed", "Cancelled"]],
+                "_assign": ["like", f"%{user}%"],
+            },
+        )
+        overdue_tasks = frappe.db.count(
+            "Task",
+            {
+                "status": ["not in", ["Completed", "Cancelled"]],
+                "exp_end_date": ["<", nowdate()],
+                "_assign": ["like", f"%{user}%"],
+            },
+        )
+
+    billable_pct = (billable / hours * 100.0) if hours else 0.0
+    persona = resolve_dashboard_persona()
+    tiles = [
+        {
+            "key": "my_hours",
+            "label": "My Hours (This Week)",
+            "description": f"{week.get('label') or 'This week'}",
+            "display_value": f"{flt(hours, 1)}h",
+            "value": flt(hours, 2),
+            "unit": "hours",
+            "status": "healthy" if hours >= 1 else "warning",
+            "route": "/timesheet",
+            "details": {"billable": flt(billable, 1), "non_billable": flt(hours - billable, 1)},
+        },
+        {
+            "key": "my_billable",
+            "label": "My Billable Mix",
+            "description": "Share of billable hours this week",
+            "display_value": f"{flt(billable_pct, 0)}%",
+            "value": flt(billable_pct, 1),
+            "unit": "%",
+            "status": "healthy" if billable_pct >= 60 else "neutral",
+            "route": "/work-entries",
+        },
+        {
+            "key": "my_drafts",
+            "label": "Draft Weeks",
+            "description": "Timesheets still in draft (last ~3 weeks)",
+            "display_value": draft_weeks,
+            "value": draft_weeks,
+            "status": "warning" if draft_weeks else "healthy",
+            "route": "/timesheet",
+        },
+        {
+            "key": "my_pending",
+            "label": "Awaiting Approval",
+            "description": "Submitted weeks pending manager approval",
+            "display_value": pending_weeks,
+            "value": pending_weeks,
+            "status": "neutral",
+            "route": "/timesheet",
+        },
+        {
+            "key": "my_tasks",
+            "label": "Open Tasks",
+            "description": "Tasks assigned to me",
+            "display_value": open_tasks,
+            "value": open_tasks,
+            "status": "neutral",
+            "route": "/task",
+        },
+        {
+            "key": "my_overdue",
+            "label": "Overdue Tasks",
+            "description": "My tasks past expected end date",
+            "display_value": overdue_tasks,
+            "value": overdue_tasks,
+            "status": "critical" if overdue_tasks else "healthy",
+            "route": "/task",
+        },
+    ]
+    return {
+        "tiles": tiles,
+        "panels": {},
+        "available_tiles": [],
+        "layout": {"tiles": [t["key"] for t in tiles]},
+        "roles": get_user_roles(),
+        "persona": persona,
+        "mode": "personal",
+        "refreshed_at": frappe.utils.now(),
+    }
+
+
+def get_reports_catalog_for_user() -> dict:
+    roles = set(get_user_roles())
+    persona = resolve_dashboard_persona(list(roles))
+    allowed = bool(roles.intersection(REPORT_ACCESS_ROLES)) or persona["persona"] == "Team Lead"
+    if not allowed:
+        return {"allowed": False, "reports": [], "persona": persona}
+
+    def _visible(audience: list[str]) -> bool:
+        audience_set = set(audience)
+        return (
+            bool(roles.intersection(audience_set))
+            or (persona["persona"] == "Team Lead" and "Team Lead" in audience_set)
+            or ("System Manager" in roles or "Administrator" in roles)
+        )
+
+    reports = []
+    from urllib.parse import quote
+
+    for item in REPORT_CATALOG:
+        if not _visible(item["audience"]):
+            continue
+        if not frappe.db.exists("Report", item["name"]):
+            continue
+        reports.append(
+            {
+                **item,
+                "url": f"/app/query-report/{quote(item['name'])}",
+                "kind": "desk",
+            }
+        )
+
+    for item in REPORT_APP_LINKS:
+        if not _visible(item["audience"]):
+            continue
+        reports.append({**item})
+
+    # Stable sort: category, then deep first, then name
+    detail_rank = {"deep": 0, "high": 1, "summary": 2}
+    reports.sort(key=lambda r: (r.get("category") or "", detail_rank.get(r.get("detail") or "high", 9), r.get("name") or ""))
+
+    categories = []
+    seen = set()
+    for r in reports:
+        if r["category"] not in seen:
+            seen.add(r["category"])
+            categories.append(r["category"])
+
+    return {
+        "allowed": True,
+        "reports": reports,
+        "categories": categories,
+        "persona": persona,
+        "counts": {
+            "total": len(reports),
+            "deep": sum(1 for r in reports if r.get("detail") == "deep"),
+            "desk": sum(1 for r in reports if r.get("kind") == "desk"),
+            "app": sum(1 for r in reports if r.get("kind") == "app"),
+        },
     }

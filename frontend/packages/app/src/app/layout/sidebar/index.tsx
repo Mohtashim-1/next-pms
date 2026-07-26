@@ -21,7 +21,8 @@ import {
   PieChart,
   GanttChartSquareIcon,
   Home,
-  // LayoutDashboard, // Dashboard hidden for now
+  LayoutDashboard,
+  FileBarChart,
   Search,
   UserCircle2,
   Users,
@@ -30,11 +31,13 @@ import {
  * Internal dependencies.
  */
 import {
-  // DASHBOARD, // Dashboard hidden for now
+  DASHBOARD,
   HOME,
   PROJECT,
+  REPORTS,
   RESOURCE_MANAGEMENT,
   PM_ACCESS_ROLES,
+  REPORT_ACCESS_ROLES,
   TASK,
   TEAM,
   TEAM_APPROVALS,
@@ -62,6 +65,7 @@ const Sidebar = () => {
   });
 
   const hasPmRole = user.roles.some((role: string) => PM_ACCESS_ROLES.includes(role));
+  const hasReportAccess = user.roles.some((role: string) => REPORT_ACCESS_ROLES.includes(role));
   const { data: approvalCountData } = useFrappeGetCall(
     "next_pms.timesheet.api.approval_queue.get_approval_queue_count",
     {},
@@ -77,14 +81,13 @@ const Sidebar = () => {
   );
   const publicViews = viewInfo.views.filter((view: ViewData) => view.public && !view.default);
   const routes: Array<Route> = [
-    // Dashboard hidden for now
-    // {
-    //   to: DASHBOARD,
-    //   icon: LayoutDashboard,
-    //   label: "Dashboard",
-    //   key: "dashboard",
-    //   isPmRoute: true,
-    // },
+    {
+      to: DASHBOARD,
+      icon: LayoutDashboard,
+      label: "Dashboard",
+      key: "dashboard",
+      isPmRoute: false,
+    },
     {
       to: HOME,
       icon: Home,
@@ -148,6 +151,15 @@ const Sidebar = () => {
       isPmRoute: false,
     },
   ];
+  if (hasReportAccess) {
+    routes.splice(1, 0, {
+      to: REPORTS,
+      icon: FileBarChart,
+      label: "Reports",
+      key: "reports",
+      isPmRoute: false,
+    });
+  }
   if (
     hasPmRole &&
     (!user.roles.includes("Contractor") || user.userName == "Administrator")

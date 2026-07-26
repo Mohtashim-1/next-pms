@@ -63,6 +63,8 @@ type DashboardResponse = {
   available_tiles: Array<{ key: string; label: string; description?: string; enabled_by_role?: boolean }>;
   layout?: { tiles?: string[] };
   refreshed_at?: string;
+  persona?: { persona?: string; title?: string; can_view_executive?: boolean; can_view_reports?: boolean };
+  mode?: string;
 };
 
 const TILE_ICONS: Record<string, typeof Activity> = {
@@ -112,6 +114,9 @@ const ExecutiveDashboard = () => {
   const response = data?.message as DashboardResponse | undefined;
   const tiles = response?.tiles ?? [];
   const panels = response?.panels;
+  const isPersonal = response?.mode === "personal" || response?.persona?.can_view_executive === false;
+  const dashboardTitle = response?.persona?.title || (isPersonal ? "My Timesheet Dashboard" : "Executive Dashboard");
+  const personaLabel = response?.persona?.persona;
 
   const openCustomize = () => {
     setSelectedTiles(response?.layout?.tiles || tiles.map((tile) => tile.key));
@@ -144,7 +149,12 @@ const ExecutiveDashboard = () => {
           <div className="space-y-1">
             <Typography variant="h3" className="flex items-center gap-2 text-lg font-semibold">
               <LayoutDashboard className="h-5 w-5" />
-              Executive Dashboard
+              {dashboardTitle}
+              {personaLabel ? (
+                <Badge variant="outline" className="text-[10px] uppercase font-normal">
+                  {personaLabel}
+                </Badge>
+              ) : null}
             </Typography>
             <Typography variant="small" className="text-muted-foreground">
               {subtitle}
@@ -155,10 +165,12 @@ const ExecutiveDashboard = () => {
               <RefreshCw className={mergeClassNames("mr-1 h-4 w-4", isValidating && "animate-spin")} />
               Refresh
             </Button>
-            <Button size="sm" variant="outline" onClick={openCustomize}>
-              <Settings2 className="mr-1 h-4 w-4" />
-              Customize
-            </Button>
+            {!isPersonal ? (
+              <Button size="sm" variant="outline" onClick={openCustomize}>
+                <Settings2 className="mr-1 h-4 w-4" />
+                Customize
+              </Button>
+            ) : null}
           </div>
         </div>
       </RootHeader>
@@ -245,7 +257,7 @@ const ExecutiveDashboard = () => {
           </Card>
         ) : null}
 
-        {!isLoading && tiles.length ? <DashboardPanels panels={panels} /> : null}
+        {!isLoading && tiles.length && !isPersonal ? <DashboardPanels panels={panels} /> : null}
         </div>
       </div>
 

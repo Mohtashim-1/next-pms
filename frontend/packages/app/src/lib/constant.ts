@@ -3,6 +3,7 @@ export const TIMESHEET = "timesheet";
 export const WORK_ENTRIES = "work-entries";
 export const HOME = "home";
 export const DASHBOARD = "dashboard";
+export const REPORTS = "reports";
 export const TEAM = "/team";
 export const TEAM_APPROVALS = `${TEAM}/approvals`;
 export const DESK = "/desk";
@@ -18,6 +19,7 @@ export const ROLES = [
   "Projects Manager",
   "Timesheet Manager",
   "Timesheet User",
+  "Team Lead",
 ];
 
 // PM / manager routes: Home, Team, Project, Resource Management (NOT Timesheet User)
@@ -28,12 +30,21 @@ export const PM_ACCESS_ROLES = [
   "Projects User",
   "Accounts Manager",
   "System Manager",
+  "Team Lead",
 ];
 
 /** Roles that may use Timesheet / Work Entries / Task (self-scoped) */
 export const TIMESHEET_ACCESS_ROLES = [
   ...PM_ACCESS_ROLES,
   "Timesheet User",
+];
+
+/** Desk reports hub — System Manager, Team Lead, Projects Manager only */
+export const REPORT_ACCESS_ROLES = [
+  "System Manager",
+  "Administrator",
+  "Team Lead",
+  "Projects Manager",
 ];
 
 export const CustomTime = [

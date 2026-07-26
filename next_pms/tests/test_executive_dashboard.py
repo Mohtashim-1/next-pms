@@ -14,6 +14,9 @@ class TestExecutiveDashboard(IntegrationTestCase):
         self.assertIn("utilization", ROLE_TILE_DEFAULTS["Projects Manager"])
         self.assertIn("margin", ROLE_TILE_DEFAULTS["Accounts Manager"])
         self.assertNotIn("ar", ROLE_TILE_DEFAULTS["Timesheet Manager"])
+        self.assertIn("approvals", ROLE_TILE_DEFAULTS["Team Lead"])
+        self.assertEqual(ROLE_TILE_DEFAULTS["Timesheet User"], [])
+        self.assertIn("utilization", ROLE_TILE_DEFAULTS["System Manager"])
 
     def test_get_default_tiles_for_user(self):
         tiles = get_default_tiles_for_user()
