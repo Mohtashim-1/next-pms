@@ -1,0 +1,21 @@
+{
+ "app": "next_pms",
+ "bg_color": "blue",
+ "creation": "2026-07-28 14:20:47.151572",
+ "docstatus": 0,
+ "doctype": "Desktop Icon",
+ "hidden": 0,
+ "icon_type": "App",
+ "idx": 2,
+ "label": "Project Management",
+ "link": "/next-pms/dashboard",
+ "link_type": "External",
+ "logo_url": "/assets/next_pms/images/next-pms-logo.svg",
+ "modified": "2026-07-28 14:20:47.151572",
+ "modified_by": "Administrator",
+ "name": "Project Management",
+ "owner": "Administrator",
+ "restrict_removal": 0,
+ "roles": [],
+ "standard": 1
+}

@@ -2448,10 +2448,11 @@ def get_reports_catalog_for_user() -> dict:
             seen.add(r["category"])
             categories.append(r["category"])
 
-    # Nested menu for sidebar: live boards/dashboards only under "Dashboards & Tools"
-    # (query reports are intentionally not listed in the sidebar menu)
+    # Nested menu for sidebar: live boards/dashboards under "Dashboards & Tools",
+    # query reports grouped by category under "Reports".
     TOOLS_HEADING = "Dashboards & Tools"
     tool_reports = [r for r in reports if r.get("kind") in ("app", "desk")]
+    query_reports = [r for r in reports if r.get("kind") == "portal"]
 
     def _link(r: dict) -> dict:
         return {
@@ -2471,11 +2472,18 @@ def get_reports_catalog_for_user() -> dict:
             }
         )
 
+    report_categories = []
+    for category in categories:
+        links = [_link(r) for r in query_reports if r.get("category") == category]
+        if links:
+            report_categories.append({"category": category, "reports": links})
+
     return {
         "allowed": True,
         "reports": reports,
         "categories": categories,
         "by_category": by_category,
+        "report_categories": report_categories,
         "tools": [_link(r) for r in tool_reports],
         "persona": persona,
         "counts": {

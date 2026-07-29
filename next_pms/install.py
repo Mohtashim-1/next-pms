@@ -7,6 +7,57 @@ def after_install():
     create_roles()
     add_project_manager_perm()
     setup_email_template()
+    ensure_desktop_icon()
+
+
+def after_migrate():
+    ensure_desktop_icon()
+
+
+def ensure_desktop_icon():
+    """Desk home icon that opens the Next PMS portal dashboard."""
+    import frappe
+
+    label = "Project Management"
+    link = "/next-pms/dashboard"
+    logo = "/assets/next_pms/images/next-pms-logo.svg"
+
+    if frappe.db.exists("Desktop Icon", label):
+        doc = frappe.get_doc("Desktop Icon", label)
+        changed = False
+        for field, value in {
+            "icon_type": "App",
+            "link_type": "External",
+            "link": link,
+            "app": "next_pms",
+            "logo_url": logo,
+            "standard": 1,
+            "hidden": 0,
+            "bg_color": "blue",
+        }.items():
+            if doc.get(field) != value:
+                doc.set(field, value)
+                changed = True
+        if changed:
+            doc.save(ignore_permissions=True)
+    else:
+        frappe.get_doc(
+            {
+                "doctype": "Desktop Icon",
+                "label": label,
+                "icon_type": "App",
+                "link_type": "External",
+                "link": link,
+                "app": "next_pms",
+                "logo_url": logo,
+                "standard": 1,
+                "hidden": 0,
+                "bg_color": "blue",
+                "idx": 2,
+            }
+        ).insert(ignore_permissions=True, ignore_if_duplicate=True)
+
+    frappe.clear_cache()
 
 
 def add_project_manager_perm():

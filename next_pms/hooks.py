@@ -13,7 +13,8 @@ add_to_apps_screen = [
     {
         "name": "next_pms",
         "title": "Project Management",
-        "route": "/next-pms",
+        "route": "/next-pms/dashboard",
+        "logo": "/assets/next_pms/images/next-pms-logo.svg",
         "has_permission": "next_pms.api.check_app_permission",
     }
 ]
@@ -98,6 +99,7 @@ doctype_js = {
 
 # before_install = "next_pms.install.before_install"
 after_install = "next_pms.install.after_install"
+after_migrate = "next_pms.install.after_migrate"
 
 # Uninstallation
 # ------------

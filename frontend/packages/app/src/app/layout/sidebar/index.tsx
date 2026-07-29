@@ -36,6 +36,7 @@ import {
   RESOURCE_MANAGEMENT,
   PM_ACCESS_ROLES,
   REPORT_ACCESS_ROLES,
+  REPORTS,
   TASK,
   TEAM,
   TIMESHEET,
@@ -84,7 +85,7 @@ const Sidebar = () => {
   const { data: reportsCatalogData } = useFrappeGetCall(
     "next_pms.next_pms.api.executive_dashboard.get_reports_catalog",
     undefined,
-    hasReportAccess ? "sidebar-tools-catalog" : null,
+    hasReportAccess ? "sidebar-tools-catalog-v2" : null,
     { revalidateOnFocus: false }
   );
   const tools =
@@ -95,6 +96,29 @@ const Sidebar = () => {
         | undefined
     )?.find((cat) => cat.is_tools || cat.category === "Dashboards & Tools")?.reports ||
     [];
+  const reportCategories = (() => {
+    const fromApi = reportsCatalogData?.message?.report_categories as
+      | { category: string; reports: { name: string; url: string; kind?: string }[] }[]
+      | undefined;
+    if (fromApi?.length) return fromApi;
+
+    // Fallback: group portal query reports from the flat catalog
+    // (covers older API responses that omit report_categories)
+    const reports = (reportsCatalogData?.message?.reports as
+      | { name: string; url: string; kind?: string; category?: string }[]
+      | undefined) || [];
+    const portal = reports.filter((r) => r.kind === "portal" && r.category);
+    const grouped = new Map<string, { name: string; url: string; kind?: string }[]>();
+    for (const report of portal) {
+      const category = report.category as string;
+      if (!grouped.has(category)) grouped.set(category, []);
+      grouped.get(category)!.push({ name: report.name, url: report.url, kind: report.kind });
+    }
+    return Array.from(grouped.entries()).map(([category, items]) => ({
+      category,
+      reports: items,
+    }));
+  })();
 
   const approvalQueueCount = approvalCountData?.message?.count ?? 0;
   const privateViews = viewInfo.views.filter(
@@ -194,6 +218,26 @@ const Sidebar = () => {
           external: isExternalUrl(tool.url) || tool.kind === "desk",
         };
       }),
+    });
+  }
+  if (hasReportAccess && reportCategories.length) {
+    const toolsIndex = routes.findIndex((route) => route.key === "dashboards-tools");
+    routes.splice(toolsIndex >= 0 ? toolsIndex + 1 : 1, 0, {
+      to: `/${REPORTS}`,
+      icon: FileText,
+      label: "Reports",
+      key: "reports",
+      isPmRoute: false,
+      children: reportCategories.map((category) => ({
+        label: category.category,
+        key: `report-category-${category.category}`,
+        children: category.reports.map((report) => ({
+          to: toSidebarPath(report.url),
+          label: report.name,
+          key: `report-${report.name}`,
+          external: isExternalUrl(report.url) || report.kind === "desk",
+        })),
+      })),
     });
   }
   if (
