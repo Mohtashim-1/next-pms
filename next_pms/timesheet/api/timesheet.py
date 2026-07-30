@@ -569,6 +569,7 @@ def get_timesheet_data(
                 continue
 
             tasks, total_hours, status = {}, 0, "Not Submitted"
+            expected_hours = 0
             if employee:
                 holiday_dates = [holiday["holiday_date"] for holiday in holidays] if holidays else []
                 tasks, total_hours = get_timesheet(week_dates["dates"], employee)
@@ -595,10 +596,16 @@ def get_timesheet_data(
 
                 if daily_norm * 5 == leave_total:
                     status = "Approved"
+
+                # Hours the employee is actually expected to log this week, so the
+                # UI can flag an incomplete week without mistaking leave for a gap.
+                working_dates = [date for date in week_dates["dates"] if date not in holiday_dates]
+                expected_hours = max(daily_norm * len(working_dates) - leave_total, 0)
             tasks = _enrich_tasks_with_period_locks(tasks, week_dates["start_date"], week_dates["end_date"])
             data[week_key] = {
                 **week_dates,
                 "total_hours": total_hours,
+                "expected_hours": expected_hours,
                 "tasks": tasks,
                 "status": status,
             }

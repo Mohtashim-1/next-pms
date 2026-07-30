@@ -50,6 +50,8 @@ export type submitButtonProps = {
   expectedHours: number;
   totalHours: number;
   workingFrequency: WorkingFrequency;
+  /** Hours owed for this week, already net of holidays and approved leave. */
+  expectedWeeklyHours?: number;
 };
 
 export type TaskHoverCardProps = {

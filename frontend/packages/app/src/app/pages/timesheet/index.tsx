@@ -370,6 +370,7 @@ function Timesheet() {
                                 status={value.status}
                                 expectedHours={timesheet.data.working_hour}
                                 totalHours={data.totalHours}
+                                expectedWeeklyHours={value.expected_hours}
                                 workingFrequency={timesheet.data.working_frequency as WorkingFrequency}
                               />
                             </div>

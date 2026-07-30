@@ -103,6 +103,8 @@ export interface timesheet {
   key: string;
   dates: string[];
   total_hours: number;
+  /** Hours owed for the week, net of holidays and approved leave. */
+  expected_hours?: number;
   tasks: TaskProps;
   status: string;
 }

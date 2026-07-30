@@ -3,12 +3,13 @@
  */
 import type { MouseEvent } from "react";
 import { Button } from "@next-pms/design-system/components";
-import { CircleCheck, CircleX, Clock3, FilePenLine, LoaderCircle, RotateCcw, Trash2 } from "lucide-react";
+import { CalendarClock, CircleCheck, CircleX, Clock3, FilePenLine, LoaderCircle, RotateCcw, Trash2 } from "lucide-react";
 /**
  * Internal dependencies
  */
-import { getTimesheetStatusLabel, isDraftTimesheetStatus } from "@/lib/timesheetStatus";
-import { calculateWeeklyHour, mergeClassNames } from "@/lib/utils";
+import { getTimesheetStatusLabel, isDraftTimesheetStatus, isWeekPartiallyLogged } from "@/lib/timesheetStatus";
+import { floatToTime } from "@next-pms/design-system/utils";
+import { mergeClassNames } from "@/lib/utils";
 import type { submitButtonProps } from "./types";
 
 /**
@@ -22,9 +23,8 @@ export const SubmitButton = ({
   onRecall,
   onAbandonDraft,
   status,
-  expectedHours,
   totalHours,
-  workingFrequency,
+  expectedWeeklyHours,
 }: submitButtonProps) => {
   const statusLabel = getTimesheetStatusLabel(status);
   const isDraft = isDraftTimesheetStatus(status);
@@ -40,7 +40,7 @@ export const SubmitButton = ({
     event.stopPropagation();
     onAbandonDraft?.(start_date, end_date);
   };
-  const expectedWeeklyHours = calculateWeeklyHour(expectedHours, workingFrequency);
+  const partiallyLogged = isWeekPartiallyLogged({ status, totalHours, expectedWeeklyHours });
   const canRecall = [
     "Approval Pending",
     "Pending HR Approval",
@@ -85,6 +85,17 @@ export const SubmitButton = ({
           {statusLabel}
         </span>
       </Button>
+      {partiallyLogged && (
+        <span
+          className="flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground"
+          title={`Approved for the time logged. ${floatToTime(totalHours)} of ${floatToTime(
+            expectedWeeklyHours ?? 0
+          )} logged this week.`}
+        >
+          <CalendarClock className="w-3.5 h-3.5" />
+          Partially logged
+        </span>
+      )}
       {canAbandonDraft && (
         <Button variant="outline" className="h-9 px-3" onClick={handleAbandonDraft} title="Discard draft">
           <Trash2 className="w-4 h-4" />
