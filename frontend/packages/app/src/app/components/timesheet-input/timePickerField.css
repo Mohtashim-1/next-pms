@@ -30,6 +30,24 @@
   padding: 0.5rem 0.75rem;
 }
 
+/* air-datepicker puts a hover-colored block behind the hour/minute currently
+   controlled by the slider. In dark mode that block resolves to white while
+   the text remains white, making the value disappear during adjustment. */
+.air-datepicker-time--current-hours,
+.air-datepicker-time--current-minutes,
+.air-datepicker-time--current-hours.-focus-,
+.air-datepicker-time--current-minutes.-focus- {
+  color: hsl(var(--popover-foreground));
+}
+
+.air-datepicker-time--current-hours::after,
+.air-datepicker-time--current-minutes::after,
+.air-datepicker-time--current-hours.-focus-::after,
+.air-datepicker-time--current-minutes.-focus-::after {
+  background: transparent;
+  opacity: 0;
+}
+
 .air-datepicker-buttons {
   padding: 0.125rem;
 }
