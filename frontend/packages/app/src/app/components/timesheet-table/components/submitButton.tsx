@@ -41,7 +41,13 @@ export const SubmitButton = ({
     onAbandonDraft?.(start_date, end_date);
   };
   const expectedWeeklyHours = calculateWeeklyHour(expectedHours, workingFrequency);
-  const canRecall = ["Approval Pending", "Processing Timesheet", "Approved", "Partially Approved"].includes(status);
+  const canRecall = [
+    "Approval Pending",
+    "Pending HR Approval",
+    "Processing Timesheet",
+    "Approved",
+    "Partially Approved",
+  ].includes(status);
   const canAbandonDraft = isDraft && totalHours > 0 && onAbandonDraft;
 
   return (
@@ -54,7 +60,7 @@ export const SubmitButton = ({
             "bg-success/20 text-success hover:bg-success/20 hover:text-success border border-success/30",
           (status == "Rejected" || status == "Partially Rejected") &&
             "bg-destructive/20 text-destructive hover:bg-destructive/20 hover:text-destructive border border-destructive/30",
-          status == "Approval Pending" &&
+          (status == "Approval Pending" || status === "Pending HR Approval") &&
             "bg-warning/20 text-warning hover:bg-warning/20 hover:text-warning  border border-warning/30",
           status === "Processing Timesheet" &&
             "bg-warning/20 text-warning hover:bg-warning/20 hover:text-warning  border border-warning/30",
@@ -71,7 +77,9 @@ export const SubmitButton = ({
         <span>
           {(status == "Approved" || status == "Partially Approved") && <CircleCheck className="stroke-success" />}
           {(status == "Rejected" || status == "Partially Rejected") && <CircleX className="stroke-destructive" />}
-          {status == "Approval Pending" && <Clock3 className="stroke-warning" />}
+          {(status == "Approval Pending" || status === "Pending HR Approval") && (
+            <Clock3 className="stroke-warning" />
+          )}
           {isDraft && <FilePenLine className="stroke-current" />}
           {status == "Processing Timesheet" && <LoaderCircle className="stroke-warning animate-spin" />}
           {statusLabel}

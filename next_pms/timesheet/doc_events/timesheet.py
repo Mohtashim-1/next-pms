@@ -172,7 +172,14 @@ def validate_dates(doc):
     ignore_roles = frappe.get_all("Timesheet Role", pluck="role")
 
     roles_to_ignore = frappe_roles.intersection(ignore_roles)
-    if frappe.session.user == "Administrator" or doc.ignore_backdated_validation or roles_to_ignore:
+    # Approvers act on entries the employee already logged, so the backdated/future
+    # windows that govern time entry must not block an approval or a correction.
+    if (
+        frappe.session.user == "Administrator"
+        or doc.ignore_backdated_validation
+        or doc.flags.get("skip_date_window_validation")
+        or roles_to_ignore
+    ):
         return
     #  Do not allow the time entry for more then one day.
     if date_diff(doc.end_date, doc.start_date) > 0:

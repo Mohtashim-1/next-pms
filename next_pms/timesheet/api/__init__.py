@@ -3,7 +3,7 @@ from frappe import get_all, get_list, get_roles, get_value, whitelist
 
 
 @whitelist()
-def get_employee_with_role(role: str | list[str]):
+def get_employee_with_role(role: str | list[str], employee: str | None = None):
     import json
 
     from frappe import get_all
@@ -16,10 +16,42 @@ def get_employee_with_role(role: str | list[str]):
         filters={"role": ["in", role], "parenttype": "User", "parent": ["!=", "Administrator"]},
         pluck="parent",
     )
+    source_employee = employee or frappe.db.get_value(
+        "Employee", {"user_id": frappe.session.user, "status": "Active"}, "name"
+    )
+    company = frappe.db.get_value("Employee", source_employee, "company") if source_employee else None
+    filters = {"user_id": ["in", user_ids], "status": "Active"}
+    if company:
+        filters["company"] = company
     employees = get_all(
-        "Employee", filters={"user_id": ["in", user_ids], "status": "Active"}, fields=["name", "employee_name"]
+        "Employee",
+        filters=filters,
+        fields=["name", "employee_name", "user_id", "company"],
+        order_by="employee_name asc",
     )
     return employees
+
+
+def _as_list(value):
+    import json
+
+    if value is None:
+        return []
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (TypeError, ValueError):
+            return [value] if value else []
+    if isinstance(value, (list, tuple, set)):
+        return [item for item in value if item]
+    return [value] if value else []
+
+
+def _intersect_values(current, candidates):
+    candidates = set(candidates or [])
+    if current is None:
+        return candidates
+    return current & candidates
 
 
 def filter_employees(
@@ -36,11 +68,12 @@ def filter_employees(
     designation=None,
     branch=None,
     role_filter=None,
+    customer=None,
+    project_type=None,
+    task=None,
     ignore_default_filters=False,
     ignore_permissions=False,
 ):
-    import json
-
     current_roles = get_roles()
 
     if not ignore_permissions:
@@ -58,52 +91,37 @@ def filter_employees(
     if reports_to:
         filters["reports_to"] = reports_to
 
-    if isinstance(department, str):
-        department = json.loads(department)
+    department = _as_list(department)
+    business_unit = _as_list(business_unit)
+    designation = _as_list(designation)
+    branch = _as_list(branch)
+    role_filter = _as_list(role_filter)
+    project = _as_list(project)
+    user_group = _as_list(user_group)
+    customer = _as_list(customer)
+    project_type = _as_list(project_type)
+    task = _as_list(task)
+    status = _as_list(status)
 
-    if isinstance(business_unit, str):
-        business_unit = json.loads(business_unit)
-
-    if isinstance(designation, str):
-        designation = json.loads(designation)
-
-    if isinstance(branch, str):
-        branch = json.loads(branch)
-
-    if isinstance(role_filter, str):
-        role_filter = json.loads(role_filter)
-
-    if isinstance(status, str):
-        status = json.loads(status)
-        if len(status) > 0:
-            filters["status"] = ["in", status]
-
-    if isinstance(status, list):
-        if len(status) > 0:
-            filters["status"] = ["in", status]
-
-    if isinstance(project, str):
-        project = json.loads(project)
-
-    if isinstance(user_group, str):
-        user_group = json.loads(user_group)
+    if status:
+        filters["status"] = ["in", status]
 
     if employee_name:
         or_filters["employee_name"] = ["like", f"%{employee_name}%"]
 
-    if department and len(department) > 0:
+    if department:
         filters["department"] = ["in", department]
 
-    if designation and len(designation) > 0:
+    if designation:
         filters["designation"] = ["in", designation]
 
-    if business_unit and len(business_unit) > 0 and has_business_unit_field:
+    if business_unit and has_business_unit_field:
         filters["custom_business_unit"] = ["in", business_unit]
 
-    if branch and len(branch) > 0:
+    if branch:
         filters["branch"] = ["in", branch]
 
-    if role_filter and len(role_filter) > 0:
+    if role_filter:
         role_users = get_all(
             "Has Role",
             filters={"role": ["in", role_filter], "parenttype": "User"},
@@ -118,26 +136,70 @@ def filter_employees(
     if ids:
         employee_ids.extend(ids)
 
-    if project and len(project) > 0:
+    resolved_projects = None
+    if project:
+        resolved_projects = _intersect_values(resolved_projects, project)
+
+    if customer:
+        customer_projects = get_all("Project", filters={"customer": ["in", customer]}, pluck="name")
+        resolved_projects = _intersect_values(resolved_projects, customer_projects)
+
+    if project_type:
+        typed_projects = get_all("Project", filters={"project_type": ["in", project_type]}, pluck="name")
+        resolved_projects = _intersect_values(resolved_projects, typed_projects)
+
+    if task:
+        task_projects = [
+            project_name
+            for project_name in get_all("Task", filters={"name": ["in", task]}, pluck="project")
+            if project_name
+        ]
+        timesheet_parents = get_all("Timesheet Detail", filters={"task": ["in", task]}, pluck="parent")
+        task_employees = []
+        if timesheet_parents:
+            task_employees = [
+                emp
+                for emp in get_all(
+                    "Timesheet",
+                    filters={"name": ["in", timesheet_parents], "docstatus": ["!=", 2]},
+                    pluck="employee",
+                )
+                if emp
+            ]
+            employee_ids.extend(task_employees)
+
+        if not task_projects and not task_employees:
+            return [], 0
+
+        if task_projects:
+            resolved_projects = _intersect_values(resolved_projects, task_projects)
+
+    if resolved_projects is not None:
+        if not resolved_projects:
+            return [], 0
         project_employee = get_all(
             "DocShare",
-            filters={"share_doctype": "Project", "share_name": ["IN", project]},
+            filters={"share_doctype": "Project", "share_name": ["IN", list(resolved_projects)]},
             pluck="user",
         )
-        ids = [get_value("Employee", {"user_id": employee}) for employee in project_employee]
-        employee_ids.extend(ids)
+        shared_employees = [get_value("Employee", {"user_id": user}) for user in project_employee]
+        employee_ids.extend([emp for emp in shared_employees if emp])
+        if not employee_ids:
+            return [], 0
 
-    if user_group and len(user_group) > 0:
+    if user_group:
         users = get_all("User Group Member", pluck="user", filters={"parent": ["in", user_group]})
-        ids = [get_value("Employee", {"user_id": user}, cache=True) for user in users]
-        employee_ids.extend(ids)
+        group_employees = [get_value("Employee", {"user_id": user}, cache=True) for user in users]
+        employee_ids.extend([emp for emp in group_employees if emp])
 
     if role_employee_ids:
         employee_ids = list(set(employee_ids) & set(role_employee_ids)) if employee_ids else role_employee_ids
 
-    if len(employee_ids) > 0:
-        filters["name"] = ["in", employee_ids]
-    elif role_filter and len(role_filter) > 0 and not role_employee_ids:
+    if employee_ids:
+        filters["name"] = ["in", list(set(employee_ids))]
+    elif role_filter and not role_employee_ids:
+        return [], 0
+    elif resolved_projects is not None and not employee_ids:
         return [], 0
 
     if ignore_default_filters:

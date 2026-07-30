@@ -39,8 +39,9 @@ export const TaskHoverCard = ({
   const user = useSelector((state: RootState) => state.user);
   const [taskLiked, setTaskedLiked] = useState(false);
   useEffect(() => {
-    setTaskedLiked(likedTaskData.some((obj: TaskDataProps) => obj.name === name) || false);
-  }, [taskData, likedTaskData]);
+    const likedTasks = Array.isArray(likedTaskData) ? likedTaskData : [];
+    setTaskedLiked(likedTasks.some((obj: TaskDataProps) => obj.name === name));
+  }, [taskData, likedTaskData, name]);
 
   const { call: toggleLikeCall } = useFrappePostCall("frappe.desk.like.toggle_like");
   const { toast } = useToast();

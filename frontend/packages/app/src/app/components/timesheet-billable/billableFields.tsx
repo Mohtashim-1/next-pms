@@ -71,10 +71,10 @@ export const BillableFields = <T extends FieldValues>({
                 aria-label="Billable"
               />
             </FormControl>
-            <div className="min-w-0">
-              <FormLabel className="font-medium leading-none">Billable</FormLabel>
+            <div className="flex min-w-0 flex-col gap-1">
+              <FormLabel className="block font-medium leading-none">Billable</FormLabel>
               {resolvedLayout === "card" && projectDefault !== undefined && (
-                <Typography variant="small" className="mt-0.5 text-muted-foreground">
+                <Typography variant="small" className="block text-muted-foreground">
                   Project default is {isBillableValue(projectDefault) ? "billable" : "non-billable"}
                 </Typography>
               )}

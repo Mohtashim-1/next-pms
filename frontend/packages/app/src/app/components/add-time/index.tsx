@@ -31,6 +31,7 @@ import {
 } from "@next-pms/design-system/components";
 import { getFormatedDate } from "@next-pms/design-system/date";
 import { FrappeConfig, FrappeContext, useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
+import type { FrappeError } from "frappe-react-sdk";
 import { LoaderCircle, Play, Save, Search, Square, X } from "lucide-react";
 import { z } from "zod";
 
@@ -41,6 +42,7 @@ import EmployeeCombo from "@/app/components/employeeComboBox";
 import { BillableFields } from "@/app/components/timesheet-billable/billableFields";
 import { TimesheetDescriptionField } from "@/app/components/timesheet-description/descriptionField";
 import { InputModeToggle } from "@/app/components/timesheet-input/inputModeToggle";
+import { TimePickerField } from "@/app/components/timesheet-input/timePickerField";
 import { TimeRangeFields } from "@/app/components/timesheet-input/timeRangeFields";
 import { TIMESHEET_INPUT_MODE_KEY } from "@/lib/constant";
 import { getLocalStorage, setLocalStorage } from "@/lib/storage";
@@ -49,7 +51,6 @@ import type { TimesheetInputMode } from "@/lib/timesheetTime";
 import { mergeClassNames, parseFrappeErrorMsg } from "@/lib/utils";
 import { TimesheetDraftSchema, timeStringToFloat } from "@/schema/timesheet";
 import type { TaskData } from "@/types";
-import TimeSelector from "./time-selector";
 import type { AddTimeProps } from "./type";
 
 const debugAddTime = (event: string, details?: unknown) => {
@@ -357,12 +358,12 @@ const AddTime = ({
           requestId,
           closeOnSuccess,
           rawError: err,
-          parsedError: parseFrappeErrorMsg(err),
+          parsedError: parseFrappeErrorMsg(err as FrappeError),
         });
         if (requestId === autoSaveRequestRef.current) {
           setDraftSaveStatus("error");
           if (closeOnSuccess) {
-            const error = parseFrappeErrorMsg(err);
+            const error = parseFrappeErrorMsg(err as FrappeError);
             toast({
               variant: "destructive",
               description: error,
@@ -436,10 +437,26 @@ const AddTime = ({
 
   const { data: projects, isLoading: isProjectLoading } = useFrappeGetCall("frappe.client.get_list", {
     doctype: "Project",
-    fields: ["name", "project_name"],
+    fields: ["name", "project_name", "customer"],
     filters: window.frappe?.boot?.global_filters.project,
     limit_page_length: "null",
   });
+
+  const activeProject = form.watch("project") || selectedProject[0] || "";
+  const projectCustomer =
+    projects?.message?.find((item: { name: string; customer?: string }) => item.name === activeProject)?.customer ?? "";
+  // Customer read access is not guaranteed for every timesheet user, so fall
+  // back to the link value when the name lookup is not permitted.
+  const { data: customerData } = useFrappeGetCall(
+    "frappe.client.get_value",
+    {
+      doctype: "Customer",
+      filters: { name: projectCustomer },
+      fieldname: "customer_name",
+    },
+    projectCustomer ? `add-time-customer-${projectCustomer}` : null
+  );
+  const customerLabel = customerData?.message?.customer_name || projectCustomer;
 
   const { data: gridMeta } = useFrappeGetCall(
     "next_pms.timesheet.api.timesheet.get_timesheet_grid_meta",
@@ -673,19 +690,17 @@ const AddTime = ({
                         <FormItem className="w-full space-y-1">
                           <FormLabel className="flex gap-2 items-center">
                             <p className="text-sm">
-                              Time <span className="text-destructive">*</span>
+                              Duration <span className="text-destructive">*</span>
                             </p>
                           </FormLabel>
                           <FormControl>
-                            <div className=" flex w-full border rounded-md ">
-                              <Input
-                                placeholder="00:00"
-                                className="placeholder:text-slate-400 focus-visible:ring-0 focus-visible:ring-offset-0 border-0 border-r rounded-none px-2"
-                                type="text"
-                                {...field}
-                              />
-                              <TimeSelector onClick={UpdateTime} />
-                            </div>
+                            <TimePickerField
+                              className="h-10"
+                              value={field.value ? String(field.value) : ""}
+                              onChange={UpdateTime}
+                              showNow={false}
+                              ariaLabel="Duration"
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -771,32 +786,44 @@ const AddTime = ({
                   )}
                 />
               </div>
-              <FormField
-                control={form.control}
-                name="activity_type"
-                render={({ field }) => (
-                  <FormItem className="space-y-1">
-                    <FormLabel className="text-sm">
-                      Work type <span className="text-destructive">*</span>
-                    </FormLabel>
-                    <Select value={field.value || undefined} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger className="h-9">
-                          <SelectValue placeholder="Select work type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {activityTypes.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {type}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="grid gap-x-4 grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="activity_type"
+                  render={({ field }) => (
+                    <FormItem className="space-y-1">
+                      <FormLabel className="text-sm">
+                        Work type <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <Select value={field.value || undefined} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Select work type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {activityTypes.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {type}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-sm">Customer</FormLabel>
+                  <Input
+                    readOnly
+                    tabIndex={-1}
+                    value={customerLabel}
+                    placeholder={activeProject ? "No customer on this project" : "Select a project"}
+                    className="h-9 cursor-default bg-muted/40 text-muted-foreground"
+                  />
+                </FormItem>
+              </div>
               {form.watch("task") && (
                 <BillableFields
                   control={form.control}

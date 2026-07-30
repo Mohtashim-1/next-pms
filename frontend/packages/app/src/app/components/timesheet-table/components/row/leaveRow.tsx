@@ -38,6 +38,7 @@ export const LeaveRow = ({
   showEmptyCell,
 }: leaveRowProps) => {
   let totalHours = 0;
+  const leaveList = Array.isArray(leaves) ? leaves : [];
 
   // For each day loop over the leaves and check whether
   // the employees has leaves for that day excluding the holidays.
@@ -45,7 +46,7 @@ export const LeaveRow = ({
   // filter the leaves for that day and calculate the total hours
   const leaveData = dates.map((date: string) => {
     let hour = 0;
-    const data = leaves.filter((data: LeaveProps) => {
+    const data = leaveList.filter((data: LeaveProps) => {
       return date >= data.from_date && date <= data.to_date;
     });
 

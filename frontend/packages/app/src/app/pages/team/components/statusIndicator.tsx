@@ -5,7 +5,7 @@ import { mergeClassNames } from "@next-pms/design-system";
 import { Hourglass, CircleCheck, CircleX, LoaderCircle } from "lucide-react";
 
 export const StatusIndicator = ({ status, className }: { status: string; className?: string }) => {
-  if (status === "Approval Pending") {
+  if (status === "Approval Pending" || status === "Pending HR Approval") {
     return <Hourglass className={mergeClassNames("w-4 h-4 stroke-warning", className)} />;
   }
   if (status === "Processing Timesheet") {

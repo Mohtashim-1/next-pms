@@ -41,6 +41,11 @@ export const initialState: TeamState = {
   employeeWeekDate: getFormatedDate(getTodayDate()),
   project: [],
   userGroup: [],
+  department: [],
+  designation: [],
+  customer: [],
+  projectType: [],
+  task: [],
   statusFilter: [],
   start: 0,
   hasMore: true,
@@ -223,6 +228,51 @@ const actionHandlers = {
     isLoading: true,
     isNeedToFetchDataAfterUpdate: true,
   }),
+  SET_DEPARTMENT: (state: TeamState, payload: Array<string>) => ({
+    ...state,
+    department: payload,
+    action: "SET",
+    start: 0,
+    pageLength: initialState.pageLength,
+    isLoading: true,
+    isNeedToFetchDataAfterUpdate: true,
+  }),
+  SET_DESIGNATION: (state: TeamState, payload: Array<string>) => ({
+    ...state,
+    designation: payload,
+    action: "SET",
+    start: 0,
+    pageLength: initialState.pageLength,
+    isLoading: true,
+    isNeedToFetchDataAfterUpdate: true,
+  }),
+  SET_CUSTOMER: (state: TeamState, payload: Array<string>) => ({
+    ...state,
+    customer: payload,
+    action: "SET",
+    start: 0,
+    pageLength: initialState.pageLength,
+    isLoading: true,
+    isNeedToFetchDataAfterUpdate: true,
+  }),
+  SET_PROJECT_TYPE: (state: TeamState, payload: Array<string>) => ({
+    ...state,
+    projectType: payload,
+    action: "SET",
+    start: 0,
+    pageLength: initialState.pageLength,
+    isLoading: true,
+    isNeedToFetchDataAfterUpdate: true,
+  }),
+  SET_TASK: (state: TeamState, payload: Array<string>) => ({
+    ...state,
+    task: payload,
+    action: "SET",
+    start: 0,
+    pageLength: initialState.pageLength,
+    isLoading: true,
+    isNeedToFetchDataAfterUpdate: true,
+  }),
   SET_REPORTS_TO: (state: TeamState, payload: string) => ({
     ...state,
     reportsTo: payload,
@@ -249,6 +299,11 @@ const actionHandlers = {
       employeeName: string;
       reportsTo: string;
       status: Array<string>;
+      department: Array<string>;
+      designation: Array<string>;
+      customer: Array<string>;
+      projectType: Array<string>;
+      task: Array<string>;
     }
   ) => ({
     ...state,
@@ -258,6 +313,11 @@ const actionHandlers = {
     status: payload.status,
     employeeName: payload.employeeName,
     reportsTo: payload.reportsTo,
+    department: payload.department,
+    designation: payload.designation,
+    customer: payload.customer,
+    projectType: payload.projectType,
+    task: payload.task,
     pageLength: initialState.pageLength,
     start: 0,
     action: "SET",

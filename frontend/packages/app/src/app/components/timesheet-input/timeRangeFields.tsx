@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { FormControl, FormItem, FormLabel, FormMessage, Input } from "@next-pms/design-system/components";
+import { FormControl, FormItem, FormLabel, FormMessage } from "@next-pms/design-system/components";
 import { mergeClassNames } from "@next-pms/design-system/utils";
 
 import { TimePickerField } from "@/app/components/timesheet-input/timePickerField";
@@ -31,11 +31,23 @@ export const TimeRangeFields = ({
     return (
       <div className={mergeClassNames("space-y-1", className)}>
         <div className="flex items-center gap-2">
-          <TimePickerField value={fromTime} onChange={onFromTimeChange} placeholder="09:00" className="min-w-0 flex-1 h-10" />
+          <TimePickerField
+            value={fromTime}
+            onChange={onFromTimeChange}
+            placeholder="09:00"
+            className="min-w-0 flex-1 h-10"
+            ariaLabel="Start time"
+          />
           <span className="shrink-0 px-0.5 text-sm text-muted-foreground" aria-hidden>
             –
           </span>
-          <TimePickerField value={toTime} onChange={onToTimeChange} placeholder="17:00" className="min-w-0 flex-1 h-10" />
+          <TimePickerField
+            value={toTime}
+            onChange={onToTimeChange}
+            placeholder="17:00"
+            className="min-w-0 flex-1 h-10"
+            ariaLabel="End time"
+          />
         </div>
         {(fromError || toError) && (
           <p className="text-xs text-destructive">{fromError || toError}</p>
@@ -49,14 +61,26 @@ export const TimeRangeFields = ({
       <FormItem className="space-y-1">
         <FormLabel className="text-sm">Start</FormLabel>
         <FormControl>
-          <Input placeholder="09:00" value={fromTime} onChange={(e) => onFromTimeChange(e.target.value)} />
+          <TimePickerField
+            value={fromTime}
+            onChange={onFromTimeChange}
+            placeholder="09:00"
+            className="h-10"
+            ariaLabel="Start time"
+          />
         </FormControl>
         {fromError && <FormMessage>{fromError}</FormMessage>}
       </FormItem>
       <FormItem className="space-y-1">
         <FormLabel className="text-sm">End</FormLabel>
         <FormControl>
-          <Input placeholder="17:00" value={toTime} onChange={(e) => onToTimeChange(e.target.value)} />
+          <TimePickerField
+            value={toTime}
+            onChange={onToTimeChange}
+            placeholder="17:00"
+            className="h-10"
+            ariaLabel="End time"
+          />
         </FormControl>
         {toError && <FormMessage>{toError}</FormMessage>}
       </FormItem>

@@ -2,6 +2,7 @@ export const DRAFT_TIMESHEET_STATUS = "Not Submitted";
 
 const LOCKED_TIMESHEET_STATUSES = new Set([
   "Approval Pending",
+  "Pending HR Approval",
   "Processing Timesheet",
   "Approved",
   "Partially Approved",

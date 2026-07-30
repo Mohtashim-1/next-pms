@@ -1,7 +1,7 @@
 /**
  * External dependencies.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -64,7 +64,8 @@ export const Approval = ({ onClose, user, timesheetState, dispatch }: ApprovalPr
   const { toast } = useToast();
   const { call } = useFrappePostCall("next_pms.timesheet.api.timesheet.submit_for_approval");
   const { data } = useFrappeGetCall("next_pms.timesheet.api.get_employee_with_role", {
-    role: ["Projects Manager", "Projects User"],
+    role: ["Timesheet Approver"],
+    employee: user.employee,
   });
   const { data: summaryData, isLoading: isValidating } = useFrappeGetCall(
     "next_pms.timesheet.api.timesheet.validate_submission",
@@ -85,14 +86,23 @@ export const Approval = ({ onClose, user, timesheetState, dispatch }: ApprovalPr
     },
     mode: "onSubmit",
   });
+  useEffect(() => {
+    const candidates = (data?.message || []) as Array<{ name: string }>;
+    if (!candidates.length) {
+      form.setValue("approver", "");
+      return;
+    }
+    const current = form.getValues("approver");
+    if (!candidates.some((item) => item.name === current)) {
+      form.setValue("approver", candidates[0].name, { shouldValidate: true });
+    }
+  }, [data?.message, form]);
 
   const handleOpen = () => {
     if (isSubmitting) return;
     form.reset();
-    const data = { start_date: "", end_date: "" };
-    dispatch({ type: "SET_DATE_RANGE", payload: data });
     dispatch({ type: "SET_APPROVAL_DIALOG_STATE", payload: false });
-    onClose?.(form.getValues());
+    onClose?.();
   };
   const handleSubmit = (data: z.infer<typeof TimesheetApprovalSchema>) => {
     setIsSubmitting(true);
@@ -215,9 +225,9 @@ export const Approval = ({ onClose, user, timesheetState, dispatch }: ApprovalPr
                 <FormItem>
                   <FormControl>
                     <div className="w-full flex items-center gap-x-2 mt-2">
-                      <FormLabel className="font-normal">Send To</FormLabel>
+                      <FormLabel className="font-normal">Line Manager</FormLabel>
                       <ComboBox
-                        label="Select an Approver"
+                        label="Select same-company approver"
                         className="max-w-48"
                         value={[field.value]}
                         onSelect={(value) => {

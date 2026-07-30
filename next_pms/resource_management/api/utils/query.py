@@ -152,7 +152,7 @@ def get_employee_leaves(employee: str | tuple, start_date: str, end_date: str):
 
     results = query.run(as_dict=True)
 
-    return results
+    return results or []
 
 
 @redis_cache

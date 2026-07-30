@@ -146,10 +146,13 @@ function Timesheet() {
 
   const handleTimesheetRefresh = useCallback(
     (savedDate?: string) => {
-      if (savedDate) {
-        dispatch({ type: "SET_DATA", payload: { ...initialState.data } });
-        dispatch({ type: "SET_WEEK_DATE", payload: getFormatedDate(getUTCDateTime(savedDate)) });
-        setStartDateParam(getFormatedDate(getUTCDateTime(savedDate)));
+      if (typeof savedDate === "string" && savedDate) {
+        const parsed = getUTCDateTime(savedDate);
+        if (!Number.isNaN(new Date(parsed).getTime())) {
+          const formatted = getFormatedDate(parsed);
+          dispatch({ type: "SET_WEEK_DATE", payload: formatted });
+          setStartDateParam(formatted);
+        }
       }
       mutate();
       getLikedTaskData();

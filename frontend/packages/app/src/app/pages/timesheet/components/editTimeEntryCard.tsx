@@ -9,7 +9,6 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-  Input,
   Typography,
 } from "@next-pms/design-system/components";
 import { getFormatedDate } from "@next-pms/design-system/date";
@@ -19,7 +18,7 @@ import type { Control, UseFormReturn } from "react-hook-form";
 import { useWatch } from "react-hook-form";
 import { z } from "zod";
 
-import TimeSelector from "@/app/components/add-time/time-selector";
+import { TimePickerField } from "@/app/components/timesheet-input/timePickerField";
 import { BillableFields } from "@/app/components/timesheet-billable/billableFields";
 import { TimesheetDescriptionField } from "@/app/components/timesheet-description/descriptionField";
 import { TimeRangeFields } from "@/app/components/timesheet-input/timeRangeFields";
@@ -145,23 +144,18 @@ export const EditTimeEntryCard = ({
                 <FormItem className="space-y-1.5">
                   <FormLabel className="text-xs font-medium text-muted-foreground">Duration</FormLabel>
                   <FormControl>
-                    <div className="flex h-10 w-full overflow-hidden rounded-lg border border-muted-foreground/20 bg-background shadow-sm">
-                      <Input
-                        placeholder="0:00"
-                        type="text"
-                        {...field}
-                        className="h-10 rounded-none border-0 border-r bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-                      />
-                      <TimeSelector
-                        onClick={(time: string) => {
-                          form.setValue(`data.${index}.hours`, time, {
-                            shouldValidate: true,
-                            shouldDirty: true,
-                            shouldTouch: true,
-                          });
-                        }}
-                      />
-                    </div>
+                    <TimePickerField
+                      className="h-10"
+                      value={field.value || ""}
+                      onChange={(time) => {
+                        field.onChange(time);
+                        form.setValue(`data.${index}.hours`, time, {
+                          shouldValidate: true,
+                          shouldDirty: true,
+                          shouldTouch: true,
+                        });
+                      }}
+                    />
                   </FormControl>
                   <FormMessage className="text-xs" />
                 </FormItem>

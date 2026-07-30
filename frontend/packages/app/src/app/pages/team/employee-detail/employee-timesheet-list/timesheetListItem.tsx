@@ -14,6 +14,14 @@ import type { TaskDataItemProps } from "@/types/timesheet";
 import { HourInput } from "../hourInput";
 import type { EmployeeTimesheetListItemProps } from "./types";
 
+/** "2026-07-22 09:30:00" -> "09:30" */
+const getClockTime = (dateTimeString?: string) => {
+  if (!dateTimeString) return "";
+  const time = dateTimeString.split(" ")[1];
+  if (!time) return "";
+  return time.slice(0, 5);
+};
+
 export const EmployeeTimesheetListItem = ({
   showCheckbox,
   isCheckboxChecked,
@@ -100,32 +108,50 @@ export const EmployeeTimesheetListItem = ({
                 callback={handleTimeChange}
                 employee={employee}
               />
-              <div className="flex gap-x-2 justify-between items-center lg:flex-row w-full ">
-                <div className="items-center flex gap-1">
-                  <div className={mergeClassNames("flex flex-col max-w-full lg:max-w-52", taskClassName)}>
-                    <div className="flex justify-center items-center gap-1">
+              <div className="flex gap-x-2 justify-between items-start lg:flex-row w-full ">
+                <div className="items-start flex gap-1 min-w-0">
+                  <div className={mergeClassNames("flex flex-col min-w-0 max-w-full", taskClassName)}>
+                    <div className="flex items-center gap-1 min-w-0">
                       <Typography
                         variant="p"
                         className="max-md:text-wrap truncate text-base font-medium"
                         onClick={() => onTaskClick?.(task.name)}
                       >
-                        {task.subject}
+                        {task.subject || task.activity_type || "-"}
                       </Typography>
                       <div
-                        title={task.is_billable == 1 ? "Billable task" : ""}
-                        className={mergeClassNames(
-                          task.is_billable === 1 && "cursor-pointer",
-                          "w-6 flex justify-center flex-none"
-                        )}
+                        title={task.is_billable ? "Billable" : "Non-billable"}
+                        className="flex items-center gap-1 flex-none"
                       >
-                        {task.is_billable === 1 && <CircleDollarSign className="size-4 stroke-success" />}
+                        <CircleDollarSign
+                          className={mergeClassNames(
+                            "size-4",
+                            task.is_billable ? "stroke-success" : "stroke-muted-foreground"
+                          )}
+                        />
+                        <Typography
+                          variant="small"
+                          className={mergeClassNames(
+                            "font-medium",
+                            task.is_billable ? "text-success" : "text-muted-foreground"
+                          )}
+                        >
+                          {task.is_billable ? "Billable" : "Non-billable"}
+                        </Typography>
                       </div>
                     </div>
                     <Typography
                       variant="small"
                       className="max-md:text-wrap shrink-0 font-medium truncate text-slate-500"
                     >
-                      {task.project_name}
+                      {[task.project_name, task.activity_type !== task.subject ? task.activity_type : null]
+                        .filter(Boolean)
+                        .join(" • ") || "No project"}
+                    </Typography>
+                    <Typography variant="small" className="text-muted-foreground">
+                      {getClockTime(task.from_time) && task.to_time
+                        ? `${getClockTime(task.from_time)} - ${getClockTime(task.to_time)} • ${floatToTime(task.hours)}h`
+                        : `${floatToTime(task.hours)}h`}
                     </Typography>
                   </div>
                 </div>
@@ -143,15 +169,18 @@ export const EmployeeTimesheetListItem = ({
                 </Button>
               </div>
             </div>
-            {task.show_description_in_approval &&
-            task.description &&
-            task.description !== "-" && (
+            {task.description && task.description !== "-" && (
               <div
-                className="text-sm font-normal max-md:text-wrap col-span-2 my-1 p-0 hover-content"
+                className="text-sm font-normal max-md:text-wrap col-span-2 my-1 p-0 hover-content pl-14"
                 onClick={(e) => e.stopPropagation()}
               >
                 <MarkdownContent value={preProcessLink(task.description ?? "")} />
               </div>
+            )}
+            {task.is_billable_override && task.billable_override_reason && (
+              <Typography variant="small" className="text-muted-foreground pl-14">
+                Billability override: {task.billable_override_reason}
+              </Typography>
             )}
           </div>
         );

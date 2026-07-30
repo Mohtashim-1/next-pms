@@ -19,7 +19,6 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-  Input,
   Separator,
   ComboBox,
   DatePicker,
@@ -28,7 +27,7 @@ import {
 import { FrappeConfig, FrappeContext, useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
 import { CircleDollarSign, LoaderCircle, Save, Search, X } from "lucide-react";
 import { z } from "zod";
-import TimeSelector from "@/app/components/add-time/time-selector";
+import { TimePickerField } from "@/app/components/timesheet-input/timePickerField";
 
 /**
  * Internal Dependencies
@@ -318,17 +317,7 @@ const EditTimeSheetListItem = ({
                           <p className="text-sm">Time</p>
                         </FormLabel>
                         <FormControl>
-                          <>
-                            <div className=" flex w-full border rounded-md ">
-                              <Input
-                                placeholder="00:00"
-                                className="placeholder:text-slate-400 focus-visible:ring-0 focus-visible:ring-offset-0 border-0 border-r rounded-none px-2"
-                                type="text"
-                                {...field}
-                              />
-                              <TimeSelector onClick={UpdateTime} />
-                            </div>
-                          </>
+                          <TimePickerField className="h-10" value={field.value || ""} onChange={UpdateTime} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

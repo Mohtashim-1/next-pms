@@ -1,0 +1,8 @@
+<p>{{ employee.employee_name }} {{ _("has completed Line Manager approval and is awaiting HR approval for the period from {0} to {1}.").format(frappe.utils.format_date(start_date), frappe.utils.format_date(end_date)) }}</p>
+{% if line_manager %}
+<p>{{ _("Approved by Line Manager:") }} {{ line_manager }}</p>
+{% endif %}
+{% if notes %}
+<p>{{ _("Note:") }} {{ notes }}</p>
+{% endif %}
+<p><a href="{{ approval_link }}">{{ _("Open Approval Queue") }}</a></p>

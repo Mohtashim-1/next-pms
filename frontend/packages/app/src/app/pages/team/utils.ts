@@ -99,5 +99,10 @@ export const createFilter = (teamState: TeamState) => {
     statusFilter: teamState?.statusFilter ?? [],
     project: teamState?.project ?? [],
     userGroup: teamState?.userGroup ?? [],
+    department: teamState?.department ?? [],
+    designation: teamState?.designation ?? [],
+    customer: teamState?.customer ?? [],
+    projectType: teamState?.projectType ?? [],
+    task: teamState?.task ?? [],
   };
 };

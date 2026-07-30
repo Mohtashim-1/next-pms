@@ -99,9 +99,13 @@ export const EmployeeTimesheet = ({
       {teamState.timesheetData.data &&
         Object.keys(teamState.timesheetData.data).length > 0 &&
         Object.entries(teamState.timesheetData.data).map(([key, value]: [string, timesheet]) => {
-          const isWeekLocked = ["Approval Pending", "Processing Timesheet", "Approved", "Partially Approved"].includes(
-            value.status
-          );
+          const isWeekLocked = [
+            "Approval Pending",
+            "Pending HR Approval",
+            "Processing Timesheet",
+            "Approved",
+            "Partially Approved",
+          ].includes(value.status);
           const data = getTimesheetHours(
             value.dates,
             value.total_hours,

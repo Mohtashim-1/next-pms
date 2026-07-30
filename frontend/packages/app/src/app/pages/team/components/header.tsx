@@ -9,7 +9,6 @@ import { addDays } from "date-fns";
 import { useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
 import _ from "lodash";
 import { useNavigate } from "react-router-dom";
-import { useFrappeGetCall } from "frappe-react-sdk";
 import { ChevronLeft, ChevronRight, ClipboardCheck } from "lucide-react";
 /**
  * Internal dependencies
@@ -27,28 +26,43 @@ export const Header = ({ teamState, dispatch, viewData }: HeaderProps) => {
     `approval-queue-count-${teamState.weekDate}`
   );
   const approvalQueueCount = approvalCountData?.message?.count ?? 0;
-  const [projectSearch, setProjectSeach] = useState<string>("");
+  const [projectSearch, setProjectSearch] = useState<string>("");
   const [userGroupSearch, setUserGroupSearch] = useState<string>("");
+  const [customerSearch, setCustomerSearch] = useState<string>("");
+  const [projectTypeSearch, setProjectTypeSearch] = useState<string>("");
+  const [taskSearch, setTaskSearch] = useState<string>("");
+  const [departmentSearch, setDepartmentSearch] = useState<string>("");
+  const [designationSearch, setDesignationSearch] = useState<string>("");
   const [projectParam] = useQueryParam<string[]>("project", []);
   const [userGroupParam] = useQueryParam<string[]>("user-group", []);
   const [statusParam] = useQueryParam<string[]>("status", []);
   const [employeeNameParam] = useQueryParam<string>("employee-name", "");
   const [reportsToParam] = useQueryParam<string>("reports-to", "");
   const [employeeStatusParam] = useQueryParam<Array<string>>("emp-status", viewData.filters.status);
+  const [departmentParam] = useQueryParam<string[]>("department", []);
+  const [designationParam] = useQueryParam<string[]>("designation", []);
+  const [customerParam] = useQueryParam<string[]>("customer", []);
+  const [projectTypeParam] = useQueryParam<string[]>("project-type", []);
+  const [taskParam] = useQueryParam<string[]>("task", []);
   const { data: employee } = useFrappeGetCall("next_pms.timesheet.api.employee.get_employee", {
     filters: { name: reportsToParam || viewData.filters.reportsTo },
   });
   const { toast } = useToast();
   useEffect(() => {
     const payload = {
-      project: projectParam && projectParam.length > 0 ? projectParam : viewData.filters.project,
-      userGroup: userGroupParam && userGroupParam.length > 0 ? userGroupParam : viewData.filters.userGroup,
-      statusFilter: statusParam && statusParam.length > 0 ? statusParam : viewData.filters.statusFilter,
-      employeeName: employeeNameParam || viewData.filters.employeeName,
-      reportsTo: reportsToParam || viewData.filters.reportsTo,
-      status: employeeStatusParam && employeeStatusParam.length > 0 ? employeeStatusParam : viewData.filters.status,
+      project: projectParam?.length ? projectParam : viewData.filters.project ?? [],
+      userGroup: userGroupParam?.length ? userGroupParam : viewData.filters.userGroup ?? [],
+      statusFilter: statusParam?.length ? statusParam : viewData.filters.statusFilter ?? [],
+      employeeName: employeeNameParam || viewData.filters.employeeName || "",
+      reportsTo: reportsToParam || viewData.filters.reportsTo || "",
+      status: employeeStatusParam?.length ? employeeStatusParam : viewData.filters.status ?? ["Active"],
+      department: departmentParam?.length ? departmentParam : viewData.filters.department ?? [],
+      designation: designationParam?.length ? designationParam : viewData.filters.designation ?? [],
+      customer: customerParam?.length ? customerParam : viewData.filters.customer ?? [],
+      projectType: projectTypeParam?.length ? projectTypeParam : viewData.filters.projectType ?? [],
+      task: taskParam?.length ? taskParam : viewData.filters.task ?? [],
     };
-    dispatch({ type: "SET_FILTERS", payload: payload });
+    dispatch({ type: "SET_FILTERS", payload });
   }, [
     dispatch,
     employeeNameParam,
@@ -57,6 +71,11 @@ export const Header = ({ teamState, dispatch, viewData }: HeaderProps) => {
     reportsToParam,
     statusParam,
     userGroupParam,
+    departmentParam,
+    designationParam,
+    customerParam,
+    projectTypeParam,
+    taskParam,
     viewData.filters,
   ]);
 
@@ -78,7 +97,6 @@ export const Header = ({ teamState, dispatch, viewData }: HeaderProps) => {
       const normalizedFilters = Array.isArray(filters) ? filters : [filters];
       dispatch({ type: "SET_STATUS_FILTER", payload: normalizedFilters });
     },
-
     [dispatch]
   );
   const handleEmployeeStatusChange = useCallback(
@@ -99,6 +117,36 @@ export const Header = ({ teamState, dispatch, viewData }: HeaderProps) => {
     },
     [dispatch]
   );
+  const handleDepartmentChange = useCallback(
+    (value: string | string[]) => {
+      dispatch({ type: "SET_DEPARTMENT", payload: value as string[] });
+    },
+    [dispatch]
+  );
+  const handleDesignationChange = useCallback(
+    (value: string | string[]) => {
+      dispatch({ type: "SET_DESIGNATION", payload: value as string[] });
+    },
+    [dispatch]
+  );
+  const handleCustomerChange = useCallback(
+    (value: string | string[]) => {
+      dispatch({ type: "SET_CUSTOMER", payload: value as string[] });
+    },
+    [dispatch]
+  );
+  const handleProjectTypeChange = useCallback(
+    (value: string | string[]) => {
+      dispatch({ type: "SET_PROJECT_TYPE", payload: value as string[] });
+    },
+    [dispatch]
+  );
+  const handleTaskChange = useCallback(
+    (value: string | string[]) => {
+      dispatch({ type: "SET_TASK", payload: value as string[] });
+    },
+    [dispatch]
+  );
   const handleprevWeek = useCallback(() => {
     const date = getFormatedDate(addDays(teamState.weekDate, -7));
     dispatch({ type: "SET_WEEK_DATE", payload: date });
@@ -113,17 +161,22 @@ export const Header = ({ teamState, dispatch, viewData }: HeaderProps) => {
     "next_pms.timesheet.doctype.pms_view_setting.pms_view_setting.update_view"
   );
 
+  const currentViewFilters = {
+    status: teamState.status,
+    employeeName: teamState.employeeName,
+    reportsTo: teamState.reportsTo,
+    statusFilter: teamState.statusFilter,
+    project: teamState.project,
+    userGroup: teamState.userGroup,
+    department: teamState.department,
+    designation: teamState.designation,
+    customer: teamState.customer,
+    projectType: teamState.projectType,
+    task: teamState.task,
+  };
+
   useEffect(() => {
-    const viewFilters = {
-      status: teamState.status,
-      employeeName: teamState.employeeName,
-      reportsTo: teamState.reportsTo,
-      statusFilter: teamState.statusFilter,
-      project: teamState.project,
-      userGroup: teamState.userGroup,
-    };
-    // console.log(viewData.filters,"======",viewFilters)
-    if (!_.isEqual(viewData.filters, viewFilters)) {
+    if (!_.isEqual(viewData.filters, currentViewFilters)) {
       dispatch({ type: "SET_HAS_VIEW_UPDATED", payload: true });
     } else {
       dispatch({ type: "SET_HAS_VIEW_UPDATED", payload: false });
@@ -135,21 +188,18 @@ export const Header = ({ teamState, dispatch, viewData }: HeaderProps) => {
     teamState.statusFilter,
     teamState.project,
     teamState.userGroup,
+    teamState.department,
+    teamState.designation,
+    teamState.customer,
+    teamState.projectType,
+    teamState.task,
     viewData,
     dispatch,
   ]);
 
   const handleSaveChanges = () => {
-    const viewFilters = {
-      status: teamState.status,
-      employeeName: teamState.employeeName,
-      reportsTo: teamState.reportsTo,
-      statusFilter: teamState.statusFilter,
-      project: teamState.project,
-      userGroup: teamState.userGroup,
-    };
     updateView({
-      view: { ...viewData, filters: viewFilters },
+      view: { ...viewData, filters: currentViewFilters },
     })
       .then(() => {
         toast({
@@ -173,7 +223,7 @@ export const Header = ({ teamState, dispatch, viewData }: HeaderProps) => {
         {
           type: "search",
           queryParameterName: "employee-name",
-          label: "Employee Name",
+          label: "Employee",
           defaultValue: "",
           value: teamState.employeeName,
           queryParameterDefault: teamState.employeeName,
@@ -214,6 +264,7 @@ export const Header = ({ teamState, dispatch, viewData }: HeaderProps) => {
           data: [
             { label: "Not Submitted", value: "Not Submitted" },
             { label: "Approval Pending", value: "Approval Pending" },
+            { label: "Pending HR Approval", value: "Pending HR Approval" },
             { label: "Approved", value: "Approved" },
             { label: "Rejected", value: "Rejected" },
             { label: "Partially Approved", value: "Partially Approved" },
@@ -227,6 +278,35 @@ export const Header = ({ teamState, dispatch, viewData }: HeaderProps) => {
           handleDelete: handleStatusChange,
           isMultiComboBox: true,
           shouldFilterComboBox: true,
+        },
+        {
+          type: "select-search",
+          queryParameterName: "customer",
+          label: "Customer",
+          value: teamState.customer,
+          queryParameterDefault: teamState.customer,
+          apiCall: {
+            url: "frappe.client.get_list",
+            filters: {
+              doctype: "Customer",
+              fields: ["name", "customer_name as label"],
+              or_filters: [
+                ["name", "like", `%${customerSearch}%`],
+                ["customer_name", "like", `%${customerSearch}%`],
+              ],
+            },
+            options: {
+              revalidateOnFocus: false,
+              revalidateIfStale: false,
+            },
+          },
+          onComboSearch: (searchTerm: string) => {
+            setCustomerSearch(searchTerm);
+          },
+          shouldFilterComboBox: false,
+          isMultiComboBox: true,
+          handleChange: handleCustomerChange,
+          handleDelete: handleCustomerChange,
         },
         {
           type: "select-search",
@@ -250,12 +330,120 @@ export const Header = ({ teamState, dispatch, viewData }: HeaderProps) => {
             },
           },
           onComboSearch: (searchTerm: string) => {
-            setProjectSeach(searchTerm);
+            setProjectSearch(searchTerm);
           },
           shouldFilterComboBox: false,
           isMultiComboBox: true,
           handleChange: handleProjectChange,
           handleDelete: handleProjectChange,
+        },
+        {
+          type: "select-search",
+          queryParameterName: "project-type",
+          label: "Project Type",
+          value: teamState.projectType,
+          queryParameterDefault: teamState.projectType,
+          apiCall: {
+            url: "frappe.client.get_list",
+            filters: {
+              doctype: "Project Type",
+              fields: ["name"],
+              or_filters: [["name", "like", `%${projectTypeSearch}%`]],
+            },
+            options: {
+              revalidateOnFocus: false,
+              revalidateIfStale: false,
+            },
+          },
+          onComboSearch: (searchTerm: string) => {
+            setProjectTypeSearch(searchTerm);
+          },
+          shouldFilterComboBox: false,
+          isMultiComboBox: true,
+          handleChange: handleProjectTypeChange,
+          handleDelete: handleProjectTypeChange,
+        },
+        {
+          type: "select-search",
+          queryParameterName: "task",
+          label: "Task",
+          value: teamState.task,
+          queryParameterDefault: teamState.task,
+          apiCall: {
+            url: "frappe.client.get_list",
+            filters: {
+              doctype: "Task",
+              fields: ["name", "subject as label"],
+              or_filters: [
+                ["name", "like", `%${taskSearch}%`],
+                ["subject", "like", `%${taskSearch}%`],
+              ],
+              limit_page_length: 50,
+            },
+            options: {
+              revalidateOnFocus: false,
+              revalidateIfStale: false,
+            },
+          },
+          onComboSearch: (searchTerm: string) => {
+            setTaskSearch(searchTerm);
+          },
+          shouldFilterComboBox: false,
+          isMultiComboBox: true,
+          handleChange: handleTaskChange,
+          handleDelete: handleTaskChange,
+        },
+        {
+          type: "select-search",
+          queryParameterName: "department",
+          label: "Department",
+          value: teamState.department,
+          queryParameterDefault: teamState.department,
+          apiCall: {
+            url: "frappe.client.get_list",
+            filters: {
+              doctype: "Department",
+              fields: ["name"],
+              or_filters: [["name", "like", `%${departmentSearch}%`]],
+            },
+            options: {
+              revalidateOnFocus: false,
+              revalidateIfStale: false,
+            },
+          },
+          onComboSearch: (searchTerm: string) => {
+            setDepartmentSearch(searchTerm);
+          },
+          shouldFilterComboBox: false,
+          isMultiComboBox: true,
+          handleChange: handleDepartmentChange,
+          handleDelete: handleDepartmentChange,
+        },
+        {
+          type: "select-search",
+          queryParameterName: "designation",
+          label: "Designation",
+          value: teamState.designation,
+          queryParameterDefault: teamState.designation,
+          apiCall: {
+            url: "frappe.client.get_list",
+            filters: {
+              doctype: "Designation",
+              fields: ["name"],
+              or_filters: [["name", "like", `%${designationSearch}%`]],
+            },
+            options: {
+              revalidateOnFocus: false,
+              revalidateIfStale: false,
+            },
+          },
+          onComboSearch: (searchTerm: string) => {
+            setDesignationSearch(searchTerm);
+          },
+          shouldFilterComboBox: false,
+          isMultiComboBox: true,
+          handleChange: handleDesignationChange,
+          handleDelete: handleDesignationChange,
         },
         {
           type: "select-search",

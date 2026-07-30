@@ -73,6 +73,11 @@ const TeamComponent = ({ viewData }: TeamComponentProps) => {
       status_filter: teamState.statusFilter,
       reports_to: teamState.reportsTo,
       status: teamState.status,
+      department: teamState.department,
+      designation: teamState.designation,
+      customer: teamState.customer,
+      project_type: teamState.projectType,
+      task: teamState.task,
     },
     undefined,
     {

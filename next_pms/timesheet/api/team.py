@@ -43,6 +43,10 @@ def get_compact_view_data(
     status_filter: list | str | None = None,
     status: list | str | None = None,
     reports_to: str | None = None,
+    designation: str | None = None,
+    customer: str | None = None,
+    project_type: str | None = None,
+    task: str | None = None,
     by_pass_access_check: bool = False,
 ):
     if not by_pass_access_check:
@@ -72,6 +76,10 @@ def get_compact_view_data(
         status=status,
         timesheet_status=status_filter,
         employee_ids=employee_ids,
+        designation=designation,
+        customer=customer,
+        project_type=project_type,
+        task=task,
         start_date=dates[0].get("start_date"),
         end_date=dates[-1].get("end_date"),
     )
@@ -121,8 +129,8 @@ def get_compact_view_data(
             start_date=add_days(dates[0].get("start_date"), -max_week * 7),
             end_date=add_days(dates[-1].get("end_date"), max_week * 7),
             employee=employee.name,
-        )
-        holidays = get_holidays(employee.name, dates[0].get("start_date"), dates[-1].get("end_date"))
+        ) or []
+        holidays = get_holidays(employee.name, dates[0].get("start_date"), dates[-1].get("end_date")) or []
 
         for date_info in dates:
             for date in date_info.get("dates"):
@@ -173,7 +181,7 @@ def get_compact_view_data(
 @whitelist(methods=["POST"])
 @error_logger
 def approve_or_reject_timesheet(employee: str, status: str, dates: list[str] | None = None, note: str = ""):
-    only_for(["Timesheet Manager", "Timesheet User", "Projects Manager"], message=True)
+    only_for(["Timesheet Approver", "HR Manager", "HR User"], message=True)
     from next_pms.timesheet.utils.rejection import require_rejection_comment
 
     require_rejection_comment(status, note)
@@ -240,6 +248,10 @@ def filter_employee_by_timesheet_status(
     start_date: str | None = None,
     end_date: str | None = None,
     status=None,
+    designation=None,
+    customer=None,
+    project_type=None,
+    task=None,
 ):
     """
     This wrapper method to filter the employees based on the certain filters.
@@ -255,16 +267,24 @@ def filter_employee_by_timesheet_status(
     if employee_ids and isinstance(employee_ids, str):
         employee_ids = json.loads(employee_ids)
 
+    common_filters = {
+        "employee_name": employee_name,
+        "department": department,
+        "project": project,
+        "status": status,
+        "user_group": user_group,
+        "reports_to": reports_to,
+        "designation": designation,
+        "customer": customer,
+        "project_type": project_type,
+        "task": task,
+    }
+
     if not timesheet_status:
         employees, count = filter_employees(
-            employee_name,
-            department,
-            project,
-            status=status,
+            **common_filters,
             page_length=page_length,
             start=start,
-            user_group=user_group,
-            reports_to=reports_to,
             ids=employee_ids,
         )
 
@@ -291,14 +311,10 @@ def filter_employee_by_timesheet_status(
     employees = employees[start : start + page_length]
 
     employees, count = filter_employees(
+        **common_filters,
         ids=employees,
-        department=department,
-        project=project,
-        status=status,
         page_length=page_length,
         start=start,
-        user_group=user_group,
-        reports_to=reports_to,
     )
 
     if start + page_length > count:
@@ -334,8 +350,12 @@ def _approve_or_reject_timesheet(
 
         from next_pms.timesheet.utils.rejection import apply_entry_rejection, return_timesheet_to_draft
 
+        from next_pms.timesheet.api.approval_queue import _assert_can_act, _notify_company_hr
+
         for timesheet in timesheets_to_process:
             doc = get_doc("Timesheet", timesheet.name)
+            doc.flags.skip_date_window_validation = True
+            stage = _assert_can_act(doc)
             for log in doc.time_logs:
                 if status == "Rejected":
                     apply_entry_rejection(log, note)
@@ -345,11 +365,21 @@ def _approve_or_reject_timesheet(
                     log.custom_rejected_by = None
                     log.custom_rejected_on = None
             if status == "Rejected":
+                doc.custom_approval_stage = "Rejected"
                 return_timesheet_to_draft(doc)
+            elif stage == "Pending Line Manager":
+                # Line Manager done → hold for HR; do not submit yet.
+                doc.custom_approval_status = "Pending HR Approval"
+                doc.custom_weekly_approval_status = "Pending HR Approval"
+                doc.custom_approval_stage = "Pending HR"
+                doc.custom_line_manager_approved_by = session.user
+                doc.save(ignore_permissions=has_permission)
+                _notify_company_hr(doc)
             else:
-                doc.custom_approval_status = status
-            doc.save(ignore_permissions=has_permission)
-            if status == "Approved":
+                doc.custom_approval_status = "Approved"
+                doc.custom_approval_stage = "Approved"
+                doc.custom_hr_approved_by = session.user
+                doc.save(ignore_permissions=has_permission)
                 doc.submit()
 
         enqueue(

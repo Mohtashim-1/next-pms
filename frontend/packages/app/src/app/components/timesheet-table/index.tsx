@@ -71,25 +71,35 @@ export const TimesheetTable = ({
   const runningTimerElapsed = runningTimer ? formatElapsedTime(runningTimer.started_at, timerTick) : undefined;
   const task_date_range_key = dates[0] + "-" + dates[dates.length - 1];
   const has_liked_task = hasKeyInLocalStorage(LIKED_TASK_KEY);
-  const isWeekLocked = ["Approval Pending", "Processing Timesheet", "Approved", "Partially Approved"].includes(
-    weeklyStatus ?? ""
-  );
+  const isWeekLocked = [
+    "Approval Pending",
+    "Pending HR Approval",
+    "Processing Timesheet",
+    "Approved",
+    "Partially Approved",
+  ].includes(weeklyStatus ?? "");
+
+  // Callers such as the team accordion render this table without like support at all.
+  const availableLikedTasks = Array.isArray(likedTaskData) ? (likedTaskData as TaskDataProps[]) : [];
 
   const setTaskInLocalStorage = () => {
-    setLikedTask(LIKED_TASK_KEY, task_date_range_key, likedTaskData!);
+    setLikedTask(LIKED_TASK_KEY, task_date_range_key, availableLikedTasks);
     setFilteredLikedTasks(
-      likedTaskData?.filter((likedTask: { name: string }) => !Object.keys(tasks).includes(likedTask.name))
+      availableLikedTasks.filter((likedTask: { name: string }) => !Object.keys(tasks ?? {}).includes(likedTask.name))
     );
   };
 
-  const liked_tasks = has_liked_task ? getLocalStorage(LIKED_TASK_KEY)[task_date_range_key] ?? [] : [];
+  const storedLikedTasks = has_liked_task
+    ? getLocalStorage(LIKED_TASK_KEY)?.[task_date_range_key]
+    : [];
+  const liked_tasks = Array.isArray(storedLikedTasks) ? storedLikedTasks : [];
 
   const [filteredLikedTasks, setFilteredLikedTasks] = useState(
-    liked_tasks.filter((likedTask: { name: string }) => !Object.keys(tasks).includes(likedTask.name))
+    liked_tasks.filter((likedTask: { name: string }) => !Object.keys(tasks ?? {}).includes(likedTask.name))
   );
   useEffect(() => {
     const filteredLikedTasks = liked_tasks.filter(
-      (likedTask: { name: string }) => !Object.keys(tasks).includes(likedTask.name)
+      (likedTask: { name: string }) => !Object.keys(tasks ?? {}).includes(likedTask.name)
     );
     setFilteredLikedTasks(filteredLikedTasks);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -127,7 +137,7 @@ export const TimesheetTable = ({
       count += 1;
       count += filteredLikedTasks.length;
     }
-    count += Object.keys(tasks).length;
+    count += Object.keys(tasks ?? {}).length;
     return count;
   }, [filteredLikedTasks.length, isWeekLocked, tasks]);
 
@@ -235,7 +245,7 @@ export const TimesheetTable = ({
               setSelectedTask={setSelectedTask}
               disabled={disabled}
               setIsTaskLogDialogBoxOpen={setIsTaskLogDialogBoxOpen}
-              likedTaskData={likedTaskData!}
+              likedTaskData={availableLikedTasks}
               getLikedTaskData={getLikedTaskData}
               runningTimer={runningTimer}
               runningTimerDate={runningTimerDate}
@@ -263,7 +273,7 @@ export const TimesheetTable = ({
                   setIsTaskLogDialogBoxOpen={setIsTaskLogDialogBoxOpen}
                   name={task.name}
                   taskData={task}
-                  likedTaskData={likedTaskData}
+                  likedTaskData={availableLikedTasks}
                   getLikedTaskData={getLikedTaskData}
                   runningTimer={runningTimer}
                   runningTimerDate={runningTimerDate}
@@ -281,7 +291,7 @@ export const TimesheetTable = ({
             holidays={holidays}
             onCellClick={onCellClick}
             disabled={disabled}
-            likedTaskData={likedTaskData}
+            likedTaskData={availableLikedTasks}
             getLikedTaskData={getLikedTaskData}
             setSelectedTask={setSelectedTask}
             setIsTaskLogDialogBoxOpen={setIsTaskLogDialogBoxOpen}

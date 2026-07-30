@@ -2,7 +2,7 @@
  * Frappe-style Query Report experience inside Next PMS.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   Badge,
   Button,
@@ -67,6 +67,9 @@ type ColumnDef = {
   fieldname?: string;
   fieldtype?: string;
   width?: number;
+  options?: string;
+  drilldown_report?: string;
+  drilldown_filters?: string[];
 };
 
 type ReportSummaryItem = {
@@ -106,6 +109,7 @@ const indicatorClass = (indicator?: string) => {
 const ReportViewer = () => {
   const { reportName: rawName } = useParams<{ reportName: string }>();
   const reportName = rawName ? decodeURIComponent(rawName) : "";
+  const [searchParams] = useSearchParams();
 
   const { data: metaRes, isLoading: metaLoading, error: metaError } = useFrappeGetCall(
     "next_pms.next_pms.api.executive_dashboard.get_report_meta",
@@ -157,8 +161,18 @@ const ReportViewer = () => {
         next[f.fieldname] = f.fieldtype === "MultiSelectList" ? [] : f.default != null && f.default !== "" ? String(f.default) : "";
       }
     }
+    // Drill-down / deep-link query params override defaults (e.g. ?employee=HR-EMP-001).
+    for (const f of meta?.filters || []) {
+      const raw = searchParams.get(f.fieldname);
+      if (raw == null || raw === "") continue;
+      if (f.fieldtype === "MultiSelectList") {
+        next[f.fieldname] = raw.split(",").map((part) => part.trim()).filter(Boolean);
+      } else {
+        next[f.fieldname] = raw;
+      }
+    }
     return next;
-  }, [meta?.defaults, meta?.filters]);
+  }, [meta?.defaults, meta?.filters, searchParams]);
 
   useEffect(() => {
     if (!meta || !reportName) return;
@@ -235,6 +249,9 @@ const ReportViewer = () => {
             label: label.trim(),
             fieldtype,
             width: 120,
+            options: undefined as string | undefined,
+            drilldown_report: undefined as string | undefined,
+            drilldown_filters: undefined as string[] | undefined,
           };
         }
         return {
@@ -242,6 +259,9 @@ const ReportViewer = () => {
           label: column.label || column.fieldname || `Column ${index + 1}`,
           fieldtype: column.fieldtype || "Data",
           width: column.width,
+          options: column.options,
+          drilldown_report: column.drilldown_report,
+          drilldown_filters: column.drilldown_filters,
         };
       }),
     [columns]
@@ -252,12 +272,96 @@ const ReportViewer = () => {
     [colKeys, hiddenColumns]
   );
 
+  const formatCell = (value: unknown, fieldtype?: string) => {
+    if (value == null || value === "") return "";
+    if (NUMERIC_TYPES.has(fieldtype || "")) {
+      const number = Number(value);
+      if (Number.isFinite(number)) {
+        if (fieldtype === "Percent") return `${number.toFixed(1)}%`;
+        return number.toLocaleString(undefined, {
+          minimumFractionDigits: fieldtype === "Currency" ? 2 : 0,
+          maximumFractionDigits: 2,
+        });
+      }
+    }
+    return stripHtml(String(value));
+  };
+
   const isTotalRow = useCallback(
     (row: Record<string, unknown>) => {
+      if (row.is_group && String(row.employee_name || "").trim().toLowerCase() === "total") return true;
       const firstValue = colKeys.length ? row[colKeys[0].key] : undefined;
-      return String(firstValue || "").trim().toLowerCase() === "total";
+      if (String(firstValue || "").trim().toLowerCase() === "total") return true;
+      return String(row.employee_name || "").trim().toLowerCase() === "total";
     },
     [colKeys]
+  );
+
+  const buildDrilldownUrl = useCallback(
+    (row: Record<string, unknown>, column: (typeof colKeys)[number]) => {
+      if (!column.drilldown_report || row.is_group) return null;
+      const params = new URLSearchParams();
+      const keys = column.drilldown_filters?.length
+        ? column.drilldown_filters
+        : ["employee", "from_date", "to_date", "company"];
+      for (const key of keys) {
+        const fromRow = row[key];
+        const fromFilter = filters[key];
+        const value = fromRow != null && fromRow !== "" ? fromRow : fromFilter;
+        if (value == null || value === "") continue;
+        params.set(key, Array.isArray(value) ? value.join(",") : String(value));
+      }
+      const qs = params.toString();
+      return `/${REPORTS}/view/${encodeURIComponent(column.drilldown_report)}${qs ? `?${qs}` : ""}`;
+    },
+    [filters]
+  );
+
+  const renderCell = useCallback(
+    (row: Record<string, unknown>, column: (typeof colKeys)[number]) => {
+      const raw = row[column.key];
+      const text = formatCell(raw, column.fieldtype);
+      if (!text && raw !== 0) return null;
+
+      const drillUrl = buildDrilldownUrl(row, column);
+      if (drillUrl && !row.is_group) {
+        return (
+          <Link
+            to={drillUrl}
+            className="text-primary underline-offset-2 hover:underline"
+            title={`Open detail for ${String(row.employee_name || row.employee || "")}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {text || String(raw)}
+          </Link>
+        );
+      }
+
+      if (
+        column.fieldtype === "Link" &&
+        column.options &&
+        raw &&
+        !row.is_group &&
+        !["", "Total"].includes(String(raw))
+      ) {
+        const doctypePath = String(column.options).toLowerCase().replace(/\s+/g, "-");
+        return (
+          <a
+            href={`/app/${doctypePath}/${encodeURIComponent(String(raw))}`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-primary underline-offset-2 hover:underline"
+            title={`Open ${column.options} ${raw}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {text || String(raw)}
+          </a>
+        );
+      }
+
+      return text;
+    },
+    [buildDrilldownUrl, formatCell]
   );
 
   const totalRows = useMemo(() => rows.filter(isTotalRow), [isTotalRow, rows]);
@@ -285,21 +389,6 @@ const ReportViewer = () => {
     setFilters(defaults);
     setSearch("");
     setPage(1);
-  };
-
-  const formatCell = (value: unknown, fieldtype?: string) => {
-    if (value == null || value === "") return "";
-    if (NUMERIC_TYPES.has(fieldtype || "")) {
-      const number = Number(value);
-      if (Number.isFinite(number)) {
-        if (fieldtype === "Percent") return `${number.toFixed(1)}%`;
-        return number.toLocaleString(undefined, {
-          minimumFractionDigits: fieldtype === "Currency" ? 2 : 0,
-          maximumFractionDigits: 2,
-        });
-      }
-    }
-    return stripHtml(String(value));
   };
 
   const exportCsv = () => {
@@ -693,7 +782,7 @@ const ReportViewer = () => {
                           )}
                           title={String(row[column.key] ?? "")}
                         >
-                          {formatCell(row[column.key], column.fieldtype)}
+                          {renderCell(row, column)}
                         </TableCell>
                       ))}
                     </TableRow>

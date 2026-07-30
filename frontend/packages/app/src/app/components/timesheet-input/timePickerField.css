@@ -1,0 +1,41 @@
+/* Theme air-datepicker (the picker Frappe desk uses) with the app's tokens. */
+.air-datepicker {
+  --adp-font-family: inherit;
+  --adp-font-size: 0.8125rem;
+  --adp-width: 246px;
+  --adp-z-index: 1100;
+  --adp-background-color: hsl(var(--popover));
+  --adp-color: hsl(var(--popover-foreground));
+  --adp-color-secondary: hsl(var(--muted-foreground));
+  --adp-accent-color: hsl(var(--primary));
+  --adp-border-color: hsl(var(--border));
+  --adp-border-color-inner: hsl(var(--border));
+  --adp-border-radius: 0.5rem;
+  --adp-btn-color: hsl(var(--primary));
+  --adp-btn-color-hover: hsl(var(--primary));
+  --adp-btn-hover-background: hsl(var(--accent));
+  --adp-time-track-color: hsl(var(--muted-foreground) / 0.35);
+  --adp-time-track-color-hover: hsl(var(--muted-foreground) / 0.55);
+  --adp-time-day-period-color: hsl(var(--muted-foreground));
+  box-shadow: 0 10px 24px -12px rgb(0 0 0 / 45%);
+}
+
+/* Rendered inside the field so it survives modal layers that disable body
+   pointer events; keep it clickable even if an ancestor opts out. */
+.air-datepicker {
+  pointer-events: auto;
+}
+
+.air-datepicker--time {
+  padding: 0.5rem 0.75rem;
+}
+
+.air-datepicker-buttons {
+  padding: 0.125rem;
+}
+
+.air-datepicker-button {
+  height: 2rem;
+  border-radius: 0.375rem;
+  font-weight: 500;
+}

@@ -127,6 +127,22 @@ REPORT_CATALOG = (
         "tags": ["hours", "weekly", "work type"],
     },
     {
+        "name": "Timesheet Hours Summary",
+        "description": "Employee hours summary for a selected duration (from–to)",
+        "audience": ["System Manager", "Team Lead", "Projects Manager"],
+        "category": "Timesheet",
+        "detail": "high",
+        "tags": ["hours", "summary", "employee"],
+    },
+    {
+        "name": "Timesheet Hours Detail",
+        "description": "Employee hours by project and task with per-employee subtotals",
+        "audience": ["System Manager", "Team Lead", "Projects Manager"],
+        "category": "Timesheet",
+        "detail": "deep",
+        "tags": ["hours", "detail", "project", "task"],
+    },
+    {
         "name": "Employee Billable Hour",
         "description": "Billable vs non-billable hours broken down by employee",
         "audience": ["System Manager", "Team Lead", "Projects Manager"],

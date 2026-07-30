@@ -19,6 +19,9 @@
   "approval_request_reminder_template",
   "timesheet_approval_template",
   "timesheet_rejection_template",
+  "send_hr_approval_request",
+  "hr_approval_reminder_template",
+  "hr_approvers",
   "column_break_udik",
   "send_weekly_approval_reminder",
   "day_to_send_reminder",
@@ -176,6 +179,30 @@
    "fieldtype": "Link",
    "label": "Timesheet Rejection Template",
    "options": "Email Template"
+  },
+  {
+   "default": "1",
+   "description": "After Line Manager approval, email HR for the employee's company (configured HR employees + Human Resources department).",
+   "fieldname": "send_hr_approval_request",
+   "fieldtype": "Check",
+   "label": "Send HR Approval Request"
+  },
+  {
+   "depends_on": "eval:doc.send_hr_approval_request",
+   "description": "Email template used when a timesheet moves to Pending HR Approval.",
+   "fieldname": "hr_approval_reminder_template",
+   "fieldtype": "Link",
+   "label": "HR Approval Reminder Template",
+   "mandatory_depends_on": "eval:doc.send_hr_approval_request",
+   "options": "Email Template"
+  },
+  {
+   "depends_on": "eval:doc.send_hr_approval_request",
+   "description": "Optional HR employees to notify. Only employees from the same company as the timesheet submitter are emailed. HR department staff for that company are always included as well.",
+   "fieldname": "hr_approvers",
+   "fieldtype": "Table",
+   "label": "HR Approvers",
+   "options": "Timesheet HR Approver"
   },
   {
    "fieldname": "tab_break_34k6",

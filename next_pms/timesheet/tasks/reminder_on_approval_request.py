@@ -23,6 +23,8 @@ def send_mail(employee: str, reporting_manager: str, start_date: str, end_date: 
     reminder_template_name = frappe.db.get_single_value(
         fieldname="approval_request_reminder_template", doctype="Timesheet Settings"
     )
+    if not reminder_template_name:
+        return
     reminder_template = frappe.get_doc("Email Template", reminder_template_name)
 
     email_message = ""
@@ -32,14 +34,22 @@ def send_mail(employee: str, reporting_manager: str, start_date: str, end_date: 
         email_message = reminder_template.response
 
     email_subject = reminder_template.subject
-    employee = frappe.get_doc("Employee", employee)
-    reporting_manager = frappe.get_doc("Employee", reporting_manager)
-    recipients = frappe.db.get_value("User", reporting_manager.user_id, "email")
+    employee_doc = frappe.get_doc("Employee", employee)
+    reporting_manager_doc = frappe.get_doc("Employee", reporting_manager)
+    recipients = frappe.db.get_value("User", reporting_manager_doc.user_id, "email")
+    if not recipients:
+        return
+
+    # Employee has employee_name (not User.full_name). Keep full_name alias so
+    # older Email Template copies still render without Jinja errors.
+    employee_doc.full_name = employee_doc.employee_name
+    reporting_manager_doc.full_name = reporting_manager_doc.employee_name
+
     args = {
         "start_date": start_date,
         "end_date": end_date,
-        "employee": employee,
-        "reporting_manager": reporting_manager,
+        "employee": employee_doc,
+        "reporting_manager": reporting_manager_doc,
         "notes": notes,
     }
     message = frappe.render_template(email_message, args)  # nosemgrep - trusted Email Template from DB

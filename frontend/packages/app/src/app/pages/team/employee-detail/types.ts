@@ -44,6 +44,11 @@ export interface TeamState {
   employeeWeekDate: string;
   project: Array<string>;
   userGroup: Array<string>;
+  department: Array<string>;
+  designation: Array<string>;
+  customer: Array<string>;
+  projectType: Array<string>;
+  task: Array<string>;
   pageLength: number;
   reportsTo: string;
   timesheet: {
@@ -98,6 +103,11 @@ export type Action =
   | { type: "SET_TIMESHEET_DATA"; payload: timesheetDataProps }
   | { type: "UPDATE_TIMESHEET_DATA"; payload: timesheetDataProps }
   | { type: "SET_USER_GROUP"; payload: Array<string> }
+  | { type: "SET_DEPARTMENT"; payload: Array<string> }
+  | { type: "SET_DESIGNATION"; payload: Array<string> }
+  | { type: "SET_CUSTOMER"; payload: Array<string> }
+  | { type: "SET_PROJECT_TYPE"; payload: Array<string> }
+  | { type: "SET_TASK"; payload: Array<string> }
   | { type: "SET_REPORTS_TO"; payload: string }
   | { type: "SET_STATUS"; payload: Array<string> }
   | { type: "SET_ACTION"; payload: teamStateActionType }
@@ -110,6 +120,11 @@ export type Action =
         employeeName: string;
         reportsTo: string;
         status: Array<string>;
+        department: Array<string>;
+        designation: Array<string>;
+        customer: Array<string>;
+        projectType: Array<string>;
+        task: Array<string>;
       };
     }
   | { type: "SET_HAS_VIEW_UPDATED"; payload: boolean };

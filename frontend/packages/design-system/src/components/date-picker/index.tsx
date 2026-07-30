@@ -62,9 +62,9 @@ const DatePicker = ({
     <div>
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" className="justify-between w-full" disabled={disabled}>
+          <Button variant="outline" className="w-full justify-start gap-2" disabled={disabled}>
+            <CalendarIcon className="shrink-0 stroke-slate-400" />
             <Typography variant="p">{pickerDate ? getDisplayDate(pickerDate) : "Pick any date"}</Typography>
-            <CalendarIcon className=" stroke-slate-400" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="z-[1000] w-auto border bg-popover p-0 text-popover-foreground shadow-md" align="start">

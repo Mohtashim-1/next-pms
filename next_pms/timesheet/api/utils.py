@@ -5,7 +5,7 @@ from frappe.utils.caching import redis_cache
 from frappe.utils.data import getdate
 
 READ_ONLY_ROLE = ["Timesheet User", "Projects User"]
-READ_WRITE_ROLE = ["Timesheet Manager", "Projects Manager"]
+READ_WRITE_ROLE = ["Timesheet Manager", "Projects Manager", "Timesheet Approver", "HR Manager", "HR User"]
 
 
 def has_write_access():
@@ -56,16 +56,41 @@ def get_week_dates(date, ignore_weekend=False):
     return data
 
 
+def resolve_week_status(day_statuses: list[str]) -> str:
+    """Roll day level approval statuses up into a single weekly status.
+
+    Only days that carry a timesheet take part. Days the employee never logged
+    are not treated as outstanding work, otherwise a timesheet approved by both
+    the Line Manager and HR would stay "Partially Approved" purely because the
+    rest of the week has nothing logged against it.
+    """
+    statuses = {status for status in day_statuses if status}
+    if not statuses:
+        return "Not Submitted"
+
+    rejected = {"Rejected", "Partially Rejected"}
+    if statuses & rejected:
+        return "Rejected" if statuses <= rejected else "Partially Rejected"
+    if "Processing Timesheet" in statuses:
+        return "Processing Timesheet"
+    # A day sitting at "Partially Approved" still owes an approver decision.
+    if statuses & {"Approval Pending", "Partially Approved"}:
+        return "Approval Pending"
+    if "Pending HR Approval" in statuses:
+        return "Pending HR Approval"
+    if "Approved" in statuses:
+        # Drafts alongside approved days keep the week flagged as incomplete.
+        return "Approved" if statuses == {"Approved"} else "Partially Approved"
+    return "Not Submitted"
+
+
 def update_weekly_status_of_timesheet(employee: str, date: str):
     from collections import defaultdict
 
     from frappe.utils import get_first_day_of_week, get_last_day_of_week
 
-    from .employee import get_workable_days_for_employee
-
     start_date = get_first_day_of_week(date)
     end_date = get_last_day_of_week(date)
-    working_days = get_workable_days_for_employee(employee, start_date, end_date)
 
     current_week_timesheet = frappe.get_all(
         "Timesheet",
@@ -85,53 +110,32 @@ def update_weekly_status_of_timesheet(employee: str, date: str):
     for ts in current_week_timesheet:
         timesheet_by_start_date[ts["start_date"]].append(ts)
 
+    # When a day holds more than one timesheet, the one still needing action wins.
     priority = {
-        "Rejected": 5,
-        "Approval Pending": 4,
-        "Approved": 3,
+        "Rejected": 7,
+        "Partially Rejected": 6,
+        "Approval Pending": 5,
+        "Partially Approved": 4,
+        "Pending HR Approval": 3,
         "Not Submitted": 2,
-        "Processing Timesheet": 1,
-        None: 0,
+        "Approved": 1,
+        "Processing Timesheet": 0,
     }
 
     final_status_per_day = {}
 
     for day, timesheets in timesheet_by_start_date.items():
         highest_status = None
-        highest_value = 0
+        highest_value = -1
         for ts in timesheets:
-            status = ts["custom_approval_status"]
-            if priority.get(status, 0) > highest_value:
+            status = ts["custom_approval_status"] or "Not Submitted"
+            value = priority.get(status, 0)
+            if value > highest_value:
                 highest_status = status
-                highest_value = priority[status]
+                highest_value = value
         final_status_per_day[day] = highest_status or "Not Submitted"
 
-    week_status = "Not Submitted"
-
-    status_count = {
-        "Not Submitted": 0,
-        "Approved": 0,
-        "Rejected": 0,
-        "Approval Pending": 0,
-        "Processing Timesheet": 0,
-    }
-
-    for day_status in final_status_per_day.values():
-        if day_status in status_count:
-            status_count[day_status] += 1
-
-    if status_count["Approval Pending"] >= working_days.get("total_working_days"):
-        week_status = "Approval Pending"
-    elif status_count["Rejected"] >= working_days.get("total_working_days"):
-        week_status = "Rejected"
-    elif status_count["Approved"] >= working_days.get("total_working_days"):
-        week_status = "Approved"
-    elif status_count["Processing Timesheet"] > 0:
-        week_status = "Processing Timesheet"
-    elif status_count["Rejected"] > 0:
-        week_status = "Partially Rejected"
-    elif status_count["Approved"] > 0:
-        week_status = "Partially Approved"
+    week_status = resolve_week_status(list(final_status_per_day.values()))
 
     for timesheet in current_week_timesheet:
         frappe.db.set_value(

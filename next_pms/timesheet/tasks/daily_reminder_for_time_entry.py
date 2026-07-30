@@ -53,6 +53,8 @@ def send_reminder(start=INITIAL_OFFSET, limit=BATCH_SIZE):
         if hour >= daily_norm:
             continue
         user = employee.user_id
+        # Employee DocType uses employee_name; keep full_name alias for templates.
+        employee.full_name = employee.employee_name
         args = {
             "date": date,
             "employee": employee,

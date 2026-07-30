@@ -365,7 +365,7 @@ def _get_timesheet_submission_summary(employee: str, start_date: str):
         if hours > 24:
             violations.append(_("You cannot submit more than 24 hours on {0}.").format(day))
 
-    locked_statuses = {"Approval Pending", "Processing Timesheet", "Approved"}
+    locked_statuses = {"Approval Pending", "Pending HR Approval", "Processing Timesheet", "Approved"}
     if any(timesheet.custom_weekly_approval_status in locked_statuses for timesheet in timesheets):
         violations.append(_("This week is already submitted or approved. Recall it before submitting again."))
 
@@ -405,7 +405,13 @@ def _assert_week_editable(employee: str, date):
 
     assert_date_not_period_locked(date)
 
-    locked_statuses = {"Approval Pending", "Processing Timesheet", "Approved", "Partially Approved"}
+    locked_statuses = {
+        "Approval Pending",
+        "Pending HR Approval",
+        "Processing Timesheet",
+        "Approved",
+        "Partially Approved",
+    }
     start_date, end_date = _get_week_range(date)
     statuses = frappe.get_all(
         "Timesheet",
@@ -896,7 +902,20 @@ def submit_for_approval(start_date: str, notes: str = None, employee: str = None
 
     if not frappe.db.exists("Employee", reporting_manager):
         throw(_("Reporting Manager does not exist."), frappe.DoesNotExistError)
-    reporting_manager_name = frappe.get_value("Employee", reporting_manager, "employee_name")
+    manager = frappe.db.get_value(
+        "Employee",
+        reporting_manager,
+        ["employee_name", "user_id", "company", "status"],
+        as_dict=True,
+    )
+    employee_company = frappe.db.get_value("Employee", employee, "company")
+    if not manager or manager.status != "Active" or not manager.user_id:
+        throw(_("The selected Line Manager is not an active system user."))
+    if manager.company != employee_company:
+        throw(_("The Line Manager must belong to the employee's company."))
+    if "Timesheet Approver" not in frappe.get_roles(manager.user_id):
+        throw(_("The selected Line Manager must have the Timesheet Approver role."))
+    reporting_manager_name = manager.employee_name
 
     start_date, end_date = _get_week_range(start_date)
 
@@ -922,7 +941,17 @@ def submit_for_approval(start_date: str, notes: str = None, employee: str = None
         prepare_entries_for_resubmission(doc)
         for log in doc.time_logs:
             log.save(ignore_permissions=True)
-        frappe.db.set_value("Timesheet", timesheet.name, "custom_approval_status", "Approval Pending")
+        frappe.db.set_value(
+            "Timesheet",
+            timesheet.name,
+            {
+                "custom_approval_status": "Approval Pending",
+                "custom_approval_stage": "Pending Line Manager",
+                "custom_timesheet_approver": reporting_manager,
+                "custom_line_manager_approved_by": None,
+                "custom_hr_approved_by": None,
+            },
+        )
 
     for timesheet in timesheets:
         frappe.db.set_value(
