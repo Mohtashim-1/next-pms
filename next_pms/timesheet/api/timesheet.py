@@ -121,6 +121,59 @@ def _normalize_invalid_duration_logs(timesheet, date):
     return changed
 
 
+def _find_autosave_match(candidates, description: str, input_mode: str, max_age_seconds: int = 120):
+    """Match only the same in-progress autosave, never a distinct intentional entry.
+
+    Distinct Meetings/Admin rows on the same day must stay separate. We only reuse
+    a row when remarks are identical, or still being typed, and the row was created
+    very recently (the Add Time dialog autosaves every ~800ms).
+    """
+    from frappe.utils import get_datetime, now_datetime, time_diff_in_seconds
+    from next_pms.timesheet.utils.time_log import strip_input_mode_marker
+
+    if not candidates:
+        return None
+
+    desc_plain = (strip_input_mode_marker(description) or "").strip()
+    now = now_datetime()
+
+    def _is_recent(log) -> bool:
+        created = get_datetime(log.creation) if log.creation else None
+        if not created:
+            return False
+        return abs(time_diff_in_seconds(now, created)) <= max_age_seconds
+
+    def _sort_key(log):
+        return get_datetime(log.creation) if log.creation else get_datetime(log.from_time)
+
+    recent = [log for log in candidates if _is_recent(log)]
+    if not recent:
+        return None
+
+    if desc_plain:
+        exact = next(
+            (
+                log
+                for log in sorted(recent, key=_sort_key, reverse=True)
+                if get_input_mode_from_description(log.description) == input_mode
+                and (strip_input_mode_marker(log.description) or "").strip() == desc_plain
+            ),
+            None,
+        )
+        if exact:
+            return exact
+
+        # Remarks still being typed ("Hand" → "Handling tickets…")
+        for log in sorted(recent, key=_sort_key, reverse=True):
+            if get_input_mode_from_description(log.description) != input_mode:
+                continue
+            prev = (strip_input_mode_marker(log.description) or "").strip()
+            if prev and (desc_plain.startswith(prev) or prev.startswith(desc_plain)):
+                return log
+
+    return None
+
+
 def _append_time_log(
     employee: str,
     task: str | None,
@@ -134,11 +187,13 @@ def _append_time_log(
     activity_type: str | None = None,
     force_new: bool = False,
     project: str | None = None,
+    name: str | None = None,
 ):
     from next_pms.timesheet.utils.settings import is_project_required_on_timesheet
 
     task = (task or "").strip() or None
     project = (project or "").strip() or None
+    name = (name or "").strip() or None
     if task:
         project = frappe.get_value("Task", task, "project") or project
     if not project and is_project_required_on_timesheet():
@@ -157,26 +212,25 @@ def _append_time_log(
     _normalize_invalid_duration_logs(timesheet, from_time)
     input_mode = get_input_mode_from_description(description)
     existing_log = None
-    if not force_new and task:
-        existing_log = next(
-            (
-                log
-                for log in timesheet.time_logs
-                if log.task == task
-                and getdate(log.from_time) == getdate(from_time)
-                and get_input_mode_from_description(log.description) == input_mode
-            ),
-            None,
-        )
-    elif not force_new and activity_type:
-        # Activity-only logs (Admin/Support/…) — merge on autosave / re-save so we don't
-        # create duplicates when the Add Time dialog watches the form and saves again.
-        from frappe.utils import get_datetime, now_datetime, time_diff_in_seconds
-        from next_pms.timesheet.utils.time_log import strip_input_mode_marker
 
+    # Prefer an explicit child-row name from the Add Time autosave loop.
+    if name:
+        existing_log = next((log for log in timesheet.time_logs if log.name == name), None)
+        if not existing_log:
+            throw(_("Time entry {0} was not found.").format(name), frappe.DoesNotExistError)
+    elif not force_new and task:
+        candidates = [
+            log
+            for log in timesheet.time_logs
+            if log.task == task and getdate(log.from_time) == getdate(from_time)
+        ]
+        existing_log = _find_autosave_match(candidates, description, input_mode)
+    elif not force_new and activity_type:
+        # Activity-only logs (Meeting/Admin/…) — never merge solely on work type.
+        # Two Meetings on the same day are two entries; only collapse an in-flight
+        # autosave of the same row.
         activity_type = activity_type.strip()
         day = getdate(from_time)
-        desc_plain = (strip_input_mode_marker(description) or "").strip()
         candidates = [
             log
             for log in timesheet.time_logs
@@ -184,46 +238,7 @@ def _append_time_log(
             and (log.activity_type or "").strip() == activity_type
             and getdate(log.from_time) == day
         ]
-
-        def _log_sort_key(log):
-            return get_datetime(log.creation) if log.creation else get_datetime(log.from_time)
-
-        existing_log = next(
-            (
-                log
-                for log in candidates
-                if get_input_mode_from_description(log.description) == input_mode
-            ),
-            None,
-        )
-        if not existing_log and desc_plain:
-            existing_log = next(
-                (
-                    log
-                    for log in candidates
-                    if (strip_input_mode_marker(log.description) or "").strip() == desc_plain
-                ),
-                None,
-            )
-        if not existing_log and desc_plain:
-            # Remarks still being typed ("Hand" → "Handling tickets…")
-            for log in sorted(candidates, key=_log_sort_key, reverse=True):
-                prev = (strip_input_mode_marker(log.description) or "").strip()
-                if prev and (desc_plain.startswith(prev) or prev.startswith(desc_plain)):
-                    existing_log = log
-                    break
-        if not existing_log and candidates:
-            # Same Add Time session: update most recent row created in the last 30 minutes
-            now = now_datetime()
-            recent = []
-            for log in candidates:
-                created = get_datetime(log.creation) if log.creation else None
-                if created and abs(time_diff_in_seconds(now, created)) <= 30 * 60:
-                    recent.append(log)
-            if recent:
-                existing_log = sorted(recent, key=_log_sort_key, reverse=True)[0]
-            elif len(candidates) == 1:
-                existing_log = candidates[0]
+        existing_log = _find_autosave_match(candidates, description, input_mode)
 
     if existing_log:
         existing_log.hours = hours
@@ -237,7 +252,7 @@ def _append_time_log(
             existing_log.activity_type = activity_type
         _mark_draft_save(timesheet)
         ignore_permissions = employee_has_higher_access(employee, ptype="write")
-        return timesheet, ignore_permissions
+        return timesheet, ignore_permissions, existing_log
 
     log_row = {
         "task": task,
@@ -251,10 +266,10 @@ def _append_time_log(
     }
     if activity_type:
         log_row["activity_type"] = activity_type
-    timesheet.append("time_logs", log_row)
+    row = timesheet.append("time_logs", log_row)
     _mark_draft_save(timesheet)
     ignore_permissions = employee_has_higher_access(employee, ptype="write")
-    return timesheet, ignore_permissions
+    return timesheet, ignore_permissions, row
 
 
 def _get_week_range(start_date: str):
@@ -685,6 +700,7 @@ def save(
     activity_type: str | None = None,
     force_new: bool = False,
     project: str | None = None,
+    name: str | None = None,
 ):
     """create time entry in Timesheet Detail child table."""
     from next_pms.timesheet.utils.description import is_meaningful_description
@@ -695,6 +711,7 @@ def save(
     task = (task or "").strip() or None
     project = (project or "").strip() or None
     activity_type = (activity_type or "").strip() or None
+    name = (name or "").strip() or None
     if not activity_type:
         throw(_("Work Type is mandatory for creating time entry."), frappe.MandatoryError)
     if not is_meaningful_description(description):
@@ -703,9 +720,18 @@ def save(
         throw(_("Select a project (or a task) for the time entry."), frappe.MandatoryError)
     _assert_week_editable(employee, date)
 
+    preferred_from = None
+    if name:
+        preferred_from = frappe.db.get_value("Timesheet Detail", name, "from_time")
+
     if input_mode == "duration":
         resolved_from, resolved_to, resolved_hours = _resolve_duration_time_slot(
-            employee, date, hours, draft_mode=True
+            employee,
+            date,
+            hours,
+            exclude_detail_name=name,
+            preferred_from=preferred_from,
+            draft_mode=True,
         )
     else:
         resolved_from, resolved_to, resolved_hours = resolve_time_log_times(
@@ -715,7 +741,7 @@ def save(
             to_time=to_time,
             input_mode=input_mode,
         )
-    timesheet, ignore_permissions = _append_time_log(
+    timesheet, ignore_permissions, row = _append_time_log(
         employee=employee,
         task=task,
         description=set_input_mode_marker(description, input_mode),
@@ -728,9 +754,19 @@ def save(
         activity_type=activity_type,
         force_new=force_new,
         project=project,
+        name=name,
     )
     timesheet.save(ignore_permissions=ignore_permissions)
-    return _("New Timesheet created successfully.")
+    # After save, newly appended rows get a real name; reload if needed.
+    detail_name = getattr(row, "name", None) or name
+    if not detail_name:
+        timesheet.reload()
+        detail_name = timesheet.time_logs[-1].name if timesheet.time_logs else None
+    return {
+        "message": _("Timesheet entry saved successfully."),
+        "name": detail_name,
+        "parent": timesheet.name,
+    }
 
 
 @frappe.whitelist()
@@ -834,7 +870,7 @@ def stop_timer(employee: str = None):
     if hours <= 0:
         throw(_("Timer duration must be greater than zero."))
 
-    timesheet, ignore_permissions = _append_time_log(
+    timesheet, ignore_permissions, _row = _append_time_log(
         employee=employee,
         task=timer.get("task"),
         description=timer.get("description"),

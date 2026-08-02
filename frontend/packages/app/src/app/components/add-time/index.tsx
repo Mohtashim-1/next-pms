@@ -91,6 +91,9 @@ const AddTime = ({
   const autoSaveRequestRef = useRef(0);
   const autoSaveInFlightRef = useRef(false);
   const pendingAutoSaveRef = useRef<z.infer<typeof TimesheetDraftSchema> | null>(null);
+  // Keep the child-row name created by the first autosave so later saves update
+  // that row instead of merging into / overwriting another Meeting on the same day.
+  const draftEntryNameRef = useRef<string>("");
   const [timerSubmitting, setTimerSubmitting] = useState(false);
   const [timerTick, setTimerTick] = useState(Date.now());
   const [isTaskLoading, setIsTaskLoading] = useState(false);
@@ -123,6 +126,7 @@ const AddTime = ({
   const selectedTask = tasks.find((item) => item.name === selectedTaskName);
   const descriptionRequired = true;
   const closeDialog = useCallback(() => {
+    draftEntryNameRef.current = "";
     form.reset();
     onOpenChange(form.getValues());
   }, [form, onOpenChange]);
@@ -251,6 +255,9 @@ const AddTime = ({
             activity_type: data.activity_type,
           };
 
+    if (draftEntryNameRef.current) {
+      return { ...base, name: draftEntryNameRef.current };
+    }
     return base;
   };
 
@@ -338,18 +345,31 @@ const AddTime = ({
           });
           return false;
         }
+        const savedPayload = res?.message;
+        const savedName =
+          typeof savedPayload === "object" && savedPayload !== null
+            ? (savedPayload as { name?: string }).name
+            : undefined;
+        if (savedName) {
+          draftEntryNameRef.current = savedName;
+        }
         setDraftSaveStatus("saved");
         onSuccess?.(parsed.data);
         debugAddTime("persist success", {
           requestId,
           closeOnSuccess,
           data: parsed.data,
+          draftEntryName: draftEntryNameRef.current,
         });
         if (closeOnSuccess) {
+          const successMessage =
+            typeof savedPayload === "object" && savedPayload !== null
+              ? (savedPayload as { message?: string }).message || "Timesheet entry saved successfully."
+              : savedPayload || "Timesheet entry saved successfully.";
           closeDialog();
           toast({
             variant: "success",
-            description: res.message,
+            description: successMessage,
           });
         }
         return true;
@@ -559,6 +579,8 @@ const AddTime = ({
 
   useEffect(() => {
     if (!open) return;
+    draftEntryNameRef.current = "";
+    setDraftSaveStatus("idle");
     form.reset({
       task: task || "",
       hours: "",
@@ -571,6 +593,8 @@ const AddTime = ({
       is_billable: false,
       project_default_is_billable: undefined,
       billable_override_reason: "",
+      activity_type: "",
+      project: project || "",
     });
     setSelectedDate(getFormatedDate(initialDate));
     setSelectedEmployee(employee);
