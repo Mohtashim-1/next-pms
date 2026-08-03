@@ -151,6 +151,7 @@ const AddTime = ({
     setSearchTask(searchTerm);
   };
   const UpdateTime = (time: string) => {
+    debugAddTime("hours setValue", { time });
     form.setValue("hours", time, {
       shouldValidate: true,
       shouldDirty: true,
@@ -403,16 +404,57 @@ const AddTime = ({
     [save, onSuccess, closeDialog, toast]
   );
 
+  /** Pull Start/End from the DOM in case Save was clicked before blur committed. */
+  const flushTimeFieldsFromDom = () => {
+    const startInput = document.querySelector<HTMLInputElement>('input[aria-label="Start time"]');
+    const endInput = document.querySelector<HTMLInputElement>('input[aria-label="End time"]');
+    const durationInput = document.querySelector<HTMLInputElement>('input[aria-label="Duration"]');
+    const mode = form.getValues("input_mode");
+    debugAddTime("flushTimeFieldsFromDom", {
+      mode,
+      startDom: startInput?.value,
+      endDom: endInput?.value,
+      durationDom: durationInput?.value,
+      formBefore: {
+        from_time: form.getValues("from_time"),
+        to_time: form.getValues("to_time"),
+        hours: form.getValues("hours"),
+      },
+    });
+    if (mode === "range") {
+      if (startInput?.value) {
+        form.setValue("from_time", startInput.value, { shouldDirty: true, shouldValidate: true });
+      }
+      if (endInput?.value) {
+        form.setValue("to_time", endInput.value, { shouldDirty: true, shouldValidate: true });
+      }
+    } else if (durationInput?.value) {
+      form.setValue("hours", durationInput.value, { shouldDirty: true, shouldValidate: true });
+    }
+    debugAddTime("flushTimeFieldsFromDom after", {
+      from_time: form.getValues("from_time"),
+      to_time: form.getValues("to_time"),
+      hours: form.getValues("hours"),
+    });
+  };
+
   const handleSubmit = async (data: z.infer<typeof TimesheetDraftSchema>) => {
-    debugAddTime("submit started", data);
+    flushTimeFieldsFromDom();
+    const merged = {
+      ...data,
+      from_time: form.getValues("from_time") || data.from_time,
+      to_time: form.getValues("to_time") || data.to_time,
+      hours: form.getValues("hours") || data.hours,
+    };
+    debugAddTime("submit started", { data, merged, errors: form.formState.errors });
     setSubmitting(true);
-    const blockMessage = getSaveBlockMessage(data);
+    const blockMessage = getSaveBlockMessage(merged);
     if (blockMessage) {
-      if (data.input_mode === "duration") {
+      if (merged.input_mode === "duration") {
         form.setError("hours", { message: blockMessage });
-      } else if (!data.from_time) {
+      } else if (!merged.from_time) {
         form.setError("from_time", { message: blockMessage });
-      } else if (!data.to_time) {
+      } else if (!merged.to_time) {
         form.setError("to_time", { message: blockMessage });
       } else {
         form.setError("to_time", { message: blockMessage });
@@ -421,16 +463,24 @@ const AddTime = ({
         variant: "destructive",
         description: blockMessage,
       });
-      debugAddTime("submit blocked", { blockMessage, data });
+      debugAddTime("submit blocked", { blockMessage, merged });
       setSubmitting(false);
       return;
     }
-    const saved = await persistDraft(data, true);
+    const saved = await persistDraft(merged, true);
     debugAddTime("submit finished", {
       saved,
-      data,
+      merged,
     });
     setSubmitting(false);
+  };
+
+  const handleInvalidSubmit = (errors: unknown) => {
+    flushTimeFieldsFromDom();
+    debugAddTime("submit INVALID (zod/rhf blocked)", {
+      errors,
+      values: form.getValues(),
+    });
   };
   const fetchTask = useCallback(() => {
     setIsTaskLoading(true);
@@ -684,7 +734,7 @@ const AddTime = ({
           <Separator />
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)}>
+          <form onSubmit={form.handleSubmit(handleSubmit, handleInvalidSubmit)}>
             <div className="flex flex-col gap-y-4">
               <InputModeToggle value={inputMode} onChange={handleInputModeChange} />
               <div className="grid max-sm:gap-y-4 sm:gap-x-4 max-sm:grid-rows-2 sm:grid-cols-2">
@@ -734,12 +784,14 @@ const AddTime = ({
                     <TimeRangeFields
                       fromTime={form.watch("from_time") || ""}
                       toTime={form.watch("to_time") || ""}
-                      onFromTimeChange={(value) =>
-                        form.setValue("from_time", value, { shouldDirty: true, shouldValidate: true })
-                      }
-                      onToTimeChange={(value) =>
-                        form.setValue("to_time", value, { shouldDirty: true, shouldValidate: true })
-                      }
+                      onFromTimeChange={(value) => {
+                        debugAddTime("from_time setValue", { value });
+                        form.setValue("from_time", value, { shouldDirty: true, shouldValidate: true });
+                      }}
+                      onToTimeChange={(value) => {
+                        debugAddTime("to_time setValue", { value });
+                        form.setValue("to_time", value, { shouldDirty: true, shouldValidate: true });
+                      }}
                       fromError={form.formState.errors.from_time?.message}
                       toError={form.formState.errors.to_time?.message}
                     />
