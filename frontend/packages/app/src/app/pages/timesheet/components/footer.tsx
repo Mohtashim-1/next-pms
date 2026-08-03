@@ -49,6 +49,7 @@ export const Footer = ({ timesheet, user, dispatch, callback }: FooterProps) => 
           activity_type={timesheet.timesheet.activity_type}
           open={timesheet.isEditDialogOpen}
           onClose={onCloseEditDialog}
+          onChanged={callback}
           user={user}
         />
       )}

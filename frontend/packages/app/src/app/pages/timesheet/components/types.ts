@@ -38,6 +38,8 @@ export interface EditTimeProps {
   activity_type?: string;
   open: boolean;
   onClose: () => void;
+  /** Refresh the parent timesheet grid while the dialog stays open. */
+  onChanged?: () => void;
   user: RootState["user"];
 }
 

@@ -40,6 +40,8 @@ _NATIVE_MULTI_COMPANY_REPORTS = {
 	"Realization Rate Report",
 	"WIP Aging",
 	"Unbilled Hours / Revenue Leakage",
+	"Timesheet Hours Summary",
+	"Timesheet Hours Detail",
 }
 
 
@@ -530,13 +532,29 @@ def _all_companies() -> list[str]:
 def _is_total_row(row) -> bool:
 	"""True for auto-added / manual Total footer rows."""
 	if isinstance(row, dict):
-		for key in ("employee", "employee_name", "name", "account", "particulars", "id"):
+		for key in ("employee", "employee_name", "name", "account", "particulars", "id", "label"):
 			val = row.get(key)
 			if val is not None and str(val).strip().lower() == "total":
 				return True
+		# Frappe add_total_row often yields blank label columns + summed Int/Float
+		# (e.g. serial_no = sum of 1..n). Treat blank employee label rows without
+		# an employee id as totals so they are not shown mid-list.
+		level = str(row.get("level") or "").lower()
+		if level == "total":
+			return True
+		emp = row.get("employee")
+		emp_name = str(row.get("employee_name") or row.get("label") or "").strip()
+		if not emp and not emp_name and row.get("total_hours") is not None:
+			return True
 		return False
 	if isinstance(row, (list, tuple)) and row:
-		return str(row[0]).strip().lower() == "total"
+		# Desk add_total_row: first non-numeric may be blank, first cell may be a summed Int.
+		if str(row[0]).strip().lower() == "total":
+			return True
+		# [summed_serial, "", "", summed_hours]
+		if len(row) >= 2 and row[0] not in (None, "") and str(row[1] or "").strip() == "":
+			return True
+		return False
 	return False
 
 

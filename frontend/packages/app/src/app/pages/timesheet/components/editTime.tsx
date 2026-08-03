@@ -17,7 +17,7 @@ import {
   useToast,
 } from "@next-pms/design-system/components";
 import { floatToTime } from "@next-pms/design-system/utils";
-import { useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
+import { useFrappeGetCall, useFrappePostCall, type FrappeError } from "frappe-react-sdk";
 import { LoaderCircle, Plus, Save, Timer, Briefcase } from "lucide-react";
 import { z } from "zod";
 /**
@@ -46,8 +46,17 @@ function sumEntryHours(rows: z.infer<typeof TimesheetDraftUpdateSchema>["data"],
   }, 0);
 }
 
-export const EditTime = ({ employee, date, task, activity_type = "", open, onClose }: EditTimeProps) => {
+export const EditTime = ({
+  employee,
+  date,
+  task,
+  activity_type = "",
+  open,
+  onClose,
+  onChanged,
+}: EditTimeProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const loadedDialogKeyRef = useRef<string | null>(null);
 
   const form = useForm<z.infer<typeof TimesheetDraftUpdateSchema>>({
@@ -118,7 +127,7 @@ export const EditTime = ({ employee, date, task, activity_type = "", open, onClo
 
     loadedDialogKeyRef.current = dialogKey;
     form.reset({ data: updatedData });
-    const firstRangeRow = updatedData.find((item) => item.input_mode === "range");
+    const firstRangeRow = updatedData.find((item: TimesheetDetail & { input_mode?: string }) => item.input_mode === "range");
     if (firstRangeRow) {
       setInputMode("range");
     }
@@ -168,6 +177,11 @@ export const EditTime = ({ employee, date, task, activity_type = "", open, onClo
 
       try {
         const res = await updateTimesheet(buildUpdatePayload(parsed.data));
+        // Re-load server rows so newly created entries get real names, then
+        // refresh the grid behind the dialog.
+        loadedDialogKeyRef.current = null;
+        await mutate();
+        onChanged?.();
         if (showToast) {
           toast({
             variant: "success",
@@ -177,7 +191,7 @@ export const EditTime = ({ employee, date, task, activity_type = "", open, onClo
         return true;
       } catch (err) {
         if (showToast) {
-          const error = parseFrappeErrorMsg(err);
+          const error = parseFrappeErrorMsg(err as FrappeError);
           toast({
             variant: "destructive",
             description: error,
@@ -186,7 +200,7 @@ export const EditTime = ({ employee, date, task, activity_type = "", open, onClo
         return false;
       }
     },
-    [toast, updateTimesheet]
+    [toast, updateTimesheet, mutate, onChanged]
   );
 
   const handleUpdate = async (formData: z.infer<typeof TimesheetDraftUpdateSchema>) => {
@@ -204,29 +218,36 @@ export const EditTime = ({ employee, date, task, activity_type = "", open, onClo
   };
 
   const removeFormRow = (index: number) => {
+    if (isDeleting) return;
     const currentData = form.getValues().data || [];
     const rowToDelete = currentData[index];
     if (!rowToDelete?.name) {
       remove(index);
-    } else {
-      handleDelete(rowToDelete.parent, rowToDelete.name);
+      return;
     }
-  };
-  const handleDelete = (parent: string, name: string) => {
-    deleteTimesheet({ parent, name })
-      .then((res) => {
-        mutate();
+    setIsDeleting(true);
+    deleteTimesheet({ parent: rowToDelete.parent, name: rowToDelete.name })
+      .then(async (res) => {
+        // Update the open dialog immediately — waiting on mutate alone left the
+        // card on screen because the load effect only runs once per dialog key.
+        remove(index);
+        loadedDialogKeyRef.current = null;
+        await mutate();
+        onChanged?.();
         toast({
           variant: "success",
           description: res.message,
         });
       })
       .catch((err) => {
-        const error = parseFrappeErrorMsg(err);
+        const error = parseFrappeErrorMsg(err as FrappeError);
         toast({
           variant: "destructive",
           description: error,
         });
+      })
+      .finally(() => {
+        setIsDeleting(false);
       });
   };
 

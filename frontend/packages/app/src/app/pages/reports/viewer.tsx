@@ -1,7 +1,7 @@
 /**
  * Frappe-style Query Report experience inside Next PMS.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   Badge,
@@ -34,7 +34,10 @@ import { getFormatedDate } from "@next-pms/design-system/date";
 import { useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
 import {
   ArrowLeft,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Columns3,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -132,6 +135,7 @@ const ReportViewer = () => {
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [lastRun, setLastRun] = useState<Date | null>(null);
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [printOpen, setPrintOpen] = useState(false);
   const [printOpts, setPrintOpts] = useState({
     letterHead: "",
@@ -220,6 +224,7 @@ const ReportViewer = () => {
       setRows(message?.result || []);
       setSummary(Array.isArray(message?.report_summary) ? message.report_summary : []);
       setPlaceholder(message?.placeholder || null);
+      setExpandedRows(new Set());
       setPage(1);
       setLastRun(new Date());
     } catch (e: unknown) {
@@ -287,19 +292,39 @@ const ReportViewer = () => {
     return stripHtml(String(value));
   };
 
+  const rowKey = useCallback((row: Record<string, unknown>, index: number) => {
+    return String(row.row_id || row.name || `row-${index}`);
+  }, []);
+
   const isTotalRow = useCallback(
     (row: Record<string, unknown>) => {
+      if (String(row.level || "").toLowerCase() === "total") return true;
+      if (String(row.label || "").trim().toLowerCase() === "total") return true;
       if (row.is_group && String(row.employee_name || "").trim().toLowerCase() === "total") return true;
       const firstValue = colKeys.length ? row[colKeys[0].key] : undefined;
       if (String(firstValue || "").trim().toLowerCase() === "total") return true;
-      return String(row.employee_name || "").trim().toLowerCase() === "total";
+      if (String(row.employee_name || "").trim().toLowerCase() === "total") return true;
+      // Blank auto-total rows from Desk add_total_row (no employee, blank label).
+      const label = String(row.employee_name || row.label || "").trim();
+      if (!row.employee && !label && row.total_hours != null) return true;
+      return false;
     },
     [colKeys]
   );
 
+  const isTreeReport = useMemo(
+    () => rows.some((row) => Number(row.indent || 0) > 0 || Boolean(row.has_children)),
+    [rows]
+  );
+
   const buildDrilldownUrl = useCallback(
     (row: Record<string, unknown>, column: (typeof colKeys)[number]) => {
-      if (!column.drilldown_report || row.is_group) return null;
+      const reportNameForDrill =
+        (typeof row.drilldown_report === "string" && row.drilldown_report) ||
+        column.drilldown_report;
+      // Employee group rows may still deep-link to the flat detail report.
+      if (!reportNameForDrill) return null;
+      if (row.is_group && String(row.level || "") !== "employee") return null;
       const params = new URLSearchParams();
       const keys = column.drilldown_filters?.length
         ? column.drilldown_filters
@@ -312,56 +337,107 @@ const ReportViewer = () => {
         params.set(key, Array.isArray(value) ? value.join(",") : String(value));
       }
       const qs = params.toString();
-      return `/${REPORTS}/view/${encodeURIComponent(column.drilldown_report)}${qs ? `?${qs}` : ""}`;
+      return `/${REPORTS}/view/${encodeURIComponent(reportNameForDrill)}${qs ? `?${qs}` : ""}`;
     },
     [filters]
   );
 
+  const toggleExpand = useCallback((id: string) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   const renderCell = useCallback(
-    (row: Record<string, unknown>, column: (typeof colKeys)[number]) => {
+    (row: Record<string, unknown>, column: (typeof colKeys)[number], absoluteIndex: number) => {
       const raw = row[column.key];
       const text = formatCell(raw, column.fieldtype);
-      if (!text && raw !== 0) return null;
+      const isFirstCol = visibleCols[0]?.key === column.key;
+      const indent = Number(row.indent || 0);
+      const id = String(row.row_id || rowKey(row, absoluteIndex));
+      const expanded = expandedRows.has(id);
+      const level = String(row.level || "");
 
-      const drillUrl = buildDrilldownUrl(row, column);
-      if (drillUrl && !row.is_group) {
-        return (
+      // Only the label / first column gets the employee→detail drill-down link.
+      // Linking every cell made hours/dates/company all render in brand-red.
+      const isDrilldownColumn = isFirstCol || column.key === "label" || column.key === "employee_name";
+      const drillUrl =
+        isDrilldownColumn && level === "employee" ? buildDrilldownUrl(row, column) : null;
+
+      const linkClass =
+        "text-foreground underline decoration-muted-foreground/50 underline-offset-2 hover:decoration-foreground";
+
+      let body: ReactNode = null;
+      if (drillUrl && text) {
+        body = (
           <Link
             to={drillUrl}
-            className="text-primary underline-offset-2 hover:underline"
-            title={`Open detail for ${String(row.employee_name || row.employee || "")}`}
+            className={linkClass}
+            title={`Open detail for ${String(row.employee_name || row.employee || row.label || "")}`}
             onClick={(event) => event.stopPropagation()}
           >
-            {text || String(raw)}
+            {text}
           </Link>
         );
-      }
-
-      if (
+      } else if (
         column.fieldtype === "Link" &&
         column.options &&
         raw &&
-        !row.is_group &&
-        !["", "Total"].includes(String(raw))
+        !["", "Total"].includes(String(raw)) &&
+        level !== "total"
       ) {
+        // Document-level links (Timesheet, Project) open the Desk form.
         const doctypePath = String(column.options).toLowerCase().replace(/\s+/g, "-");
-        return (
+        body = (
           <a
             href={`/app/${doctypePath}/${encodeURIComponent(String(raw))}`}
             target="_blank"
             rel="noreferrer"
-            className="text-primary underline-offset-2 hover:underline"
+            className={linkClass}
             title={`Open ${column.options} ${raw}`}
             onClick={(event) => event.stopPropagation()}
           >
             {text || String(raw)}
           </a>
         );
+      } else if (!text && raw !== 0) {
+        body = null;
+      } else {
+        body = text ? <span className="text-foreground">{text}</span> : null;
       }
 
-      return text;
+      if (isFirstCol && isTreeReport) {
+        const canExpand = Boolean(row.has_children) && level !== "total";
+        return (
+          <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: `${indent * 1.1}rem` }}>
+            {canExpand ? (
+              <button
+                type="button"
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label={expanded ? "Collapse" : "Expand"}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  toggleExpand(id);
+                }}
+              >
+                {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </button>
+            ) : (
+              <span className="inline-block h-6 w-6 shrink-0" />
+            )}
+            <span className={mergeClassNames("min-w-0 truncate text-foreground", indent === 0 && "font-medium")}>
+              {body}
+            </span>
+          </div>
+        );
+      }
+
+      return body;
     },
-    [buildDrilldownUrl, formatCell]
+    [buildDrilldownUrl, expandedRows, formatCell, isTreeReport, rowKey, toggleExpand, visibleCols]
   );
 
   const totalRows = useMemo(() => rows.filter(isTotalRow), [isTotalRow, rows]);
@@ -370,16 +446,103 @@ const ReportViewer = () => {
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return resultRows;
-    return resultRows.filter((row) =>
-      colKeys.some((column) => stripHtml(String(row[column.key] ?? "")).toLowerCase().includes(query))
-    );
-  }, [colKeys, resultRows, search]);
+    // When searching a tree, include matching rows and their ancestors so context remains.
+    if (!isTreeReport) {
+      return resultRows.filter((row) =>
+        colKeys.some((column) => stripHtml(String(row[column.key] ?? "")).toLowerCase().includes(query))
+      );
+    }
+    const matchIds = new Set<string>();
+    const byId = new Map<string, Record<string, unknown>>();
+    resultRows.forEach((row, index) => {
+      const id = rowKey(row, index);
+      byId.set(id, row);
+      const hit = colKeys.some((column) =>
+        stripHtml(String(row[column.key] ?? "")).toLowerCase().includes(query)
+      );
+      if (hit) matchIds.add(id);
+    });
+    const keep = new Set<string>();
+    for (const id of matchIds) {
+      let current: string | undefined = id;
+      while (current) {
+        keep.add(current);
+        const parent = String(byId.get(current)?.parent_row || "");
+        current = parent || undefined;
+      }
+    }
+    return resultRows.filter((row, index) => keep.has(rowKey(row, index)));
+  }, [colKeys, isTreeReport, resultRows, rowKey, search]);
 
-  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize) || 1);
+  const treeVisibleRows = useMemo(() => {
+    if (!isTreeReport) return filteredRows;
+    if (search.trim()) return filteredRows;
+
+    const parentById = new Map<string, string>();
+    for (const row of filteredRows) {
+      const id = String(row.row_id || "");
+      if (id) parentById.set(id, String(row.parent_row || ""));
+    }
+
+    const isAncestorExpanded = (parentId: string) => {
+      let walk = parentId;
+      const guard = new Set<string>();
+      while (walk) {
+        if (guard.has(walk)) return false;
+        guard.add(walk);
+        if (!expandedRows.has(walk)) return false;
+        walk = parentById.get(walk) || "";
+      }
+      return true;
+    };
+
+    return filteredRows.filter((row) => {
+      const parent = String(row.parent_row || "");
+      if (!parent) return true;
+      return isAncestorExpanded(parent);
+    });
+  }, [expandedRows, filteredRows, isTreeReport, search]);
+
+  const rootRows = useMemo(() => {
+    if (!isTreeReport) return treeVisibleRows;
+    return treeVisibleRows.filter((row) => Number(row.indent || 0) === 0);
+  }, [isTreeReport, treeVisibleRows]);
+
+  const pageCount = Math.max(
+    1,
+    Math.ceil((isTreeReport ? rootRows.length : treeVisibleRows.length) / pageSize) || 1
+  );
+
   const visibleRows = useMemo(() => {
     const start = (page - 1) * pageSize;
-    return filteredRows.slice(start, start + pageSize);
-  }, [filteredRows, page, pageSize]);
+    if (!isTreeReport) {
+      return treeVisibleRows.slice(start, start + pageSize);
+    }
+    const pageRoots = rootRows.slice(start, start + pageSize);
+    const rootIds = new Set(pageRoots.map((row) => String(row.row_id || "")));
+    const out: Record<string, unknown>[] = [];
+    let currentRoot = "";
+    for (const row of treeVisibleRows) {
+      const indent = Number(row.indent || 0);
+      const id = String(row.row_id || "");
+      if (indent === 0) {
+        currentRoot = id;
+        if (rootIds.has(id)) out.push(row);
+        continue;
+      }
+      if (currentRoot && rootIds.has(currentRoot)) out.push(row);
+    }
+    return out;
+  }, [isTreeReport, page, pageSize, rootRows, treeVisibleRows]);
+
+  const expandableIds = useMemo(
+    () =>
+      resultRows
+        .filter((row) => Boolean(row.has_children) && String(row.level || "") !== "total")
+        .map((row) => String(row.row_id || ""))
+        .filter(Boolean),
+    [resultRows]
+  );
 
   useEffect(() => {
     if (page > pageCount) setPage(pageCount);
@@ -461,7 +624,7 @@ const ReportViewer = () => {
           .join("")}</div>`
       : "";
     const head = visibleCols.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("");
-    const body = [...filteredRows, ...totalRows]
+    const body = [...treeVisibleRows, ...totalRows]
       .map(
         (row) =>
           `<tr>${visibleCols
@@ -489,7 +652,7 @@ const ReportViewer = () => {
 </style></head><body>
   ${letterHead ? `<div class="letter">${escapeHtml(letterHead)}</div>` : ""}
   <h1>${escapeHtml(title)}</h1>
-  <div class="meta">${escapeHtml(filterText || "No filters")} · ${filteredRows.length} rows</div>
+  <div class="meta">${escapeHtml(filterText || "No filters")} · ${resultCount} ${isTreeReport ? "employees" : "rows"}</div>
   ${summaryHtml}
   <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
 </body></html>`;
@@ -534,8 +697,14 @@ const ReportViewer = () => {
     setPrintOpen(false);
   };
 
-  const firstRow = filteredRows.length ? (page - 1) * pageSize + 1 : 0;
-  const lastRow = Math.min(page * pageSize, filteredRows.length);
+  const firstRow = (isTreeReport ? rootRows : treeVisibleRows).length
+    ? (page - 1) * pageSize + 1
+    : 0;
+  const lastRow = Math.min(
+    page * pageSize,
+    (isTreeReport ? rootRows : treeVisibleRows).length
+  );
+  const resultCount = isTreeReport ? rootRows.length : treeVisibleRows.length;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-muted/20">
@@ -712,10 +881,39 @@ const ReportViewer = () => {
         ) : null}
 
         <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <Badge variant="secondary" className="font-normal">
-              {filteredRows.length.toLocaleString()} row{filteredRows.length === 1 ? "" : "s"}
+              {resultCount.toLocaleString()}{" "}
+              {isTreeReport ? "employee" : "row"}
+              {resultCount === 1 ? "" : "s"}
+              {isTreeReport ? " (expand for detail)" : ""}
             </Badge>
+            {isTreeReport ? (
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs"
+                  disabled={!expandableIds.length}
+                  onClick={() => setExpandedRows(new Set(expandableIds))}
+                >
+                  <ChevronsUpDown className="h-3.5 w-3.5" />
+                  Expand all
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs"
+                  disabled={!expandedRows.size}
+                  onClick={() => setExpandedRows(new Set())}
+                >
+                  <ChevronsDownUp className="h-3.5 w-3.5" />
+                  Collapse
+                </Button>
+              </div>
+            ) : null}
             {lastRun ? <span>Updated {lastRun.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span> : null}
             {running && rows.length ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
           </div>
@@ -770,23 +968,41 @@ const ReportViewer = () => {
               </TableHeader>
               <TableBody>
                 {visibleRows.length ? (
-                  visibleRows.map((row, rowIndex) => (
-                    <TableRow key={`${page}-${rowIndex}`} className="h-9 even:bg-muted/20 hover:bg-primary/5">
-                      {visibleCols.map((column, columnIndex) => (
-                        <TableCell
-                          key={column.key}
-                          className={mergeClassNames(
-                            "max-w-[28rem] truncate whitespace-nowrap border-r px-3 py-2 last:border-r-0",
-                            NUMERIC_TYPES.has(column.fieldtype) && "font-mono text-right tabular-nums",
-                            columnIndex === 0 && "font-medium"
-                          )}
-                          title={String(row[column.key] ?? "")}
-                        >
-                          {renderCell(row, column)}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
+                  visibleRows.map((row, rowIndex) => {
+                    const id = String(row.row_id || rowKey(row, rowIndex));
+                    const indent = Number(row.indent || 0);
+                    return (
+                      <TableRow
+                        key={id || `${page}-${rowIndex}`}
+                        className={mergeClassNames(
+                          "h-9 hover:bg-primary/5",
+                          indent === 0 ? "even:bg-muted/20" : "bg-background",
+                          indent === 1 && "bg-muted/10",
+                          indent >= 2 && "bg-muted/5",
+                          row.has_children && "cursor-pointer"
+                        )}
+                        onClick={() => {
+                          if (row.has_children && String(row.level || "") !== "total") {
+                            toggleExpand(id);
+                          }
+                        }}
+                      >
+                        {visibleCols.map((column, columnIndex) => (
+                          <TableCell
+                            key={column.key}
+                            className={mergeClassNames(
+                              "max-w-[28rem] truncate whitespace-nowrap border-r px-3 py-2 text-foreground last:border-r-0",
+                              NUMERIC_TYPES.has(column.fieldtype) && "font-mono text-right tabular-nums",
+                              columnIndex === 0 && "font-medium"
+                            )}
+                            title={String(row[column.key] ?? "")}
+                          >
+                            {renderCell(row, column, rowIndex)}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    );
+                  })
                 ) : (
                   <TableRow>
                     <TableCell colSpan={Math.max(visibleCols.length, 1)} className="h-40 text-center">
@@ -807,7 +1023,7 @@ const ReportViewer = () => {
                       <TableCell
                         key={column.key}
                         className={mergeClassNames(
-                          "border-r border-t px-3 py-2 last:border-r-0",
+                          "border-r border-t px-3 py-2 text-foreground last:border-r-0",
                           NUMERIC_TYPES.has(column.fieldtype) && "font-mono text-right tabular-nums"
                         )}
                       >
@@ -823,7 +1039,8 @@ const ReportViewer = () => {
 
         <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 pt-2 text-xs text-muted-foreground">
           <span>
-            Showing {firstRow.toLocaleString()}–{lastRow.toLocaleString()} of {filteredRows.length.toLocaleString()}
+            Showing {firstRow.toLocaleString()}–{lastRow.toLocaleString()} of {resultCount.toLocaleString()}
+            {isTreeReport ? " employees" : ""}
           </span>
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1.5">
