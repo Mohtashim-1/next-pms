@@ -317,7 +317,15 @@ const EditTimeSheetListItem = ({
                           <p className="text-sm">Time</p>
                         </FormLabel>
                         <FormControl>
-                          <TimePickerField className="h-10" value={field.value || ""} onChange={UpdateTime} />
+                          <TimePickerField
+                            className="h-10"
+                            value={field.value || ""}
+                            onChange={UpdateTime}
+                            showNow={false}
+                            minutesStep={15}
+                            ariaLabel="Duration"
+                            placeholder="1:30 or 1.5"
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

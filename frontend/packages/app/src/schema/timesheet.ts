@@ -3,6 +3,8 @@
  */
 import { z } from "zod";
 
+import { parseClockTime, rangeOrderError } from "@/lib/timesheetClockTime";
+
 export const timeFormatRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
 const descriptionSchema = z
   .string({
@@ -98,11 +100,13 @@ const validateDraftDurationOrRange = (
   ctx: z.RefinementCtx
 ) => {
   if (v.input_mode === "range") {
-    if (v.from_time && v.to_time && timeStringToFloat(v.to_time) <= timeStringToFloat(v.from_time)) {
+    const from = parseClockTime(String(v.from_time || ""));
+    const to = parseClockTime(String(v.to_time || ""));
+    if (from && to && timeStringToFloat(to) <= timeStringToFloat(from)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["to_time"],
-        message: "End time must be after start time.",
+        message: rangeOrderError(from, to),
       });
     }
     return;
@@ -140,11 +144,13 @@ const validateDurationOrRange = (
         message: "Please enter an end time.",
       });
     }
-    if (v.from_time && v.to_time && timeStringToFloat(v.to_time) <= timeStringToFloat(v.from_time)) {
+    const from = parseClockTime(String(v.from_time || ""));
+    const to = parseClockTime(String(v.to_time || ""));
+    if (from && to && timeStringToFloat(to) <= timeStringToFloat(from)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["to_time"],
-        message: "End time must be after start time.",
+        message: rangeOrderError(from, to),
       });
     }
     return;

@@ -954,6 +954,9 @@ const ApprovalQueue = () => {
                     className="h-10"
                     value={editForm.from}
                     onChange={(value) => setEditForm((current) => ({ ...current, from: value }))}
+                    hour12
+                    ariaLabel="Start time"
+                    placeholder="9:00 AM"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -962,6 +965,9 @@ const ApprovalQueue = () => {
                     className="h-10"
                     value={editForm.to}
                     onChange={(value) => setEditForm((current) => ({ ...current, to: value }))}
+                    hour12
+                    ariaLabel="End time"
+                    placeholder="5:00 PM"
                   />
                 </div>
               </div>

@@ -483,14 +483,18 @@ export function TimesheetGridDialog({
                     <TimePickerField
                       value={row.from_time}
                       onChange={(value) => updateRow(index, { from_time: value })}
-                      placeholder="09:00"
+                      placeholder="9:00 AM"
+                      hour12
+                      ariaLabel="Start time"
                     />
                   </td>
                   <td className="border-b px-1 py-1 min-w-[100px]">
                     <TimePickerField
                       value={row.to_time}
                       onChange={(value) => updateRow(index, { to_time: value })}
-                      placeholder="17:00"
+                      placeholder="5:00 PM"
+                      hour12
+                      ariaLabel="End time"
                     />
                   </td>
                   {canPickEmployee && (

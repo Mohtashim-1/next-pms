@@ -34,9 +34,10 @@ export const TimeRangeFields = ({
           <TimePickerField
             value={fromTime}
             onChange={onFromTimeChange}
-            placeholder="09:00"
+            placeholder="9:00"
             className="min-w-0 flex-1 h-10"
             ariaLabel="Start time"
+            hour12
           />
           <span className="shrink-0 px-0.5 text-sm text-muted-foreground" aria-hidden>
             –
@@ -44,9 +45,10 @@ export const TimeRangeFields = ({
           <TimePickerField
             value={toTime}
             onChange={onToTimeChange}
-            placeholder="17:00"
+            placeholder="5:00"
             className="min-w-0 flex-1 h-10"
             ariaLabel="End time"
+            hour12
           />
         </div>
         {(fromError || toError) && (
@@ -64,9 +66,10 @@ export const TimeRangeFields = ({
           <TimePickerField
             value={fromTime}
             onChange={onFromTimeChange}
-            placeholder="09:00"
+            placeholder="9:00"
             className="h-10"
             ariaLabel="Start time"
+            hour12
           />
         </FormControl>
         {fromError && <FormMessage>{fromError}</FormMessage>}
@@ -77,9 +80,10 @@ export const TimeRangeFields = ({
           <TimePickerField
             value={toTime}
             onChange={onToTimeChange}
-            placeholder="17:00"
+            placeholder="5:00"
             className="h-10"
             ariaLabel="End time"
+            hour12
           />
         </FormControl>
         {toError && <FormMessage>{toError}</FormMessage>}

@@ -49,6 +49,7 @@ import { getLocalStorage, setLocalStorage } from "@/lib/storage";
 import { isBillableValue } from "@/lib/timesheetBillable";
 import type { TimesheetInputMode } from "@/lib/timesheetTime";
 import { mergeClassNames, parseFrappeErrorMsg } from "@/lib/utils";
+import { getDayPeriod, parseClockTime, rangeOrderError, withDayPeriod } from "@/lib/timesheetClockTime";
 import { TimesheetDraftSchema, timeStringToFloat } from "@/schema/timesheet";
 import type { TaskData } from "@/types";
 import type { AddTimeProps } from "./type";
@@ -272,10 +273,12 @@ const AddTime = ({
       return "Please enter remarks.";
     }
     if (data.input_mode === "range") {
-      if (!data.from_time) return "Please enter a start time.";
-      if (!data.to_time) return "Please enter an end time.";
-      if (timeStringToFloat(data.to_time) <= timeStringToFloat(data.from_time)) {
-        return "End time must be after start time.";
+      const from = parseClockTime(data.from_time || "");
+      const to = parseClockTime(data.to_time || "");
+      if (!from) return "Please enter a start time.";
+      if (!to) return "Please enter an end time.";
+      if (timeStringToFloat(to) <= timeStringToFloat(from)) {
+        return rangeOrderError(from, to);
       }
       return null;
     }
@@ -422,14 +425,27 @@ const AddTime = ({
       },
     });
     if (mode === "range") {
-      if (startInput?.value) {
-        form.setValue("from_time", startInput.value, { shouldDirty: true, shouldValidate: true });
+      // Inputs show the 12h face (`9:00`); AM/PM lives in toggles / form value.
+      const resolveRangeTime = (raw: string | undefined, current: string) => {
+        const trimmed = (raw ?? "").trim();
+        if (!trimmed) return "";
+        const parsed = parseClockTime(trimmed);
+        if (!parsed) return "";
+        if (/\s*(am|pm)$/i.test(trimmed)) return parsed;
+        const period = getDayPeriod(current) || getDayPeriod(parsed) || "AM";
+        return withDayPeriod(parsed, period);
+      };
+      const start = resolveRangeTime(startInput?.value, form.getValues("from_time") || "");
+      const end = resolveRangeTime(endInput?.value, form.getValues("to_time") || "");
+      if (start) {
+        form.setValue("from_time", start, { shouldDirty: true, shouldValidate: true });
       }
-      if (endInput?.value) {
-        form.setValue("to_time", endInput.value, { shouldDirty: true, shouldValidate: true });
+      if (end) {
+        form.setValue("to_time", end, { shouldDirty: true, shouldValidate: true });
       }
     } else if (durationInput?.value) {
-      form.setValue("hours", durationInput.value, { shouldDirty: true, shouldValidate: true });
+      const duration = parseClockTime(durationInput.value, 15) || durationInput.value;
+      form.setValue("hours", duration, { shouldDirty: true, shouldValidate: true });
     }
     debugAddTime("flushTimeFieldsFromDom after", {
       from_time: form.getValues("from_time"),
@@ -737,26 +753,75 @@ const AddTime = ({
           <form onSubmit={form.handleSubmit(handleSubmit, handleInvalidSubmit)}>
             <div className="flex flex-col gap-y-4">
               <InputModeToggle value={inputMode} onChange={handleInputModeChange} />
-              <div className="grid max-sm:gap-y-4 sm:gap-x-4 max-sm:grid-rows-2 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="employee"
-                  render={() => (
-                    <FormItem className="w-full space-y-1">
-                      <FormLabel className="flex gap-2 items-center text-sm">Employee</FormLabel>
-                      <FormControl>
-                        <EmployeeCombo
-                          onSelect={onEmployeeChange}
-                          value={selectedEmployee}
-                          employeeName={employeeName}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className={mergeClassNames("grid gap-x-4", inputMode === "range" ? "grid-cols-1" : "grid-cols-2")}>
-                  {inputMode === "duration" ? (
+              {inputMode === "range" ? (
+                <>
+                  <div className="grid max-sm:gap-y-4 sm:gap-x-4 max-sm:grid-rows-2 sm:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="employee"
+                      render={() => (
+                        <FormItem className="w-full space-y-1">
+                          <FormLabel className="flex gap-2 items-center text-sm">Employee</FormLabel>
+                          <FormControl>
+                            <EmployeeCombo
+                              onSelect={onEmployeeChange}
+                              value={selectedEmployee}
+                              employeeName={employeeName}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="date"
+                      render={({ field }) => (
+                        <FormItem className="w-full space-y-1">
+                          <FormLabel className="flex gap-2 items-center text-sm">Date</FormLabel>
+                          <FormControl>
+                            <DatePicker date={field.value} onDateChange={handleDateChange} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <TimeRangeFields
+                    fromTime={form.watch("from_time") || ""}
+                    toTime={form.watch("to_time") || ""}
+                    onFromTimeChange={(value) => {
+                      debugAddTime("from_time setValue", { value });
+                      form.setValue("from_time", value, { shouldDirty: true, shouldValidate: true });
+                    }}
+                    onToTimeChange={(value) => {
+                      debugAddTime("to_time setValue", { value });
+                      form.setValue("to_time", value, { shouldDirty: true, shouldValidate: true });
+                    }}
+                    fromError={form.formState.errors.from_time?.message}
+                    toError={form.formState.errors.to_time?.message}
+                  />
+                </>
+              ) : (
+                <div className="grid max-sm:gap-y-4 sm:gap-x-4 max-sm:grid-rows-2 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="employee"
+                    render={() => (
+                      <FormItem className="w-full space-y-1">
+                        <FormLabel className="flex gap-2 items-center text-sm">Employee</FormLabel>
+                        <FormControl>
+                          <EmployeeCombo
+                            onSelect={onEmployeeChange}
+                            value={selectedEmployee}
+                            employeeName={employeeName}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="grid gap-x-4 grid-cols-2">
                     <FormField
                       control={form.control}
                       name="hours"
@@ -773,44 +838,31 @@ const AddTime = ({
                               value={field.value ? String(field.value) : ""}
                               onChange={UpdateTime}
                               showNow={false}
+                              minutesStep={15}
                               ariaLabel="Duration"
+                              placeholder="1:30 or 1.5"
                             />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                  ) : (
-                    <TimeRangeFields
-                      fromTime={form.watch("from_time") || ""}
-                      toTime={form.watch("to_time") || ""}
-                      onFromTimeChange={(value) => {
-                        debugAddTime("from_time setValue", { value });
-                        form.setValue("from_time", value, { shouldDirty: true, shouldValidate: true });
-                      }}
-                      onToTimeChange={(value) => {
-                        debugAddTime("to_time setValue", { value });
-                        form.setValue("to_time", value, { shouldDirty: true, shouldValidate: true });
-                      }}
-                      fromError={form.formState.errors.from_time?.message}
-                      toError={form.formState.errors.to_time?.message}
+                    <FormField
+                      control={form.control}
+                      name="date"
+                      render={({ field }) => (
+                        <FormItem className="w-full space-y-1">
+                          <FormLabel className="flex gap-2 items-center text-sm">Date</FormLabel>
+                          <FormControl>
+                            <DatePicker date={field.value} onDateChange={handleDateChange} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                  )}
-                  <FormField
-                    control={form.control}
-                    name="date"
-                    render={({ field }) => (
-                      <FormItem className="w-full space-y-1">
-                        <FormLabel className="flex gap-2 items-center text-sm">Date</FormLabel>
-                        <FormControl>
-                          <DatePicker date={field.value} onDateChange={handleDateChange} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="grid gap-x-4 grid-cols-2">
                 <FormItem className="space-y-1">
                   <FormLabel>Projects <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>

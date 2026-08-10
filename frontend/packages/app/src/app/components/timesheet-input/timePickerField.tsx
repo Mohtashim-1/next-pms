@@ -1,15 +1,25 @@
 /**
  * Time / duration field with optional air-datepicker sliders.
- * - Typing in the input always works.
- * - Clock icon opens the slider popup; it stays open while you drag,
- *   and closes only on outside click, Tab to another field, Enter, or Escape.
+ *
+ * - Duration: 24h `HH:mm` (optional 15-minute steps, decimal hours like 1.5).
+ * - Start/End: 12h display with explicit AM/PM toggles; form value stays 24h `HH:mm`.
+ *
+ * "Current time" comes from the browser clock (`new Date()`), never the server.
  */
 import { useEffect, useRef } from "react";
 import AirDatepicker from "air-datepicker";
-import { floatToTime, mergeClassNames } from "@next-pms/design-system/utils";
+import localeEn from "air-datepicker/locale/en";
+import { mergeClassNames } from "@next-pms/design-system/utils";
 import { Clock3 } from "lucide-react";
 
-import { formatTime } from "@/lib/utils";
+import {
+  formatClockDisplay,
+  formatClockFace,
+  getDayPeriod,
+  parseClockTime,
+  withDayPeriod,
+  type DayPeriod,
+} from "@/lib/timesheetClockTime";
 
 import "air-datepicker/air-datepicker.css";
 import "./timePickerField.css";
@@ -19,32 +29,13 @@ type TimePickerFieldProps = {
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
-  /** The "Now" shortcut only makes sense for clock times, not for durations. */
   showNow?: boolean;
   ariaLabel?: string;
+  minutesStep?: number;
+  hour12?: boolean;
 };
 
-/** Custom event — picker opens from the clock icon, not on every focus. */
 const OPEN_PICKER_EVENT = "nextpms:open-timepicker";
-
-function toTimeValue(raw: string): string {
-  const trimmed = (raw ?? "").trim();
-  if (!trimmed) return "";
-  try {
-    let time = trimmed;
-    if (!time.includes(":")) {
-      const numeric = Number(time);
-      if (Number.isNaN(numeric)) return "";
-      time = floatToTime(numeric, 2, 2);
-    }
-    const [hours, minutes] = formatTime(time).split(":").map(Number);
-    if (Number.isNaN(hours) || Number.isNaN(minutes)) return "";
-    if (hours > 23) return "23:59";
-    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-  } catch {
-    return "";
-  }
-}
 
 function toDate(time: string): Date {
   const [hours, minutes] = time.split(":").map(Number);
@@ -53,12 +44,19 @@ function toDate(time: string): Date {
   return date;
 }
 
-function fromDate(date: Date): string {
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+function fromDate(date: Date, minutesStep = 1): string {
+  return parseClockTime(
+    `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`,
+    minutesStep
+  );
 }
 
-function looksComplete(raw: string): boolean {
-  return /^\d{1,2}:\d{2}$/.test((raw ?? "").trim());
+function looksComplete(raw: string, hour12: boolean): boolean {
+  const trimmed = (raw ?? "").trim();
+  if (/^\d{1,2}:\d{2}$/.test(trimmed)) return true;
+  if (/^\d+(\.\d{1,2})?$/.test(trimmed)) return true;
+  if (hour12 && /^\d{1,2}(?::[0-5]?\d)?\s*(am|pm)$/i.test(trimmed)) return true;
+  return false;
 }
 
 const debugTimePicker = (label: string, ariaLabel: string | undefined, details?: unknown) => {
@@ -68,10 +66,12 @@ const debugTimePicker = (label: string, ariaLabel: string | undefined, details?:
 export const TimePickerField = ({
   value,
   onChange,
-  placeholder = "00:00",
+  placeholder,
   className,
   showNow = true,
   ariaLabel,
+  minutesStep = 1,
+  hour12 = false,
 }: TimePickerFieldProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -80,16 +80,45 @@ export const TimePickerField = ({
   onChangeRef.current = onChange;
   const valueRef = useRef(value);
   valueRef.current = value;
+  const minutesStepRef = useRef(minutesStep);
+  minutesStepRef.current = minutesStep;
+  const hour12Ref = useRef(hour12);
+  hour12Ref.current = hour12;
   const focusedRef = useRef(false);
   const ignorePickerSelectRef = useRef(false);
-  /** True while pointer is down inside the slider popup — blur must not close it. */
   const pointerInPickerRef = useRef(false);
   const pickerOpenRef = useRef(false);
 
   const isLarge = className?.includes("h-10");
+  const isQuarterHour = minutesStep > 1;
+  // With AM/PM toggles, the input shows only the clock face (`9:00`).
+  const resolvedPlaceholder =
+    placeholder || (hour12 ? "9:00" : isQuarterHour ? "1:30 or 1.5" : "00:00");
+  const activePeriod = getDayPeriod(value) || "AM";
+
+  const toInputDisplay = (hhmm: string) =>
+    hour12Ref.current ? formatClockFace(hhmm) : formatClockDisplay(hhmm, false);
+
+  const writeInputDisplay = (hhmm: string) => {
+    if (!inputRef.current) return;
+    inputRef.current.value = toInputDisplay(hhmm);
+  };
+
+  /** Parse typed text; if hour12 and no am/pm suffix, keep the active period. */
+  const normalizeTyped = (raw: string) => {
+    const trimmed = (raw ?? "").trim();
+    if (!trimmed) return "";
+    let normalized = parseClockTime(trimmed, minutesStepRef.current);
+    if (!normalized) return "";
+    if (hour12Ref.current && !/\s*(am|pm)$/i.test(trimmed)) {
+      const period = getDayPeriod(valueRef.current) || "AM";
+      normalized = withDayPeriod(normalized, period);
+    }
+    return normalized;
+  };
 
   const commitTypedValue = (raw: string, hidePicker: boolean) => {
-    const normalized = toTimeValue(raw);
+    const normalized = normalizeTyped(raw);
     debugTimePicker("commitTypedValue", ariaLabel, { raw, normalized, hidePicker });
     ignorePickerSelectRef.current = true;
 
@@ -102,17 +131,12 @@ export const TimePickerField = ({
       if (inputRef.current) inputRef.current.value = raw;
       onChange(raw.trim());
     } else {
-      if (inputRef.current) inputRef.current.value = normalized;
+      writeInputDisplay(normalized);
       onChange(normalized);
       const picker = pickerRef.current;
-      if (picker && !hidePicker) {
+      if (picker) {
         const selected = picker.selectedDates[0];
-        if (!selected || fromDate(selected) !== normalized) {
-          picker.selectDate(toDate(normalized), { silent: true });
-        }
-      } else if (picker && hidePicker) {
-        const selected = picker.selectedDates[0];
-        if (!selected || fromDate(selected) !== normalized) {
+        if (!selected || fromDate(selected, minutesStepRef.current) !== normalized) {
           picker.selectDate(toDate(normalized), { silent: true });
         }
       }
@@ -123,6 +147,26 @@ export const TimePickerField = ({
     }, 0);
   };
 
+  const applyPeriod = (period: DayPeriod) => {
+    const face =
+      parseClockTime(inputRef.current?.value || "", minutesStep) ||
+      parseClockTime(value, minutesStep) ||
+      "09:00";
+    const current = withDayPeriod(face, getDayPeriod(value) || getDayPeriod(face) || "AM");
+    const next = withDayPeriod(current, period);
+    debugTimePicker("AM/PM toggle", ariaLabel, { current, period, next });
+    writeInputDisplay(next);
+    onChange(next);
+    const picker = pickerRef.current;
+    if (picker) {
+      ignorePickerSelectRef.current = true;
+      picker.selectDate(toDate(next), { silent: true });
+      window.setTimeout(() => {
+        ignorePickerSelectRef.current = false;
+      }, 0);
+    }
+  };
+
   useEffect(() => {
     if (!inputRef.current || !containerRef.current) return;
 
@@ -130,10 +174,12 @@ export const TimePickerField = ({
       container: containerRef.current,
       timepicker: true,
       onlyTimepicker: true,
-      timeFormat: "HH:mm",
+      locale: hour12 ? localeEn : { ...localeEn, timeFormat: "HH:mm" },
+      timeFormat: hour12 ? "hh:mm aa" : "HH:mm",
       autoClose: false,
       isMobile: false,
       keyboardNav: false,
+      minutesStep: minutesStep > 1 ? minutesStep : 1,
       showEvent: OPEN_PICKER_EVENT,
       ...(showNow
         ? {
@@ -141,9 +187,13 @@ export const TimePickerField = ({
               {
                 content: "Now",
                 onClick: (instance: AirDatepicker) => {
+                  const now = new Date();
+                  debugTimePicker("Now button", ariaLabel, {
+                    source: "browser new Date()",
+                    local: now.toString(),
+                  });
                   ignorePickerSelectRef.current = false;
-                  instance.selectDate(new Date());
-                  // Keep open — user closes by clicking outside / leaving field.
+                  instance.selectDate(now);
                 },
               },
             ],
@@ -152,16 +202,15 @@ export const TimePickerField = ({
       onShow: (isFinished) => {
         if (!isFinished) return;
         pickerOpenRef.current = true;
-        const seed = toTimeValue(valueRef.current) || toTimeValue(inputRef.current?.value || "");
-        const next = seed || fromDate(new Date());
-        debugTimePicker("picker onShow", ariaLabel, { seed, next });
+        const step = minutesStepRef.current;
+        const seed =
+          parseClockTime(valueRef.current, step) || parseClockTime(inputRef.current?.value || "", step);
+        const next = seed || fromDate(new Date(), step);
         ignorePickerSelectRef.current = true;
-        if (!picker.selectedDates.length || (seed && fromDate(picker.selectedDates[0]) !== seed)) {
+        if (!picker.selectedDates.length || (seed && fromDate(picker.selectedDates[0], step) !== seed)) {
           picker.selectDate(toDate(next), { silent: true });
         }
-        if (inputRef.current && seed) {
-          inputRef.current.value = seed;
-        }
+        if (inputRef.current && seed) writeInputDisplay(seed);
         window.setTimeout(() => {
           ignorePickerSelectRef.current = false;
         }, 0);
@@ -173,23 +222,25 @@ export const TimePickerField = ({
         if (ignorePickerSelectRef.current) return;
         const selected = Array.isArray(date) ? date[0] : date;
         if (!selected) return;
-        const next = fromDate(selected);
-        debugTimePicker("picker onSelect", ariaLabel, { next });
-        if (inputRef.current) inputRef.current.value = next;
+        const next = fromDate(selected, minutesStepRef.current);
+        writeInputDisplay(next);
         onChangeRef.current(next);
-        // Do NOT hide — stay open until outside click / other field / Escape.
       },
     });
     pickerRef.current = picker;
     inputRef.current.removeAttribute("readonly");
+    if (valueRef.current) {
+      const normalized = parseClockTime(valueRef.current, minutesStep);
+      if (normalized) writeInputDisplay(normalized);
+    }
 
     return () => {
       picker.destroy();
       pickerRef.current = null;
     };
-  }, [ariaLabel, showNow]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ariaLabel, hour12, minutesStep, showNow]);
 
-  // Keep popup open while dragging sliders; close only on true outside click.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -197,27 +248,19 @@ export const TimePickerField = ({
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (!target) return;
-
       const pickerEl = container.querySelector(".air-datepicker");
       const insidePicker = Boolean(pickerEl?.contains(target));
       const insideField = container.contains(target);
-
       if (insidePicker) {
         pointerInPickerRef.current = true;
         return;
       }
-
       pointerInPickerRef.current = false;
-
-      // Clicked outside this field entirely while picker is open → commit + close.
       if (pickerOpenRef.current && !insideField) {
-        debugTimePicker("outside click -> close", ariaLabel, {});
         commitTypedValue(inputRef.current?.value || "", true);
       }
     };
-
     const onPointerUp = () => {
-      // Allow a following blur to see the flag during the same gesture.
       window.setTimeout(() => {
         pointerInPickerRef.current = false;
       }, 0);
@@ -238,7 +281,7 @@ export const TimePickerField = ({
     if (!picker || !input) return;
     if (focusedRef.current || document.activeElement === input || pickerOpenRef.current) return;
 
-    const normalized = toTimeValue(value);
+    const normalized = parseClockTime(value, minutesStep);
     if (!normalized) {
       if (picker.selectedDates.length) picker.clear({ silent: true });
       if (input.value !== "") input.value = "";
@@ -246,108 +289,136 @@ export const TimePickerField = ({
     }
 
     const selected = picker.selectedDates[0];
-    if (!selected || fromDate(selected) !== normalized) {
+    if (!selected || fromDate(selected, minutesStep) !== normalized) {
       ignorePickerSelectRef.current = true;
       picker.selectDate(toDate(normalized), { silent: true });
       ignorePickerSelectRef.current = false;
     }
-    if (input.value !== normalized) input.value = normalized;
-  }, [value]);
+    const display = hour12 ? formatClockFace(normalized) : formatClockDisplay(normalized, false);
+    if (input.value !== display) input.value = display;
+  }, [hour12, minutesStep, value]);
 
   const openPicker = () => {
     const input = inputRef.current;
     const picker = pickerRef.current;
     if (!input || !picker) return;
     input.removeAttribute("readonly");
-    const seed = toTimeValue(input.value) || toTimeValue(valueRef.current);
+    const seed = normalizeTyped(input.value) || parseClockTime(valueRef.current, minutesStep);
     if (seed) {
       ignorePickerSelectRef.current = true;
       picker.selectDate(toDate(seed), { silent: true });
-      input.value = seed;
+      writeInputDisplay(seed);
       window.setTimeout(() => {
         ignorePickerSelectRef.current = false;
       }, 0);
     }
     input.focus({ preventScroll: true });
-    debugTimePicker("open picker via clock", ariaLabel, { seed });
     input.dispatchEvent(new Event(OPEN_PICKER_EVENT));
   };
 
   return (
-    <div ref={containerRef} className="relative w-full">
-      <button
-        type="button"
-        tabIndex={-1}
-        className="absolute left-0 top-0 z-10 flex h-full w-9 items-center justify-center text-muted-foreground hover:text-foreground"
-        aria-label={`Open ${ariaLabel || "time"} picker`}
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          openPicker();
-        }}
-      >
-        <Clock3 className="h-4 w-4" />
-      </button>
-      <input
-        ref={inputRef}
-        type="text"
-        inputMode="numeric"
-        autoComplete="off"
-        spellCheck={false}
-        aria-label={ariaLabel}
-        placeholder={placeholder}
-        defaultValue={toTimeValue(value)}
-        onFocus={() => {
-          focusedRef.current = true;
-          inputRef.current?.removeAttribute("readonly");
-        }}
-        onChange={(event) => {
-          const raw = event.target.value;
-          if (looksComplete(raw)) {
-            const normalized = toTimeValue(raw);
-            onChange(normalized || raw);
-          }
-        }}
-        onBlur={() => {
-          focusedRef.current = false;
-          // Clicking the slider blurs the input — keep the popup open in that case.
-          window.setTimeout(() => {
-            if (pointerInPickerRef.current || pickerOpenRef.current) {
-              debugTimePicker("blur ignored (picker still open)", ariaLabel, {
-                pointerInPicker: pointerInPickerRef.current,
-                pickerOpen: pickerOpenRef.current,
-              });
-              return;
-            }
-            const active = document.activeElement;
-            if (containerRef.current?.contains(active)) return;
-            commitTypedValue(inputRef.current?.value || "", true);
-          }, 0);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
+    <div ref={containerRef} className="relative w-full min-w-0">
+      <div className="relative w-full min-w-[7.5rem]">
+        <button
+          type="button"
+          tabIndex={-1}
+          className="absolute left-0 top-0 z-10 flex h-full w-9 items-center justify-center text-muted-foreground hover:text-foreground"
+          aria-label={`Open ${ariaLabel || "time"} picker`}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            commitTypedValue((event.target as HTMLInputElement).value, true);
-            (event.target as HTMLInputElement).blur();
-            return;
+            openPicker();
+          }}
+        >
+          <Clock3 className="h-4 w-4" />
+        </button>
+        <input
+          ref={inputRef}
+          type="text"
+          inputMode="text"
+          autoComplete="off"
+          spellCheck={false}
+          aria-label={ariaLabel}
+          placeholder={resolvedPlaceholder}
+          defaultValue={
+            hour12
+              ? formatClockFace(parseClockTime(value, minutesStep))
+              : formatClockDisplay(parseClockTime(value, minutesStep), false)
           }
-          if (event.key === "Tab") {
-            event.stopPropagation();
-            commitTypedValue((event.target as HTMLInputElement).value, true);
-          }
-          if (event.key === "Escape") {
-            pickerRef.current?.hide();
-            pickerOpenRef.current = false;
-          }
-        }}
-        className={mergeClassNames(
-          "w-full cursor-text rounded-md border border-input bg-background pl-9 pr-3 text-foreground shadow-sm ring-offset-background transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-          isLarge ? "h-10 text-sm" : "h-8 text-xs",
-          className
-        )}
-      />
+          onFocus={() => {
+            focusedRef.current = true;
+            inputRef.current?.removeAttribute("readonly");
+          }}
+          onChange={(event) => {
+            const raw = event.target.value;
+            if (looksComplete(raw, hour12)) {
+              const normalized = normalizeTyped(raw);
+              if (normalized) onChange(normalized);
+            }
+          }}
+          onBlur={() => {
+            focusedRef.current = false;
+            window.setTimeout(() => {
+              if (pointerInPickerRef.current || pickerOpenRef.current) return;
+              const active = document.activeElement;
+              if (containerRef.current?.contains(active)) return;
+              commitTypedValue(inputRef.current?.value || "", true);
+            }, 0);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              event.stopPropagation();
+              commitTypedValue((event.target as HTMLInputElement).value, true);
+              (event.target as HTMLInputElement).blur();
+              return;
+            }
+            if (event.key === "Tab") {
+              event.stopPropagation();
+              commitTypedValue((event.target as HTMLInputElement).value, true);
+            }
+            if (event.key === "Escape") {
+              pickerRef.current?.hide();
+              pickerOpenRef.current = false;
+            }
+          }}
+          className={mergeClassNames(
+            "w-full min-w-0 cursor-text rounded-md border border-input bg-background pl-9 text-foreground shadow-sm ring-offset-background transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            hour12 ? "pr-[4.75rem]" : "pr-3",
+            isLarge ? "h-10 text-sm" : "h-8 text-xs",
+            className
+          )}
+        />
+        {hour12 ? (
+          <div
+            className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 overflow-hidden rounded-md border border-input bg-muted/50 p-0.5"
+            role="group"
+            aria-label={`${ariaLabel || "Time"} AM/PM`}
+          >
+            {(["AM", "PM"] as DayPeriod[]).map((period) => {
+              const selected = activePeriod === period;
+              return (
+                <button
+                  key={period}
+                  type="button"
+                  className={mergeClassNames(
+                    "rounded-sm px-1.5 text-[10px] font-semibold leading-5 transition-colors",
+                    selected
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  aria-pressed={selected}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => applyPeriod(period)}
+                >
+                  {period}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 };

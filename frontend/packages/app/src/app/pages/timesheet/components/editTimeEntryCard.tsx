@@ -147,6 +147,10 @@ export const EditTimeEntryCard = ({
                     <TimePickerField
                       className="h-10"
                       value={field.value || ""}
+                      showNow={false}
+                      minutesStep={15}
+                      ariaLabel="Duration"
+                      placeholder="1:30 or 1.5"
                       onChange={(time) => {
                         field.onChange(time);
                         form.setValue(`data.${index}.hours`, time, {
