@@ -228,14 +228,17 @@ def _append_time_log(
     elif not force_new and activity_type:
         # Activity-only logs (Meeting/Admin/…) — never merge solely on work type.
         # Two Meetings on the same day are two entries; only collapse an in-flight
-        # autosave of the same row.
+        # autosave of the same row. Always scope by project so distinct projects
+        # stay on separate grid rows.
         activity_type = activity_type.strip()
         day = getdate(from_time)
+        project_key = project or ""
         candidates = [
             log
             for log in timesheet.time_logs
             if not log.task
             and (log.activity_type or "").strip() == activity_type
+            and (log.project or "") == project_key
             and getdate(log.from_time) == day
         ]
         existing_log = _find_autosave_match(candidates, description, input_mode)
@@ -1114,6 +1117,7 @@ def update_timesheet_detail(
     to_time: str | None = None,
     input_mode: str = "duration",
     activity_type: str | None = None,
+    project: str | None = None,
 ):
     parent_doc = frappe.get_doc("Timesheet", parent)
     _assert_week_editable(parent_doc.employee, parent_doc.start_date)
@@ -1122,10 +1126,14 @@ def update_timesheet_detail(
     new_logs = []
     task = (task or "").strip() or None
     activity_type = (activity_type or "").strip() or None
+    project = (project or "").strip() or None
     task_project = frappe.get_value("Task", task, "project") if task else None
+    resolved_project = task_project or project
     existing_log = next((log for log in parent_doc.time_logs if name and log.name == name), None)
     if not activity_type and existing_log:
         activity_type = (existing_log.activity_type or "").strip() or None
+    if not resolved_project and existing_log:
+        resolved_project = (existing_log.project or "").strip() or None
     if input_mode == "duration":
         resolved_from, resolved_to, resolved_hours = _resolve_duration_time_slot(
             employee=parent_doc.employee,
@@ -1154,6 +1162,7 @@ def update_timesheet_detail(
             "from_time": str(resolved_from),
             "to_time": str(resolved_to),
             "input_mode": input_mode,
+            "project": resolved_project,
         }
         if activity_type:
             payload["activity_type"] = activity_type
@@ -1176,6 +1185,8 @@ def update_timesheet_detail(
         log.task = task
         log.from_time = resolved_from
         log.to_time = resolved_to
+        if resolved_project:
+            log.project = resolved_project
         if activity_type:
             log.activity_type = activity_type
         if is_billable is not None:
@@ -1184,6 +1195,7 @@ def update_timesheet_detail(
                 is_billable,
                 billable_override_reason,
                 require_override_reason=True,
+                project=resolved_project,
             )
             log.is_billable = resolved_billable
             log.custom_billable_override_reason = override_reason
@@ -1202,19 +1214,24 @@ def update_timesheet_detail(
                 "description": set_input_mode_marker(description, input_mode),
                 "from_time": resolved_from,
                 "to_time": resolved_to,
-                "project": task_project,
+                "project": resolved_project,
             }
+            if activity_type:
+                log["activity_type"] = activity_type
             if is_billable is not None:
                 resolved_billable, override_reason, _default = resolve_entry_billable(
                     task,
                     is_billable,
                     billable_override_reason,
                     require_override_reason=True,
+                    project=resolved_project,
                 )
                 log["is_billable"] = resolved_billable
                 log["custom_billable_override_reason"] = override_reason
             else:
-                default_billable, _billable_default, _override_reason = resolve_entry_billable(task)
+                default_billable, _billable_default, _override_reason = resolve_entry_billable(
+                    task, project=resolved_project
+                )
                 log["is_billable"] = default_billable
 
             parent_doc.append("time_logs", log)
@@ -1234,7 +1251,7 @@ def update_timesheet_detail(
 
 
 def get_timesheet(dates: list, employee: str):
-    from next_pms.timesheet.utils.constant import ACTIVITY_ROW_PREFIX, ALLOWED_TIMESHET_DETAIL_FIELDS
+    from next_pms.timesheet.utils.constant import ALLOWED_TIMESHET_DETAIL_FIELDS, activity_row_key
 
     """Return the time entry from Timesheet Detail child table based on the list of dates and for the given employee.
     example:
@@ -1257,7 +1274,8 @@ def get_timesheet(dates: list, employee: str):
         }
 
     Logs without a Task but with an Activity Type (Admin, Dev, …) are returned under
-    synthetic keys ``activity::<Activity Type>`` so the Next PMS grid can show them.
+    synthetic keys ``activity::<Activity Type>::<Project>`` so the Next PMS grid can
+    show one row per work type + project combination.
     """
     data = {}
     total_hours = 0
@@ -1326,7 +1344,8 @@ def get_timesheet(dates: list, employee: str):
                 # Orphan task reference — still count hours under activity if present
                 activity = (log.activity_type or "").strip()
                 if activity:
-                    row_key = f"{ACTIVITY_ROW_PREFIX}{activity}"
+                    project = log.project or ""
+                    row_key = activity_row_key(activity, project)
                     _append_log_to_row(
                         row_key,
                         {
@@ -1338,8 +1357,8 @@ def get_timesheet(dates: list, employee: str):
                             "description_required": False,
                             "show_description_in_approval": False,
                             "include_description_on_invoice": False,
-                            "project_name": None,
-                            "project": log.project or "",
+                            "project_name": frappe.db.get_value("Project", project, "project_name") if project else None,
+                            "project": project,
                             "expected_time": 0,
                             "actual_time": 0,
                             "status": "Open",
@@ -1348,7 +1367,7 @@ def get_timesheet(dates: list, employee: str):
                             "activity_type": activity,
                         },
                         log,
-                        log.project,
+                        project or None,
                         None,
                     )
                 else:
@@ -1384,14 +1403,14 @@ def get_timesheet(dates: list, employee: str):
             )
             continue
 
-        # No task — group by activity type (Admin, Dev, …)
+        # No task — group by activity type + project (Admin, Dev, …)
         activity = (log.activity_type or "").strip()
         if not activity:
             total_hours += log.hours
             continue
 
-        row_key = f"{ACTIVITY_ROW_PREFIX}{activity}"
         project = log.project or ""
+        row_key = activity_row_key(activity, project)
         project_default = get_project_default_is_billable(project) if project else 0
         description_settings = get_project_description_settings(project) if project else {
             "required": False,
@@ -1497,13 +1516,34 @@ def get_remaining_hour_for_employee(employee: str, date: str):
 
 @frappe.whitelist()
 @validate_current_employee(ptype="read")
-def get_timesheet_details(date: str, task: str = None, employee: str = None, activity_type: str = None):
-    from next_pms.timesheet.utils.constant import ACTIVITY_ROW_PREFIX
+def get_timesheet_details(
+    date: str,
+    task: str = None,
+    employee: str = None,
+    activity_type: str = None,
+    project: str = None,
+):
+    from next_pms.timesheet.utils.constant import ACTIVITY_ROW_PREFIX, parse_activity_row_key
 
     task = (task or "").strip()
     activity_type = (activity_type or "").strip() or None
+    # Only filter by project when the client explicitly sent it (new UI).
+    # Older builds omit the arg — do not treat that as "no project" or the dialog goes empty.
+    filter_by_project = "project" in (frappe.form_dict or {})
+    if filter_by_project:
+        project = (frappe.form_dict.get("project") or "").strip()
+    else:
+        project = (project or "").strip() if project is not None else None
+        filter_by_project = project is not None
+
     if task.startswith(ACTIVITY_ROW_PREFIX):
-        activity_type = task[len(ACTIVITY_ROW_PREFIX) :]
+        parsed_activity, parsed_project = parse_activity_row_key(task)
+        activity_type = activity_type or parsed_activity
+        # Keys look like activity::<type>::<project>; empty project segment is still explicit.
+        rest = task[len(ACTIVITY_ROW_PREFIX) :]
+        if "::" in rest and not filter_by_project:
+            filter_by_project = True
+            project = parsed_project or ""
         task = ""
 
     logs = frappe.get_list(
@@ -1540,14 +1580,19 @@ def get_timesheet_details(date: str, task: str = None, employee: str = None, act
         project_id = task_project.project if task_project else None
         is_activity_row = False
     else:
-        # Activity-only rows (Admin / Dev / …) — no Task on the time log
+        # Activity-only rows (Admin / Dev / …) — no Task on the time log.
         logs = [
             log
             for log in logs
             if not log.get("task")
             and (log.get("activity_type") or "").strip() == (activity_type or "")
         ]
-        project_id = next((log.get("project") for log in logs if log.get("project")), None)
+        if filter_by_project:
+            project_key = project or ""
+            logs = [log for log in logs if (log.get("project") or "") == project_key]
+            project_id = project or None
+        else:
+            project_id = next((log.get("project") for log in logs if log.get("project")), None)
         project_name = frappe.db.get_value("Project", project_id, "project_name") if project_id else ""
         project_default = get_project_default_is_billable(project_id)
         description_settings = get_project_description_settings(project_id)
@@ -1564,10 +1609,12 @@ def get_timesheet_details(date: str, task: str = None, employee: str = None, act
         if is_activity_row:
             log["task"] = ""
             log["activity_type"] = activity_type
+            log["project"] = log.get("project") or project_id or ""
 
     return {
         "task": title,
         "project": project_name or "",
+        "project_id": project_id or "",
         "project_default_is_billable": project_default,
         "description_required": description_settings["required"],
         "show_description_in_approval": description_settings["show_in_approval"],
@@ -1614,6 +1661,7 @@ def bulk_save(timesheet_entries: list):
             activity_type=entry.get("activity_type"),
             is_billable=entry.get("is_billable"),
             billable_override_reason=entry.get("billable_override_reason"),
+            project=entry.get("project"),
         )
 
     return _("Event Timesheet created successfully.")

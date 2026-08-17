@@ -59,6 +59,7 @@ export interface TeamState {
     description: string;
     hours: number;
     project?: string;
+    activity_type?: string;
   };
   hasViewUpdated: boolean;
   timesheetData: timesheetDataProps;

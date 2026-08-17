@@ -85,6 +85,8 @@ export const EmployeeDetailHeader = ({ state, dispatch, employeeId }: EmployeeDe
           employee={state.employee}
           date={state.timesheet.date}
           task={state.timesheet.task}
+          activity_type={state.timesheet.activity_type}
+          project={state.timesheet.project}
           user={user}
           onClose={() => {
             dispatch({ type: "SET_EDIT_DIALOG", payload: false });

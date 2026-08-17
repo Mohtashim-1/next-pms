@@ -128,6 +128,7 @@ export const EditableCell = ({
 
   const taskName = data?.[0]?.task ?? primaryEntry?.task;
   const activityType = data?.[0]?.activity_type ?? primaryEntry?.activity_type ?? "";
+  const projectId = data?.[0]?.project ?? primaryEntry?.project ?? "";
   const canPersistWithoutTask = Boolean(activityType) || Boolean(primaryEntry?.name && primaryEntry?.parent);
 
   const openDetailDialog = useCallback(() => {
@@ -222,6 +223,7 @@ export const EditableCell = ({
             date,
             input_mode: "duration",
             activity_type: activityType || undefined,
+            project: projectId || undefined,
           };
           debugInlineEdit("update payload", payload);
           const response = await updateTimesheet(payload);
@@ -238,6 +240,7 @@ export const EditableCell = ({
             employee,
             input_mode: "duration",
             activity_type: activityType || undefined,
+            project: projectId || undefined,
           };
           debugInlineEdit("save payload", payload);
           const response = await saveTimesheet(payload);
@@ -284,6 +287,7 @@ export const EditableCell = ({
       data,
       taskName,
       activityType,
+      projectId,
       canPersistWithoutTask,
       date,
       employee,

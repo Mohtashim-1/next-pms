@@ -51,6 +51,7 @@ export const EditTime = ({
   date,
   task,
   activity_type = "",
+  project = "",
   open,
   onClose,
   onChanged,
@@ -82,18 +83,33 @@ export const EditTime = ({
   const { toast } = useToast();
   const { call: updateTimesheet } = useFrappePostCall("next_pms.timesheet.api.timesheet.bulk_update_timesheet_detail");
   const { call: deleteTimesheet } = useFrappePostCall("next_pms.timesheet.api.timesheet.delete");
-  const resolvedActivityType = activity_type || (task?.startsWith("activity::") ? task.replace(/^activity::/, "") : "");
+  const resolvedActivityType = useMemo(() => {
+    if (activity_type) return activity_type;
+    if (!task?.startsWith("activity::")) return "";
+    // activity::<type> or activity::<type>::<project>
+    const rest = task.replace(/^activity::/, "");
+    return rest.split("::")[0] || "";
+  }, [activity_type, task]);
   const resolvedTask = task?.startsWith("activity::") ? "" : task || "";
+  const resolvedProject = useMemo(() => {
+    if (project) return project;
+    if (!task?.startsWith("activity::")) return "";
+    const rest = task.replace(/^activity::/, "");
+    const parts = rest.split("::");
+    return parts.length > 1 ? parts.slice(1).join("::") : "";
+  }, [project, task]);
   const { data, isLoading, mutate } = useFrappeGetCall("next_pms.timesheet.api.timesheet.get_timesheet_details", {
     employee: employee,
     date: date,
     task: resolvedTask,
     activity_type: resolvedActivityType || undefined,
+    project: resolvedProject || undefined,
   });
   const projectDefaultIsBillable = data?.message?.project_default_is_billable;
   const descriptionRequired = Boolean(data?.message?.description_required);
   const entryLabel = data?.message?.task || resolvedActivityType || "Time entry";
   const isActivityRow = Boolean(data?.message?.is_activity_row || resolvedActivityType);
+  const dialogProjectId = data?.message?.project_id || resolvedProject || "";
 
   const updatedData = useMemo(() => {
     if (!data) return [];
@@ -110,10 +126,11 @@ export const EditTime = ({
         billable_override_reason: item.billable_override_reason || "",
         activity_type: item.activity_type || resolvedActivityType || data.message.activity_type || "",
         task: item.task || resolvedTask || "",
+        project: item.project || dialogProjectId || "",
       };
     });
     return updatedData;
-  }, [data, resolvedActivityType, resolvedTask]);
+  }, [data, resolvedActivityType, resolvedTask, dialogProjectId]);
 
   useEffect(() => {
     if (!open) {
@@ -122,7 +139,7 @@ export const EditTime = ({
     }
     if (!data) return;
 
-    const dialogKey = `${employee}-${date}-${resolvedTask}-${resolvedActivityType}`;
+    const dialogKey = `${employee}-${date}-${resolvedTask}-${resolvedActivityType}-${dialogProjectId}`;
     if (loadedDialogKeyRef.current === dialogKey) return;
 
     loadedDialogKeyRef.current = dialogKey;
@@ -132,7 +149,7 @@ export const EditTime = ({
       setInputMode("range");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, data, employee, date, resolvedTask, resolvedActivityType]);
+  }, [open, data, employee, date, resolvedTask, resolvedActivityType, dialogProjectId]);
 
   const handleInputModeChange = (mode: TimesheetInputMode) => {
     setInputMode(mode);
@@ -155,6 +172,7 @@ export const EditTime = ({
       from_time: "",
       to_time: "",
       activity_type: resolvedActivityType || data?.message?.activity_type || "",
+      project: dialogProjectId,
       is_billable: isBillableValue(projectDefaultIsBillable),
       project_default_is_billable: projectDefaultIsBillable,
       billable_override_reason: "",

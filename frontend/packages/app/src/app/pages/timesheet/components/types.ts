@@ -22,6 +22,7 @@ export type TimesheetDetail = Pick<
   | "is_billable"
   | "from_time"
   | "to_time"
+  | "project"
   | "project_default_is_billable"
   | "is_billable_override"
   | "billable_override_reason"
@@ -36,6 +37,7 @@ export interface EditTimeProps {
   date: string;
   task: string;
   activity_type?: string;
+  project?: string;
   open: boolean;
   onClose: () => void;
   /** Refresh the parent timesheet grid while the dialog stays open. */

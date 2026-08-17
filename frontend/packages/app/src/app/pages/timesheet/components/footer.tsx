@@ -47,6 +47,7 @@ export const Footer = ({ timesheet, user, dispatch, callback }: FooterProps) => 
           date={timesheet.timesheet.date}
           task={timesheet.timesheet.task}
           activity_type={timesheet.timesheet.activity_type}
+          project={timesheet.timesheet.project}
           open={timesheet.isEditDialogOpen}
           onClose={onCloseEditDialog}
           onChanged={callback}

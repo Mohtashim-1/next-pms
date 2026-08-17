@@ -41,7 +41,11 @@ def enforce_transit_security():
 	if settings.enforce_https and not is_secure_request():
 		if _is_local_host():
 			return
-		target = get_url(frappe.local.request.path, https=1)
+		# frappe.utils.get_url no longer accepts https=; force https scheme explicitly
+		path = frappe.local.request.full_path or frappe.local.request.path or "/"
+		target = get_url(path)
+		if target.startswith("http://"):
+			target = "https://" + target[len("http://") :]
 		frappe.local.response["type"] = "redirect"
 		frappe.local.response["location"] = target
 		frappe.local.flags.redirect_location = target

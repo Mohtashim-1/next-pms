@@ -258,6 +258,7 @@ export const TimesheetDraftSingleRowSchema = z
     from_time: z.string().optional(),
     to_time: z.string().optional(),
     activity_type: z.string().optional().default(""),
+    project: z.string().optional().default(""),
     is_billable: z
       .union([z.boolean(), z.number()])
       .transform((val) => {
@@ -325,6 +326,7 @@ export function serializeTimesheetUpdateRow(row: z.infer<typeof TimesheetDraftSi
     from_time?: string;
     to_time?: string;
     activity_type?: string;
+    project?: string;
   } = {
     name: row.name,
     parent: row.parent,
@@ -337,6 +339,10 @@ export function serializeTimesheetUpdateRow(row: z.infer<typeof TimesheetDraftSi
 
   if (row.activity_type) {
     entry.activity_type = row.activity_type;
+  }
+
+  if (row.project) {
+    entry.project = row.project;
   }
 
   if (row.is_billable !== undefined) {
