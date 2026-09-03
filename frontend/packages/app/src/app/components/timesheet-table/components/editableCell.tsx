@@ -68,6 +68,7 @@ export const EditableCell = ({
   const { toast } = useToast();
   const { call: updateTimesheet } = useFrappePostCall("next_pms.timesheet.api.timesheet.update_timesheet_detail");
   const { call: saveTimesheet } = useFrappePostCall("next_pms.timesheet.api.timesheet.save");
+  const persistInFlightRef = useRef(false);
 
   const realEntries = useMemo(() => (data ?? []).filter((item) => item.name), [data]);
   const primaryEntry = realEntries[0];
@@ -212,6 +213,12 @@ export const EditableCell = ({
         return;
       }
 
+      if (persistInFlightRef.current) {
+        debugInlineEdit("persist skipped: already in flight", { date, parsedHours });
+        return;
+      }
+      persistInFlightRef.current = true;
+
       try {
         if (primaryEntry?.name && primaryEntry.parent) {
           const payload = {
@@ -268,6 +275,7 @@ export const EditableCell = ({
         setOptimisticHours(null);
         setDraftHours(floatToTime(hours));
       } finally {
+        persistInFlightRef.current = false;
         debugInlineEdit("persist finished", {
           date,
           gridRow,

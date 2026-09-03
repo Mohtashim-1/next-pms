@@ -28,9 +28,11 @@ class TimesheetOverwrite(Timesheet):
     def validate_time_logs(self):
         if not self.get("time_logs"):
             return
+        skip_overlap = getattr(self.flags, "skip_overlap_validation", False)
         for data in self.get("time_logs"):
             self.update_billing_hours(data)
-            self.validate_overlap(data)
+            if not skip_overlap:
+                self.validate_overlap(data)
             self.set_project(data)
             self.validate_project(data)
 

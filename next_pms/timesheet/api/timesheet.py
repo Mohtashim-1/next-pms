@@ -1,6 +1,8 @@
 import frappe
 from frappe import _, throw
+from contextlib import contextmanager
 from datetime import timedelta
+from threading import local
 
 from frappe.utils import (
     add_days,
@@ -16,6 +18,7 @@ from frappe.utils import (
     nowdate,
     strip_html_tags,
     time_diff_in_hours,
+    time_diff_in_seconds,
 )
 
 from next_pms.api.utils import error_logger
@@ -51,6 +54,35 @@ from .utils import (
 )
 
 
+_day_lock_held = local()
+
+
+@contextmanager
+def _employee_day_lock(employee: str, date):
+    """Serialize time-entry writes for one employee on one day (reentrant).
+
+    Parallel Add Time autosaves / double-clicks otherwise create two Timesheet
+    parents with the same from/to, and ERPNext then blocks every later save
+    with OverlapError.
+    """
+    from frappe.utils.synchronization import filelock
+
+    key = f"{employee}:{getdate(date)}"
+    held = getattr(_day_lock_held, "keys", None)
+    if held is None:
+        held = set()
+        _day_lock_held.keys = held
+    if key in held:
+        yield
+        return
+    held.add(key)
+    try:
+        with filelock(f"next_pms_ts_day_{employee}_{getdate(date)}", timeout=30):
+            yield
+    finally:
+        held.discard(key)
+
+
 def _get_running_timer_key(employee: str):
     return f"{EMP_TIMESHEET}::running_timer::{employee}"
 
@@ -79,21 +111,13 @@ def _find_open_timesheet_name(employee: str, date, project: str | None = None):
 def _get_open_timesheet(employee: str, date, project: str | None = None):
     """Return draft/open timesheet for employee+day, creating one if needed.
 
-    Concurrent Add Time autosaves can otherwise race and create two identical
-    Timesheet parents (overlapping hours → approval fails).
+    Callers must hold `_employee_day_lock` so two requests cannot both miss
+    the existing parent and insert duplicates.
     """
-    from frappe.utils.synchronization import filelock
-
     parent = _find_open_timesheet_name(employee, date, project)
     if parent:
         return frappe.get_doc("Timesheet", parent)
-
-    lock_name = f"next_pms_open_ts_{employee}_{getdate(date)}_{project or 'none'}"
-    with filelock(lock_name, timeout=15):
-        parent = _find_open_timesheet_name(employee, date, project)
-        if parent:
-            return frappe.get_doc("Timesheet", parent)
-        return frappe.get_doc({"doctype": "Timesheet", "employee": employee})
+    return frappe.get_doc({"doctype": "Timesheet", "employee": employee})
 
 
 def _mark_draft_save(timesheet):
@@ -723,6 +747,43 @@ def save(
         throw(_("Select a project (or a task) for the time entry."), frappe.MandatoryError)
     _assert_week_editable(employee, date)
 
+    with _employee_day_lock(employee, date):
+        return _save_time_entry(
+            date=date,
+            description=description,
+            task=task,
+            hours=hours,
+            employee=employee,
+            from_time=from_time,
+            to_time=to_time,
+            input_mode=input_mode,
+            is_billable=is_billable,
+            billable_override_reason=billable_override_reason,
+            activity_type=activity_type,
+            force_new=force_new,
+            project=project,
+            name=name,
+        )
+
+
+def _save_time_entry(
+    date: str,
+    description: str,
+    task: str | None,
+    hours: float,
+    employee: str,
+    from_time: str | None,
+    to_time: str | None,
+    input_mode: str,
+    is_billable: bool | None,
+    billable_override_reason: str | None,
+    activity_type: str | None,
+    force_new: bool,
+    project: str | None,
+    name: str | None,
+):
+    from erpnext.projects.doctype.timesheet.timesheet import OverlapError
+
     preferred_from = None
     if name:
         preferred_from = frappe.db.get_value("Timesheet Detail", name, "from_time")
@@ -759,8 +820,23 @@ def save(
         project=project,
         name=name,
     )
-    timesheet.save(ignore_permissions=ignore_permissions)
-    # After save, newly appended rows get a real name; reload if needed.
+    try:
+        timesheet.save(ignore_permissions=ignore_permissions)
+    except OverlapError:
+        if input_mode != "duration":
+            raise
+        resolved_from, resolved_to, resolved_hours = _resolve_duration_time_slot(
+            employee,
+            date,
+            hours,
+            exclude_detail_name=name or getattr(row, "name", None),
+            preferred_from=None,
+            draft_mode=True,
+        )
+        row.from_time = resolved_from
+        row.to_time = resolved_to
+        row.hours = resolved_hours
+        timesheet.save(ignore_permissions=ignore_permissions)
     detail_name = getattr(row, "name", None) or name
     if not detail_name:
         timesheet.reload()
@@ -873,19 +949,20 @@ def stop_timer(employee: str = None):
     if hours <= 0:
         throw(_("Timer duration must be greater than zero."))
 
-    timesheet, ignore_permissions, _row = _append_time_log(
-        employee=employee,
-        task=timer.get("task"),
-        description=timer.get("description"),
-        from_time=started_at,
-        to_time=stopped_at,
-        hours=hours,
-        activity_type=timer.get("activity_type"),
-        project=timer.get("project"),
-        force_new=True,
-    )
-    timesheet.flags.keep_actual_times = True
-    timesheet.save(ignore_permissions=ignore_permissions)
+    with _employee_day_lock(employee, nowdate()):
+        timesheet, ignore_permissions, _row = _append_time_log(
+            employee=employee,
+            task=timer.get("task"),
+            description=timer.get("description"),
+            from_time=started_at,
+            to_time=stopped_at,
+            hours=hours,
+            activity_type=timer.get("activity_type"),
+            project=timer.get("project"),
+            force_new=True,
+        )
+        timesheet.flags.keep_actual_times = True
+        timesheet.save(ignore_permissions=ignore_permissions)
     if timer_key:
         frappe.cache().delete_value(timer_key)
     frappe.cache().delete_value(_get_running_timer_user_key(timer.get("user")))
@@ -1788,3 +1865,141 @@ def bulk_save_grid(timesheet_entries: list):
         "saved_dates": list(dict.fromkeys(saved_dates)),
         "message": summary,
     }
+
+
+def repair_duplicate_timesheets(employee: str) -> dict:
+    """Remove exact-clone Timesheet parents and re-pack overlapping duration slots.
+
+    Used to unblock an employee after a double-save race created two documents
+    with the same from/to times.
+    """
+    rows = frappe.get_all(
+        "Timesheet",
+        filters={"employee": employee, "docstatus": 0},
+        fields=["name", "start_date", "parent_project", "creation"],
+        order_by="creation asc",
+        limit_page_length=0,
+    )
+    deleted = []
+    from collections import defaultdict
+
+    groups = defaultdict(list)
+    for row in rows:
+        groups[(str(row.start_date), row.parent_project or "")].append(row)
+
+    def _fingerprint(log, include_times=True):
+        base = (
+            round(flt(log.hours), 4),
+            (strip_input_mode_marker(log.description) or "").strip(),
+            (log.activity_type or "").strip(),
+            (log.project or "").strip(),
+            (log.task or "").strip(),
+        )
+        if not include_times:
+            return base
+        return (
+            str(get_datetime(log.from_time)),
+            str(get_datetime(log.to_time)),
+            *base,
+        )
+
+    for _key, docs in groups.items():
+        if len(docs) < 2:
+            continue
+        loaded = [frappe.get_doc("Timesheet", row.name) for row in docs]
+        loaded.sort(key=lambda doc: (-len(doc.time_logs), -flt(doc.total_hours), str(doc.creation)))
+        keep = loaded[0]
+        seen = {_fingerprint(log) for log in keep.time_logs}
+        seen_notime = {_fingerprint(log, include_times=False) for log in keep.time_logs}
+        for extra in loaded[1:]:
+            extra_prints = [_fingerprint(log) for log in extra.time_logs]
+            extra_notime = [_fingerprint(log, include_times=False) for log in extra.time_logs]
+            created_gap = abs(
+                time_diff_in_seconds(get_datetime(extra.creation), get_datetime(keep.creation))
+            )
+            is_exact = extra_prints and all(fp in seen for fp in extra_prints)
+            is_near_duplicate = (
+                created_gap <= 5
+                and extra_notime
+                and all(fp in seen_notime for fp in extra_notime)
+            )
+            if is_exact or is_near_duplicate:
+                extra.delete(ignore_permissions=True)
+                deleted.append(extra.name)
+
+    packed_days = _repack_overlapping_duration_days(employee)
+    from next_pms.timesheet.doc_events.timesheet import flush_cache
+
+    for day in {str(row.start_date) for row in rows if row.start_date}:
+        flush_cache(frappe._dict({"employee": employee, "start_date": day}))
+    frappe.db.commit()
+    return {"deleted": deleted, "packed_days": packed_days}
+
+
+def _repack_overlapping_duration_days(employee: str) -> list[str]:
+    """Shift duration-mode logs on a day so they no longer overlap across parents."""
+    from collections import defaultdict
+
+    parent_names = frappe.get_all(
+        "Timesheet",
+        filters={"employee": employee, "docstatus": 0},
+        pluck="name",
+        limit_page_length=0,
+    )
+    if not parent_names:
+        return []
+
+    details = frappe.get_all(
+        "Timesheet Detail",
+        filters={"parenttype": "Timesheet", "parent": ["in", parent_names]},
+        fields=["name", "parent", "from_time", "to_time", "hours", "description", "creation"],
+        order_by="creation asc",
+        limit_page_length=0,
+    )
+    parent_set = set(parent_names)
+    by_day = defaultdict(list)
+
+    for row in details:
+        if row.parent not in parent_set:
+            continue
+        by_day[str(getdate(row.from_time))].append(row)
+
+    packed = []
+    for day, logs in by_day.items():
+        intervals = []
+        for log in logs:
+            start, end = _get_effective_log_interval(log)
+            if start and end and end > start:
+                intervals.append((start, end, log))
+        if not _day_has_overlap(intervals):
+            continue
+        cursor = get_datetime(getdate(day)).replace(hour=0, minute=0, second=0, microsecond=0)
+        parents_to_save = {}
+        for _start, _end, log in sorted(intervals, key=lambda item: item[2].creation or item[0]):
+            duration = timedelta(hours=float(log.hours or 0))
+            if duration.total_seconds() <= 0:
+                continue
+            parent = parents_to_save.get(log.parent) or frappe.get_doc("Timesheet", log.parent)
+            parents_to_save[log.parent] = parent
+            child = next((row for row in parent.time_logs if row.name == log.name), None)
+            if not child:
+                continue
+            child.from_time = cursor
+            child.to_time = cursor + duration
+            cursor = child.to_time
+        for parent in parents_to_save.values():
+            parent.flags.skip_overlap_validation = True
+            parent.flags.skip_submission_validation = True
+            parent.save(ignore_permissions=True)
+        packed.append(day)
+    return packed
+
+
+def _day_has_overlap(intervals) -> bool:
+    ordered = sorted(intervals, key=lambda item: item[0])
+    last_end = None
+    for start, end, _log in ordered:
+        if last_end and start < last_end:
+            return True
+        last_end = end if last_end is None else max(last_end, end)
+    return False

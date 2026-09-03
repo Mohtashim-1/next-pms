@@ -92,6 +92,8 @@ const AddTime = ({
   const autoSaveRequestRef = useRef(0);
   const autoSaveInFlightRef = useRef(false);
   const pendingAutoSaveRef = useRef<z.infer<typeof TimesheetDraftSchema> | null>(null);
+  const pendingCloseOnSuccessRef = useRef(false);
+  const submittingRef = useRef(false);
   // Keep the child-row name created by the first autosave so later saves update
   // that row instead of merging into / overwriting another Meeting on the same day.
   const draftEntryNameRef = useRef<string>("");
@@ -318,10 +320,11 @@ const AddTime = ({
         return false;
       }
 
-      // Serialize autosaves — parallel create races spawn duplicate Timesheet docs.
-      if (autoSaveInFlightRef.current && !closeOnSuccess) {
+      // Serialize autosaves AND Save — parallel creates spawn duplicate Timesheet docs.
+      if (autoSaveInFlightRef.current) {
         pendingAutoSaveRef.current = parsed.data;
-        debugAddTime("persist queued (in flight)", { data: parsed.data });
+        pendingCloseOnSuccessRef.current = closeOnSuccess || pendingCloseOnSuccessRef.current;
+        debugAddTime("persist queued (in flight)", { closeOnSuccess, data: parsed.data });
         return false;
       }
 
@@ -398,9 +401,11 @@ const AddTime = ({
       } finally {
         autoSaveInFlightRef.current = false;
         const pending = pendingAutoSaveRef.current;
+        const closePending = pendingCloseOnSuccessRef.current;
         pendingAutoSaveRef.current = null;
-        if (pending && !closeOnSuccess) {
-          void persistDraft(pending, false);
+        pendingCloseOnSuccessRef.current = false;
+        if (pending) {
+          void persistDraft(pending, closePending);
         }
       }
     },
@@ -455,6 +460,7 @@ const AddTime = ({
   };
 
   const handleSubmit = async (data: z.infer<typeof TimesheetDraftSchema>) => {
+    if (submittingRef.current) return;
     flushTimeFieldsFromDom();
     const merged = {
       ...data,
@@ -463,6 +469,7 @@ const AddTime = ({
       hours: form.getValues("hours") || data.hours,
     };
     debugAddTime("submit started", { data, merged, errors: form.formState.errors });
+    submittingRef.current = true;
     setSubmitting(true);
     const blockMessage = getSaveBlockMessage(merged);
     if (blockMessage) {
@@ -480,6 +487,7 @@ const AddTime = ({
         description: blockMessage,
       });
       debugAddTime("submit blocked", { blockMessage, merged });
+      submittingRef.current = false;
       setSubmitting(false);
       return;
     }
@@ -488,6 +496,7 @@ const AddTime = ({
       saved,
       merged,
     });
+    submittingRef.current = false;
     setSubmitting(false);
   };
 

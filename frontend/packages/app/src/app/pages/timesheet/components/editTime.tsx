@@ -222,6 +222,7 @@ export const EditTime = ({
   );
 
   const handleUpdate = async (formData: z.infer<typeof TimesheetDraftUpdateSchema>) => {
+    if (isSubmitting) return;
     if (!form.formState.isDirty) {
       onClose();
       return;
