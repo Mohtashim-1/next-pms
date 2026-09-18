@@ -7,6 +7,15 @@ export type BillableEntry = {
 
 export const isBillableValue = (value?: boolean | number | null) => value === true || value === 1;
 
+/** Keep in sync with next_pms.timesheet.utils.billable.BILLABLE_PROJECT_TYPES */
+const BILLABLE_PROJECT_TYPES = new Set(["Fixed Cost", "Retainer", "Time and Material"]);
+
+/** Project default billable flag from Project.custom_billing_type */
+export const projectDefaultFromBillingType = (billingType?: string | null) => {
+  if (!billingType || billingType === "Non-Billable") return false;
+  return BILLABLE_PROJECT_TYPES.has(billingType);
+};
+
 export const getBillableSummary = (entries: BillableEntry[] = []) => {
   const billableEntries = entries.filter((entry) => isBillableValue(entry.is_billable));
   const nonBillableEntries = entries.filter((entry) => !isBillableValue(entry.is_billable));

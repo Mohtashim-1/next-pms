@@ -47,11 +47,10 @@ def resolve_entry_billable(
     reason = (billable_override_reason or "").strip() or None
 
     if resolved != default:
+        # Intentional override only with a reason. Otherwise keep the project default
+        # (Add Time may omit the billable UI when only a project is selected).
         if require_override_reason and not reason:
-            frappe.throw(
-                _("Billable override reason is required when billable status differs from the project default."),
-                frappe.MandatoryError,
-            )
+            return default, None, default
         return resolved, reason, default
 
     return resolved, None, default

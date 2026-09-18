@@ -238,10 +238,11 @@ def _append_time_log(
     existing_log = None
 
     # Prefer an explicit child-row name from the Add Time autosave loop.
+    # If that row was discarded / never committed / is on another timesheet,
+    # fall through and create a fresh log instead of failing the draft save.
+    existing_log = None
     if name:
         existing_log = next((log for log in timesheet.time_logs if log.name == name), None)
-        if not existing_log:
-            throw(_("Time entry {0} was not found.").format(name), frappe.DoesNotExistError)
     elif not force_new and task:
         candidates = [
             log

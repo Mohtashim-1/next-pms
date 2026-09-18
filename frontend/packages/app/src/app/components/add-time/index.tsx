@@ -46,7 +46,7 @@ import { TimePickerField } from "@/app/components/timesheet-input/timePickerFiel
 import { TimeRangeFields } from "@/app/components/timesheet-input/timeRangeFields";
 import { TIMESHEET_INPUT_MODE_KEY } from "@/lib/constant";
 import { getLocalStorage, setLocalStorage } from "@/lib/storage";
-import { isBillableValue } from "@/lib/timesheetBillable";
+import { isBillableValue, projectDefaultFromBillingType } from "@/lib/timesheetBillable";
 import type { TimesheetInputMode } from "@/lib/timesheetTime";
 import { mergeClassNames, parseFrappeErrorMsg } from "@/lib/utils";
 import { getDayPeriod, parseClockTime, rangeOrderError, withDayPeriod } from "@/lib/timesheetClockTime";
@@ -213,6 +213,46 @@ const AddTime = ({
     },
     [form, selectedProject, tasks]
   );
+  const applyProjectBillableDefaults = useCallback(
+    (projectName: string, billingType?: string | null) => {
+      if (!projectName) {
+        form.setValue("project_default_is_billable", undefined, {
+          shouldValidate: true,
+          shouldDirty: true,
+          shouldTouch: true,
+        });
+        form.setValue("is_billable", false, {
+          shouldValidate: true,
+          shouldDirty: true,
+          shouldTouch: true,
+        });
+        form.setValue("billable_override_reason", "", {
+          shouldValidate: true,
+          shouldDirty: true,
+          shouldTouch: true,
+        });
+        return;
+      }
+      const projectDefault = projectDefaultFromBillingType(billingType);
+      form.setValue("project_default_is_billable", projectDefault, {
+        shouldValidate: true,
+        shouldDirty: true,
+        shouldTouch: true,
+      });
+      form.setValue("is_billable", projectDefault, {
+        shouldValidate: true,
+        shouldDirty: true,
+        shouldTouch: true,
+      });
+      form.setValue("billable_override_reason", "", {
+        shouldValidate: true,
+        shouldDirty: true,
+        shouldTouch: true,
+      });
+    },
+    [form]
+  );
+
   const handleProjectChange = (value: string | string[]) => {
     const projectName = value instanceof Array ? value[0] : value;
     if (value instanceof Array) {
@@ -231,6 +271,10 @@ const AddTime = ({
       shouldDirty: true,
       shouldTouch: true,
     });
+    const billingType = projects?.message?.find(
+      (item: { name: string; custom_billing_type?: string }) => item.name === projectName
+    )?.custom_billing_type;
+    applyProjectBillableDefaults(projectName || "", billingType);
   };
   const handleInputModeChange = (mode: TimesheetInputMode) => {
     form.setValue("input_mode", mode, { shouldDirty: true, shouldValidate: true });
@@ -381,19 +425,23 @@ const AddTime = ({
         }
         return true;
       } catch (err) {
+        const errorMsg = parseFrappeErrorMsg(err as FrappeError);
         debugAddTime("persist failed", {
           requestId,
           closeOnSuccess,
           rawError: err,
-          parsedError: parseFrappeErrorMsg(err as FrappeError),
+          parsedError: errorMsg,
         });
+        // Drop stale autosave id so the next attempt creates a fresh row.
+        if (/time entry .+ was not found/i.test(errorMsg || "")) {
+          draftEntryNameRef.current = "";
+        }
         if (requestId === autoSaveRequestRef.current) {
           setDraftSaveStatus("error");
           if (closeOnSuccess) {
-            const error = parseFrappeErrorMsg(err as FrappeError);
             toast({
               variant: "destructive",
-              description: error,
+              description: errorMsg,
             });
           }
         }
@@ -532,10 +580,22 @@ const AddTime = ({
 
   const { data: projects, isLoading: isProjectLoading } = useFrappeGetCall("frappe.client.get_list", {
     doctype: "Project",
-    fields: ["name", "project_name", "customer"],
+    fields: ["name", "project_name", "customer", "custom_billing_type"],
     filters: window.frappe?.boot?.global_filters.project,
     limit_page_length: "null",
   });
+
+  // When projects load (or pre-selected project), align billable with project default if no task yet
+  useEffect(() => {
+    const projectName = form.getValues("project") || selectedProject[0] || "";
+    if (!projectName || form.getValues("task")) return;
+    if (form.getValues("project_default_is_billable") !== undefined) return;
+    const billingType = projects?.message?.find(
+      (item: { name: string; custom_billing_type?: string }) => item.name === projectName
+    )?.custom_billing_type;
+    if (billingType === undefined && !projects?.message) return;
+    applyProjectBillableDefaults(projectName, billingType ?? null);
+  }, [applyProjectBillableDefaults, form, projects, selectedProject]);
 
   const activeProject = form.watch("project") || selectedProject[0] || "";
   const projectCustomer =
@@ -961,7 +1021,7 @@ const AddTime = ({
                   />
                 </FormItem>
               </div>
-              {form.watch("task") && (
+              {(form.watch("task") || form.watch("project") || selectedProject[0]) && (
                 <BillableFields
                   control={form.control}
                   isBillableName="is_billable"

@@ -133,7 +133,7 @@ function ChartBox({
     []
   );
 
-  return <div ref={ref} style={{ height }} className="w-full overflow-hidden" />;
+  return <div ref={ref} style={{ height }} className="relative z-0 w-full overflow-hidden" />;
 }
 
 export function PersonalDashboardPanels({ panels }: { panels?: PersonalPanels }) {
@@ -450,7 +450,7 @@ export function PersonalDashboardPanels({ panels }: { panels?: PersonalPanels })
             <ChartBox option={billableOption} height={300} empty="No hours this week" />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="overflow-hidden isolate">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Hours by project</CardTitle>
           </CardHeader>
@@ -458,7 +458,7 @@ export function PersonalDashboardPanels({ panels }: { panels?: PersonalPanels })
             <ChartBox option={projectOption} height={320} empty="No project hours yet" />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="overflow-hidden isolate">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Hours by activity</CardTitle>
           </CardHeader>
@@ -466,46 +466,41 @@ export function PersonalDashboardPanels({ panels }: { panels?: PersonalPanels })
             <ChartBox option={activityOption} height={320} empty="No activity types logged" />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="overflow-hidden isolate">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
               <ListChecks className="h-4 w-4 text-primary" />
               Recent entries
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="relative z-10 flex max-h-[22rem] flex-col gap-2 overflow-y-auto pt-0">
             {!recent.length ? (
-              <Typography variant="small" className="py-8 text-center text-muted-foreground">
-                No recent time entries
-              </Typography>
+              <p className="py-8 text-center text-xs text-muted-foreground">No recent time entries</p>
             ) : (
               recent.slice(0, 8).map((row, idx) => (
                 <div
-                  key={`${row.date}-${idx}`}
-                  className="flex items-start justify-between gap-2 rounded-lg border border-border/70 px-2.5 py-2"
+                  key={`${row.date}-${row.project || "none"}-${row.task || ""}-${row.hours}-${idx}`}
+                  className="relative z-0 flex w-full shrink-0 items-start justify-between gap-3 rounded-lg border border-border/70 bg-card px-2.5 py-2"
                 >
-                  <div className="min-w-0">
-                    <Typography variant="small" className="truncate font-medium">
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <p className="truncate text-xs font-medium text-foreground">
                       {row.project_name || "No project"}
-                    </Typography>
-                    <Typography variant="small" className="truncate text-muted-foreground">
+                    </p>
+                    <p className="truncate text-[11px] text-muted-foreground">
                       {row.date} · {row.activity_type || "—"}
                       {row.description ? ` · ${row.description}` : ""}
-                    </Typography>
+                    </p>
                   </div>
-                  <div className="shrink-0 text-right">
-                    <Typography variant="small" className="font-semibold tabular-nums">
-                      {row.hours}h
-                    </Typography>
-                    <Badge
-                      variant="secondary"
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="text-xs font-semibold tabular-nums text-foreground">{row.hours}h</span>
+                    <span
                       className={mergeClassNames(
-                        "mt-1 text-[10px]",
+                        "rounded-full px-2 py-0.5 text-[10px] font-medium",
                         row.is_billable ? "bg-teal-500/15 text-teal-700" : "bg-muted text-muted-foreground"
                       )}
                     >
                       {row.is_billable ? "Billable" : "Non-bill"}
-                    </Badge>
+                    </span>
                   </div>
                 </div>
               ))
