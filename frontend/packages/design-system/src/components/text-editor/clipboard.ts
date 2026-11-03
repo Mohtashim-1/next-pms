@@ -5,10 +5,12 @@ const Clipboard = Quill.import("modules/clipboard");
 const Delta = Quill.import("delta");
 
 class PlainClipboard extends Clipboard {
-  onPaste(e) {
+  onPaste(e: ClipboardEvent) {
+    if (!e.clipboardData) return;
     e.preventDefault();
 
     const range = this.quill.getSelection();
+    if (!range) return;
     const text = e.clipboardData.getData("text/plain");
 
     const delta = new Delta()

@@ -40,6 +40,7 @@ import { TEAM, EMPLOYEE } from "@/lib/constant";
 import { parseFrappeErrorMsg, mergeClassNames } from "@/lib/utils";
 import { DateProps, ItemProps, dataItem } from "@/types/team";
 import { Approval } from "./components/approval";
+import { DailyHoursChart } from "./components/dailyHoursChart";
 import { EmployeeTimesheetTable } from "./components/employeeTimesheetTable";
 import { Header } from "./components/header";
 import { StatusIndicator } from "./components/statusIndicator";
@@ -166,6 +167,7 @@ const TeamComponent = ({ viewData }: TeamComponentProps) => {
         />
       )}
       <Header teamState={teamState} dispatch={dispatch} viewData={viewData} />
+      <DailyHoursChart teamState={teamState} />
 
       {isLoading && Object.keys(teamState.data.data).length == 0 ? (
         <Spinner isFull />

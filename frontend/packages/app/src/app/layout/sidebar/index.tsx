@@ -31,6 +31,7 @@ import {
  */
 import {
   DASHBOARD,
+  TEAM_PERFORMANCE,
   HOME,
   PROJECT,
   RESOURCE_MANAGEMENT,
@@ -132,6 +133,13 @@ const Sidebar = () => {
       label: "Dashboard",
       key: "dashboard",
       isPmRoute: false,
+    },
+    {
+      to: TEAM_PERFORMANCE,
+      icon: BarChart3,
+      label: "Team Performance",
+      key: "team-performance",
+      isPmRoute: true,
     },
     {
       to: HOME,
@@ -498,7 +506,13 @@ const Sidebar = () => {
                   </div>
                 </React.Fragment>
               ) : (
-                <NavLink to={route.to} key={route.key} title={route.label} className="  flex items-center h-9 group">
+                <NavLink
+                  to={route.to}
+                  end={route.key === "dashboard"}
+                  key={route.key}
+                  title={route.label}
+                  className="  flex items-center h-9 group"
+                >
                   {({ isActive }) => (
                     <div
                       className={mergeClassNames(

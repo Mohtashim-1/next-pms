@@ -9,7 +9,7 @@ import { useContextSelector } from "use-context-selector";
 /**
  * Internal dependencies.
  */
-import { TIMESHEET, HOME, DASHBOARD, REPORTS, TEAM, TASK, PROJECT, RESOURCE_MANAGEMENT, PM_ACCESS_ROLES, REPORT_ACCESS_ROLES, WORK_ENTRIES } from "@/lib/constant";
+import { TIMESHEET, HOME, DASHBOARD, TEAM_PERFORMANCE, REPORTS, TEAM, TASK, PROJECT, RESOURCE_MANAGEMENT, PM_ACCESS_ROLES, REPORT_ACCESS_ROLES, WORK_ENTRIES } from "@/lib/constant";
 import { UserContext } from "@/lib/UserProvider";
 import { default as Layout } from "./app/layout";
 import { RootState } from "./store";
@@ -40,6 +40,7 @@ const PortfolioMargins = lazy(() => import("@/app/pages/project/margins"));
 const ProjectProfitability = lazy(() => import("@/app/pages/project/profitability"));
 const BudgetBurnShare = lazy(() => import("@/app/pages/project/budget-burn-share"));
 const ExecutiveDashboard = lazy(() => import("@/app/pages/dashboard"));
+const TeamPerformance = lazy(() => import("@/app/pages/dashboard/teamPerformance"));
 const Reports = lazy(() => import("@/app/pages/reports"));
 const ReportViewer = lazy(() => import("@/app/pages/reports/viewer"));
 const NotFound = lazy(() => import("@/app/pages/404"));
@@ -51,6 +52,7 @@ export function Router() {
       <Route element={<AuthenticatedRoute />}>
         <Route path="/" element={<Navigate to={DASHBOARD} replace />} />
         <Route path={DASHBOARD} element={<ExecutiveDashboard />} />
+        <Route path={TEAM_PERFORMANCE} element={<TeamPerformance />} />
         <Route path={TIMESHEET} element={<Timesheet />} />
         <Route path={WORK_ENTRIES} element={<WorkEntries />} />
         <Route element={<ReportsRoute />}>

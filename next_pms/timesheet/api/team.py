@@ -27,6 +27,14 @@ from .employee import get_employee_daily_working_norm, get_employee_working_hour
 from .timesheet import get_timesheet_state
 from .utils import employee_has_higher_access, get_holidays, get_week_dates
 
+TEAM_PORTAL_ROLES = [
+    "Timesheet Manager",
+    "Timesheet User",
+    "Projects Manager",
+    "Team Lead",
+    "System Manager",
+]
+
 
 @whitelist()
 @error_logger
@@ -50,7 +58,7 @@ def get_compact_view_data(
     by_pass_access_check: bool = False,
 ):
     if not by_pass_access_check:
-        only_for(["Timesheet Manager", "Timesheet User", "Projects Manager"], message=True)
+        only_for(TEAM_PORTAL_ROLES, message=True)
 
     dates = []
     data = {}
@@ -176,6 +184,168 @@ def get_compact_view_data(
     res["has_more"] = int(start) + int(page_length) < total_count
 
     return res
+
+
+def _employees_for_daily_chart(
+    start_date,
+    end_date,
+    employee_name=None,
+    department=None,
+    project=None,
+    user_group=None,
+    status_filter=None,
+    reports_to=None,
+    status=None,
+    designation=None,
+    customer=None,
+    project_type=None,
+    task=None,
+):
+    """Employees matching the Team filters, without the table's page limit."""
+    if status_filter and isinstance(status_filter, str):
+        status_filter = json.loads(status_filter)
+
+    employees, _count = filter_employees(
+        employee_name=employee_name,
+        department=department,
+        project=project,
+        user_group=user_group,
+        page_length=0,
+        start=0,
+        reports_to=reports_to,
+        status=status,
+        designation=designation,
+        customer=customer,
+        project_type=project_type,
+        task=task,
+        ignore_permissions=True,
+    )
+    if not status_filter or not employees:
+        return employees
+
+    matched = set(
+        get_all(
+            "Timesheet",
+            filters={
+                "start_date": [">=", getdate(start_date)],
+                "end_date": ["<=", getdate(end_date)],
+                "custom_weekly_approval_status": ["in", status_filter],
+                "docstatus": ["!=", 2],
+            },
+            pluck="employee",
+            limit_page_length=0,
+        )
+    )
+    return [employee for employee in employees if employee.name in matched]
+
+
+@whitelist()
+@error_logger
+def get_daily_hours_chart(
+    date: str,
+    employee_name: str | None = None,
+    department: str | None = None,
+    project: str | None = None,
+    user_group: str | None = None,
+    status_filter: list | str | None = None,
+    reports_to: str | None = None,
+    status: list | str | None = None,
+    designation: str | None = None,
+    customer: str | None = None,
+    project_type: str | None = None,
+    task: str | None = None,
+):
+    """Daily logged hours for the selected week.
+
+    With no employee filter this is the company total for each day.
+    With an employee filter it is that person's daily hours (or each match, when the name matches more than one).
+    """
+    only_for(TEAM_PORTAL_ROLES, message=True)
+
+    week = get_week_dates(date=date)
+    dates = [str(getdate(day)) for day in week.get("dates") or []]
+    labels = [getdate(day).strftime("%a %d") for day in dates]
+    date_index = {day: index for index, day in enumerate(dates)}
+
+    employees = _employees_for_daily_chart(
+        start_date=week.get("start_date"),
+        end_date=week.get("end_date"),
+        employee_name=employee_name,
+        department=department,
+        project=project,
+        user_group=user_group,
+        status_filter=status_filter,
+        reports_to=reports_to,
+        status=status,
+        designation=designation,
+        customer=customer,
+        project_type=project_type,
+        task=task,
+    )
+    employee_names = [employee.name for employee in employees]
+    focused = bool((employee_name or "").strip())
+
+    buckets = {name: [0.0] * len(dates) for name in employee_names}
+    if employee_names and dates:
+        timesheets = get_all(
+            "Timesheet",
+            filters={
+                "employee": ["in", employee_names],
+                "start_date": [">=", getdate(dates[0])],
+                "end_date": ["<=", getdate(dates[-1])],
+                "docstatus": ["!=", 2],
+            },
+            fields=["employee", "start_date", "end_date", "total_hours"],
+            limit_page_length=0,
+        )
+        for timesheet in timesheets:
+            if getdate(timesheet.start_date) != getdate(timesheet.end_date):
+                continue
+            index = date_index.get(str(getdate(timesheet.start_date)))
+            if index is None or timesheet.employee not in buckets:
+                continue
+            buckets[timesheet.employee][index] += float(timesheet.total_hours or 0)
+
+    series = []
+    expected = None
+    if focused:
+        ranked = sorted(
+            employees,
+            key=lambda employee: sum(buckets.get(employee.name, [])),
+            reverse=True,
+        )
+        shown = ranked[:25]
+        for employee in shown:
+            hours = [round(hour, 2) for hour in buckets.get(employee.name, [])]
+            series.append({"name": employee.employee_name or employee.name, "employee": employee.name, "hours": hours})
+        if len(shown) == 1:
+            norm = float(get_employee_daily_working_norm(shown[0].name) or 0)
+            expected = [0 if getdate(day).weekday() >= 5 else round(norm, 2) for day in dates]
+        title = series[0]["name"] if len(series) == 1 else "Selected employees"
+        mode = "employee"
+    else:
+        totals = [0.0] * len(dates)
+        for hours in buckets.values():
+            for index, hour in enumerate(hours):
+                totals[index] += hour
+        series.append({"name": "Logged hours", "hours": [round(hour, 2) for hour in totals]})
+        title = "Company daily hours"
+        mode = "company"
+
+    total_hours = round(sum(sum(item["hours"]) for item in series), 2)
+    return {
+        "mode": mode,
+        "title": title,
+        "week_label": week.get("key"),
+        "dates": dates,
+        "labels": labels,
+        "series": series,
+        "expected": expected,
+        "employee_count": len(employees),
+        "shown_count": len(series) if focused else len(employees),
+        "truncated": focused and len(employees) > len(series),
+        "total_hours": total_hours,
+    }
 
 
 @whitelist(methods=["POST"])

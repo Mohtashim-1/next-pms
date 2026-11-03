@@ -2,7 +2,7 @@
  * External dependencies
  */
 import { useState, useEffect, useMemo } from "react";
-import { Matcher } from "react-day-picker";
+import { Matcher, DayPickerSingleProps } from "react-day-picker";
 import { Calendar as CalendarIcon } from "lucide-react";
 
 /**
@@ -14,7 +14,7 @@ import { default as Calendar, CalendarProps } from "../calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../popover";
 import Typography from "../typography";
 
-export type DatePickerProp = CalendarProps & {
+export type DatePickerProp = Omit<DayPickerSingleProps, "mode" | "selected" | "onSelect"> & {
   date?: Date | string;
   disabled?: boolean;
   disabledDates?: Matcher | Matcher[];
@@ -52,7 +52,8 @@ const DatePicker = ({
     }
   }, [date]);
 
-  const onDateSelect = (date: Date) => {
+  const onDateSelect = (date: Date | undefined) => {
+    if (!date) return;
     setPickerDate(date);
     onDateChange?.(date);
     setIsOpen(false);
@@ -68,8 +69,6 @@ const DatePicker = ({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="z-[1000] w-auto border bg-popover p-0 text-popover-foreground shadow-md" align="start">
-          {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-          {/* @ts-expect-error */}
           <Calendar
             mode="single"
             selected={pickerDate}

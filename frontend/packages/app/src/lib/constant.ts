@@ -3,6 +3,7 @@ export const TIMESHEET = "timesheet";
 export const WORK_ENTRIES = "work-entries";
 export const HOME = "home";
 export const DASHBOARD = "dashboard";
+export const TEAM_PERFORMANCE = `${DASHBOARD}/team`;
 export const REPORTS = "reports";
 export const TEAM = "/team";
 export const TEAM_APPROVALS = `${TEAM}/approvals`;
