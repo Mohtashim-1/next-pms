@@ -46,7 +46,7 @@ import { TimePickerField } from "@/app/components/timesheet-input/timePickerFiel
 import { TimeRangeFields } from "@/app/components/timesheet-input/timeRangeFields";
 import { TIMESHEET_INPUT_MODE_KEY } from "@/lib/constant";
 import { getLocalStorage, setLocalStorage } from "@/lib/storage";
-import { isBillableValue, projectDefaultFromBillingType } from "@/lib/timesheetBillable";
+import { isBillableValue, resolveProjectDefaultBillable } from "@/lib/timesheetBillable";
 import type { TimesheetInputMode } from "@/lib/timesheetTime";
 import { mergeClassNames, parseFrappeErrorMsg } from "@/lib/utils";
 import { getDayPeriod, parseClockTime, rangeOrderError, withDayPeriod } from "@/lib/timesheetClockTime";
@@ -214,7 +214,11 @@ const AddTime = ({
     [form, selectedProject, tasks]
   );
   const applyProjectBillableDefaults = useCallback(
-    (projectName: string, billingType?: string | null) => {
+    (
+      projectName: string,
+      defaultIsBillable?: boolean | number | null,
+      billingType?: string | null
+    ) => {
       if (!projectName) {
         form.setValue("project_default_is_billable", undefined, {
           shouldValidate: true,
@@ -233,7 +237,7 @@ const AddTime = ({
         });
         return;
       }
-      const projectDefault = projectDefaultFromBillingType(billingType);
+      const projectDefault = resolveProjectDefaultBillable(defaultIsBillable, billingType);
       form.setValue("project_default_is_billable", projectDefault, {
         shouldValidate: true,
         shouldDirty: true,
@@ -271,10 +275,18 @@ const AddTime = ({
       shouldDirty: true,
       shouldTouch: true,
     });
-    const billingType = projects?.message?.find(
-      (item: { name: string; custom_billing_type?: string }) => item.name === projectName
-    )?.custom_billing_type;
-    applyProjectBillableDefaults(projectName || "", billingType);
+    const selected = projects?.message?.find(
+      (item: {
+        name: string;
+        custom_billing_type?: string;
+        custom_default_is_billable?: boolean | number;
+      }) => item.name === projectName
+    );
+    applyProjectBillableDefaults(
+      projectName || "",
+      selected?.custom_default_is_billable,
+      selected?.custom_billing_type
+    );
   };
   const handleInputModeChange = (mode: TimesheetInputMode) => {
     form.setValue("input_mode", mode, { shouldDirty: true, shouldValidate: true });
@@ -580,7 +592,7 @@ const AddTime = ({
 
   const { data: projects, isLoading: isProjectLoading } = useFrappeGetCall("frappe.client.get_list", {
     doctype: "Project",
-    fields: ["name", "project_name", "customer", "custom_billing_type"],
+    fields: ["name", "project_name", "customer", "custom_billing_type", "custom_default_is_billable"],
     filters: window.frappe?.boot?.global_filters.project,
     limit_page_length: "null",
   });
@@ -590,11 +602,19 @@ const AddTime = ({
     const projectName = form.getValues("project") || selectedProject[0] || "";
     if (!projectName || form.getValues("task")) return;
     if (form.getValues("project_default_is_billable") !== undefined) return;
-    const billingType = projects?.message?.find(
-      (item: { name: string; custom_billing_type?: string }) => item.name === projectName
-    )?.custom_billing_type;
-    if (billingType === undefined && !projects?.message) return;
-    applyProjectBillableDefaults(projectName, billingType ?? null);
+    const selected = projects?.message?.find(
+      (item: {
+        name: string;
+        custom_billing_type?: string;
+        custom_default_is_billable?: boolean | number;
+      }) => item.name === projectName
+    );
+    if (!selected && !projects?.message) return;
+    applyProjectBillableDefaults(
+      projectName,
+      selected?.custom_default_is_billable,
+      selected?.custom_billing_type ?? null
+    );
   }, [applyProjectBillableDefaults, form, projects, selectedProject]);
 
   const activeProject = form.watch("project") || selectedProject[0] || "";

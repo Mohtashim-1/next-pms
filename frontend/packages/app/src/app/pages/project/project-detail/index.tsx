@@ -256,6 +256,8 @@ const ProjectDetail = () => {
                     project_type: { readOnly: true },
                     custom_restricted_under_nda: { readOnly: true },
                     custom_billing_type: { readOnly: true },
+                    // PMs can change timesheet default without changing commercial Billing Type
+                    custom_default_is_billable: { readOnly: false },
                     users: { hidden: true },
                     monitor_progress: { hidden: true },
                     collect_progress: { hidden: true },

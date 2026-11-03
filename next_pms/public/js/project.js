@@ -52,6 +52,10 @@ frappe.ui.form.on("Project", {
   },
   custom_billing_type: function (frm) {
     frm.events.custom_send_reminder_when_approaching_project_threshold_limit(frm);
+    const billable = ["Fixed Cost", "Retainer", "Time and Material"].includes(frm.doc.custom_billing_type);
+    if (frm.fields_dict.custom_default_is_billable) {
+      frm.set_value("custom_default_is_billable", billable ? 1 : 0);
+    }
   },
   custom_send_reminder_when_approaching_project_threshold_limit: function (frm) {
     if (frm.doc.custom_billing_type == "Retainer") {

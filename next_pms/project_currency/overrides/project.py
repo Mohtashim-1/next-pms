@@ -11,8 +11,21 @@ class ProjectOverwrite(EmployeeProject):
     def validate(self):
         super().validate()
         self.update_project_currency()
+        self.sync_default_is_billable()
         self.validate_overlap_project_billing()
         self.validate_project_budget()
+
+    def sync_default_is_billable(self):
+        """Keep Project Default Billable aligned with Billing Type unless PM set it explicitly."""
+        if not self.meta.has_field("custom_default_is_billable"):
+            return
+
+        from next_pms.timesheet.utils.billable import default_is_billable_from_billing_type
+
+        billing_changed = self.is_new() or self.has_value_changed("custom_billing_type")
+        default_changed = self.has_value_changed("custom_default_is_billable")
+        if billing_changed and not default_changed:
+            self.custom_default_is_billable = default_is_billable_from_billing_type(self.custom_billing_type)
 
     def update_project_currency(self):
         if self.customer:

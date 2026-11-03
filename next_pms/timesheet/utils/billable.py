@@ -1,23 +1,30 @@
 import frappe
-from frappe import _
 from frappe.utils import cint
 
 
 BILLABLE_PROJECT_TYPES = {"Fixed Cost", "Retainer", "Time and Material"}
 
 
+def default_is_billable_from_billing_type(billing_type: str | None) -> int:
+    if not billing_type or billing_type == "Non-Billable":
+        return 0
+    if billing_type in BILLABLE_PROJECT_TYPES:
+        return 1
+    return 0
+
+
 def get_project_default_is_billable(project: str | None) -> int:
     if not project:
         return 0
 
+    if frappe.get_meta("Project").has_field("custom_default_is_billable"):
+        value = frappe.db.get_value("Project", project, "custom_default_is_billable")
+        # Check column is always 0/1 after install; treat as source of truth.
+        if value is not None:
+            return cint(value)
+
     billing_type = frappe.db.get_value("Project", project, "custom_billing_type")
-    if not billing_type or billing_type == "Non-Billable":
-        return 0
-
-    if billing_type in BILLABLE_PROJECT_TYPES:
-        return 1
-
-    return 0
+    return default_is_billable_from_billing_type(billing_type)
 
 
 def get_task_project_default_is_billable(task: str | None) -> int:
