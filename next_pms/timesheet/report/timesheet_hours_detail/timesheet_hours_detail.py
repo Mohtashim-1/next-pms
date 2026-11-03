@@ -180,8 +180,14 @@ def _fetch_detail_rows(filters):
 	timesheet = DocType("Timesheet")
 	detail = DocType("Timesheet Detail")
 	task = DocType("Task")
+	project = DocType("Project")
 	from_dt = get_datetime(filters.get("from_date"))
 	to_dt = get_datetime(getdate(filters.get("to_date")) + timedelta(days=1))
+
+	# Prefer Timesheet.customer; fall back to Project.customer
+	from frappe.query_builder.functions import Coalesce
+
+	customer_col = Coalesce(timesheet.customer, project.customer).as_("customer")
 
 	query = (
 		frappe.qb.from_(timesheet)
@@ -189,10 +195,13 @@ def _fetch_detail_rows(filters):
 		.on(detail.parent == timesheet.name)
 		.left_join(task)
 		.on(task.name == detail.task)
+		.left_join(project)
+		.on(project.name == detail.project)
 		.select(
 			timesheet.employee,
 			timesheet.employee_name,
 			timesheet.company,
+			customer_col,
 			timesheet.name.as_("timesheet"),
 			detail.project,
 			detail.task,
@@ -221,5 +230,17 @@ def _fetch_detail_rows(filters):
 				query = query.where(timesheet.company.isin(list(companies)))
 		else:
 			query = query.where(timesheet.company == companies)
+	if filters.get("customer"):
+		customers = filters.get("customer")
+		if isinstance(customers, (list, tuple)):
+			if customers:
+				query = query.where(
+					(timesheet.customer.isin(list(customers)))
+					| (project.customer.isin(list(customers)))
+				)
+		else:
+			query = query.where(
+				(timesheet.customer == customers) | (project.customer == customers)
+			)
 
 	return query.run(as_dict=True)

@@ -44,5 +44,12 @@ frappe.query_reports["Timesheet Hours Detail"] = {
       fieldtype: "Link",
       options: "Company",
     },
+    {
+      fieldname: "customer",
+      label: __("Customer"),
+      fieldtype: "Link",
+      options: "Customer",
+      ignore_user_permissions: frappe.user_roles.includes("Timesheet Manager"),
+    },
   ],
 };
