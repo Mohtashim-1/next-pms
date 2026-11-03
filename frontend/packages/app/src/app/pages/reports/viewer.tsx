@@ -1227,8 +1227,10 @@ const ReportFilter = ({
     );
   }
 
+  // Use <div>, not <label>: wrapping DatePicker/ComboBox in a label makes
+  // calendar prev/next clicks activate the trigger and break month navigation.
   return (
-    <label className="relative flex min-w-[11rem] max-w-[16rem] flex-1 flex-col gap-1 sm:flex-none">
+    <div className="relative flex min-w-[11rem] max-w-[16rem] flex-1 flex-col gap-1 sm:flex-none">
       <span className="text-[11px] font-medium text-muted-foreground">
         {filter.label}
         {filter.reqd ? <span className="ml-0.5 text-destructive">*</span> : null}
@@ -1299,7 +1301,7 @@ const ReportFilter = ({
           className="h-10 bg-background text-sm"
         />
       )}
-    </label>
+    </div>
   );
 };
 

@@ -10,7 +10,7 @@ from datetime import timedelta
 import frappe
 from frappe import _
 from frappe.query_builder import DocType
-from frappe.utils import flt, format_datetime, get_datetime, getdate
+from frappe.utils import flt, format_time, formatdate, get_datetime, getdate
 
 
 def execute(filters=None):
@@ -44,10 +44,28 @@ def get_columns():
 			"width": 180,
 		},
 		{
-			"fieldname": "duration",
-			"label": _("Duration (from-to)"),
+			"fieldname": "from_date",
+			"label": _("From Date"),
+			"fieldtype": "Date",
+			"width": 110,
+		},
+		{
+			"fieldname": "from_time",
+			"label": _("From Time"),
 			"fieldtype": "Data",
-			"width": 220,
+			"width": 100,
+		},
+		{
+			"fieldname": "to_date",
+			"label": _("To Date"),
+			"fieldtype": "Date",
+			"width": 110,
+		},
+		{
+			"fieldname": "to_time",
+			"label": _("To Time"),
+			"fieldtype": "Data",
+			"width": 100,
 		},
 		{
 			"fieldname": "project",
@@ -106,7 +124,10 @@ def get_data(filters):
 				"employee_name": _("{0} total").format(employee_name),
 				"company": "",
 				"customer": "",
-				"duration": "",
+				"from_date": "",
+				"from_time": "",
+				"to_date": "",
+				"to_time": "",
 				"project": "",
 				"task": "",
 				"task_subject": "",
@@ -131,11 +152,8 @@ def get_data(filters):
 		serial += 1
 		employee_hours += hours
 		grand_total += hours
-		duration = ""
-		if row.from_time and row.to_time:
-			duration = f"{format_datetime(row.from_time)} - {format_datetime(row.to_time)}"
-		elif row.from_time:
-			duration = format_datetime(row.from_time)
+		from_dt = get_datetime(row.from_time) if row.from_time else None
+		to_dt = get_datetime(row.to_time) if row.to_time else None
 
 		data.append(
 			{
@@ -144,7 +162,10 @@ def get_data(filters):
 				"employee_name": row.employee_name or emp,
 				"company": row.company or "",
 				"customer": row.customer or "",
-				"duration": duration,
+				"from_date": formatdate(from_dt) if from_dt else "",
+				"from_time": format_time(from_dt) if from_dt else "",
+				"to_date": formatdate(to_dt) if to_dt else "",
+				"to_time": format_time(to_dt) if to_dt else "",
 				"project": row.project or "",
 				"task": row.task or "",
 				"task_subject": row.task_subject or "",
@@ -163,7 +184,10 @@ def get_data(filters):
 				"employee_name": "Total",
 				"company": "",
 				"customer": "",
-				"duration": "",
+				"from_date": "",
+				"from_time": "",
+				"to_date": "",
+				"to_time": "",
 				"project": "",
 				"task": "",
 				"task_subject": "",

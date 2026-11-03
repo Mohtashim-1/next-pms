@@ -32,6 +32,7 @@ const DatePicker = ({
   ...props
 }: DatePickerProp) => {
   const [pickerDate, setPickerDate] = useState<Date>();
+  const [displayMonth, setDisplayMonth] = useState<Date>();
   const [isOpen, setIsOpen] = useState(false);
 
   const yearRange = useMemo(() => {
@@ -43,18 +44,22 @@ const DatePicker = ({
   }, [fromYear, toYear]);
 
   useEffect(() => {
-    if (!date) setPickerDate(getUTCDateTime() as Date);
-
-    if (date && typeof date === "string") {
-      setPickerDate(getUTCDateTime(date) as Date);
+    let next: Date;
+    if (!date) {
+      next = getUTCDateTime() as Date;
+    } else if (typeof date === "string") {
+      next = getUTCDateTime(date) as Date;
     } else {
-      setPickerDate(date as Date);
+      next = date as Date;
     }
+    setPickerDate(next);
+    setDisplayMonth(next);
   }, [date]);
 
   const onDateSelect = (date: Date | undefined) => {
     if (!date) return;
     setPickerDate(date);
+    setDisplayMonth(date);
     onDateChange?.(date);
     setIsOpen(false);
   };
@@ -68,7 +73,11 @@ const DatePicker = ({
             <Typography variant="p">{pickerDate ? getDisplayDate(pickerDate) : "Pick any date"}</Typography>
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="z-[1000] w-auto border bg-popover p-0 text-popover-foreground shadow-md" align="start">
+        <PopoverContent
+          className="z-[1000] w-auto border bg-popover p-0 text-popover-foreground shadow-md"
+          align="start"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
           <Calendar
             mode="single"
             selected={pickerDate}
@@ -77,7 +86,8 @@ const DatePicker = ({
             captionLayout={captionLayout}
             fromYear={yearRange.fromYear}
             toYear={yearRange.toYear}
-            defaultMonth={pickerDate}
+            month={displayMonth}
+            onMonthChange={setDisplayMonth}
             {...props}
           />
         </PopoverContent>
