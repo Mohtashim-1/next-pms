@@ -1,0 +1,46 @@
+{
+  "chart_name": "Condado - Hours vs Target by Week",
+  "chart_type": "Report",
+  "creation": "2026-11-03 19:55:31.290335",
+  "currency": "",
+  "docstatus": 0,
+  "doctype": "Dashboard Chart",
+  "filters_json": "{}",
+  "group_by_type": "Count",
+  "idx": 0,
+  "is_public": 1,
+  "is_standard": 1,
+  "modified": "2026-11-11 18:45:00.000000",
+  "modified_by": "Administrator",
+  "module": "Timesheet",
+  "name": "Condado - Hours vs Target by Week",
+  "number_of_groups": 0,
+  "owner": "Administrator",
+  "roles": [],
+  "show_values_over_chart": 1,
+  "timeseries": 0,
+  "time_interval": "Yearly",
+  "timespan": "Last Year",
+  "type": "Bar",
+  "use_report_chart": 0,
+  "y_axis": [
+    {
+      "color": "#B0BEC5",
+      "y_field": "hours_target"
+    },
+    {
+      "color": "#455A64",
+      "y_field": "hours"
+    },
+    {
+      "color": "#A5D6A7",
+      "y_field": "billable_target"
+    },
+    {
+      "color": "#2E7D32",
+      "y_field": "billable_hours"
+    }
+  ],
+  "report_name": "Condado Time Adherence - Weekly Summary",
+  "x_field": "week_of"
+}

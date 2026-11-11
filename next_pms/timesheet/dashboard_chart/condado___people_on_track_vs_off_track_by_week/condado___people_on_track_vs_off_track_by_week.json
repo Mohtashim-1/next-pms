@@ -1,0 +1,38 @@
+{
+  "chart_name": "Condado - People On Track vs Off Track by Week",
+  "chart_type": "Report",
+  "creation": "2026-11-03 19:55:30.736902",
+  "currency": "",
+  "docstatus": 0,
+  "doctype": "Dashboard Chart",
+  "filters_json": "{}",
+  "group_by_type": "Count",
+  "idx": 0,
+  "is_public": 1,
+  "is_standard": 1,
+  "modified": "2026-11-11 18:45:00.000000",
+  "modified_by": "Administrator",
+  "module": "Timesheet",
+  "name": "Condado - People On Track vs Off Track by Week",
+  "number_of_groups": 0,
+  "owner": "Administrator",
+  "roles": [],
+  "show_values_over_chart": 1,
+  "timeseries": 0,
+  "time_interval": "Yearly",
+  "timespan": "Last Year",
+  "type": "Bar",
+  "use_report_chart": 0,
+  "y_axis": [
+    {
+      "color": "#2E7D32",
+      "y_field": "on_track"
+    },
+    {
+      "color": "#B71C1C",
+      "y_field": "off_track"
+    }
+  ],
+  "report_name": "Condado Time Adherence - Weekly Summary",
+  "x_field": "week_of"
+}

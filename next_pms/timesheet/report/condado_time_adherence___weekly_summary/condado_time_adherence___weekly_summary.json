@@ -1,0 +1,31 @@
+{
+  "add_total_row": 0,
+  "columns": [],
+  "creation": "2026-11-02 17:04:53.408424",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Report",
+  "filters": [],
+  "idx": 0,
+  "is_standard": "Yes",
+  "letter_head": null,
+  "modified": "2026-11-11 18:45:00.000000",
+  "modified_by": "Administrator",
+  "module": "Timesheet",
+  "name": "Condado Time Adherence - Weekly Summary",
+  "owner": "Administrator",
+  "prepared_report": 0,
+  "query": "SELECT\n  x.wk AS \"Week Of:Date:100\",\n  IF(MAX(x.closed) = 1, 'Closed', 'Open') AS \"Week::70\",\n  MAX(x.eff_days) AS \"Days Due:Int:80\",\n  COUNT(*) AS \"People:Int:70\",\n  SUM(x.on_track) AS \"On Track:Int:80\",\n  SUM(x.eff_days > 0 AND x.on_track = 0) AS \"Off Track:Int:80\",\n  IF(MAX(x.eff_days) = 0, NULL, ROUND(100 * SUM(x.on_track) / COUNT(*), 0)) AS \"Adherence Pct:Percent:110\",\n  SUM(x.eff_days > 0 AND x.hrs = 0) AS \"No Time Logged:Int:120\",\n  SUM(x.noproj > 0) AS \"Logged No Project:Int:130\",\n  SUM(x.hrs < 8*x.eff_days) AS \"Under Hours:Int:100\",\n  SUM(x.eff_days - x.days_logged > 0) AS \"Missed Days:Int:100\",\n  SUM(x.closed = 1 AND x.unsub > 0) AS \"Not Submitted:Int:110\",\n  SUM(x.eff_days > 0 AND x.bill < 0.8*GREATEST(8*x.eff_days - x.pto, 0)) AS \"Under Billable:Int:110\",\n  ROUND(SUM(x.hrs), 1) AS \"Hours:Float:80\",\n  ROUND(SUM(8*x.eff_days), 1) AS \"Hours Target:Float:100\",\n  ROUND(SUM(x.bill), 1) AS \"Billable Hours:Float:110\",\n  ROUND(SUM(0.8*GREATEST(8*x.eff_days - x.pto, 0)), 1) AS \"Billable Target:Float:110\",\n  ROUND(SUM(x.unsub), 1) AS \"Hours Not Submitted:Float:140\",\n  ROUND(SUM(x.pending), 1) AS \"Hours Awaiting Approval:Float:160\",\n  ROUND(SUM(x.noproj), 1) AS \"Hours No Project:Float:130\"\nFROM (\n  SELECT y.*,\n    CASE WHEN y.eff_days > 0 AND y.hrs >= 8*y.eff_days AND y.eff_days - y.days_logged <= 0 AND (y.closed = 0 OR y.unsub = 0) THEN 1 ELSE 0 END AS on_track\n  FROM (\n    SELECT e.name AS employee, w.wk,\n      IF(DATEDIFF(CURDATE(), w.wk) >= 7, 1, 0) AS closed,\n      GREATEST(GREATEST(0, LEAST(LEAST(DATEDIFF(CURDATE(), w.wk), 7) - 1, 5)) - IFNULL(h.hol_days,0), 0) AS eff_days,\n      IFNULL(l.total_hrs,0) AS hrs,\n      IFNULL(l.bill_hrs,0) AS bill,\n      IFNULL(l.pto_hrs,0) AS pto,\n      IFNULL(l.days_logged,0) AS days_logged,\n      IFNULL(l.unsub_hrs,0) AS unsub,\n      IFNULL(l.pending_hrs,0) AS pending,\n      IFNULL(l.noproj_hrs,0) AS noproj\n    FROM `tabEmployee` e\n    CROSS JOIN (\n      SELECT w0.wk FROM (\n        SELECT DATE_SUB(DATE_SUB(CURDATE(), INTERVAL DAYOFWEEK(CURDATE())-1 DAY), INTERVAL 7*nn.n DAY) AS wk\n        FROM (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7) nn\n      ) w0 WHERE w0.wk >= '2026-11-01'\n    ) w\n    LEFT JOIN (\n      SELECT hl.parent AS holiday_list,\n        DATE_SUB(hl.holiday_date, INTERVAL DAYOFWEEK(hl.holiday_date)-1 DAY) AS wk,\n        COUNT(DISTINCT hl.holiday_date) AS hol_days\n      FROM `tabHoliday` hl\n      WHERE IFNULL(hl.weekly_off,0) = 0\n        AND DAYOFWEEK(hl.holiday_date) BETWEEN 2 AND 6\n        AND hl.holiday_date >= '2026-11-01'\n        AND hl.holiday_date < CURDATE()\n      GROUP BY hl.parent, wk\n    ) h ON h.holiday_list = e.holiday_list AND h.wk = w.wk\n    LEFT JOIN (\n      SELECT t.employee,\n        DATE_SUB(DATE(td.from_time), INTERVAL DAYOFWEEK(td.from_time)-1 DAY) AS wk,\n        COUNT(DISTINCT CASE WHEN DAYOFWEEK(td.from_time) BETWEEN 2 AND 6 THEN DATE(td.from_time) END) AS days_logged,\n        SUM(td.hours) AS total_hrs,\n        SUM(CASE WHEN td.is_billable = 1 THEN td.hours ELSE 0 END) AS bill_hrs,\n        SUM(CASE WHEN td.project = '[Internal] - PTO' THEN td.hours ELSE 0 END) AS pto_hrs,\n        SUM(CASE WHEN t.docstatus = 0 AND IFNULL(t.workflow_state,'Draft') NOT IN ('Pending Approval','Approved','Approved By PM') THEN td.hours ELSE 0 END) AS unsub_hrs,\n        SUM(CASE WHEN t.docstatus = 0 AND t.workflow_state = 'Pending Approval' THEN td.hours ELSE 0 END) AS pending_hrs,\n        SUM(CASE WHEN IFNULL(td.project,'') = '' THEN td.hours ELSE 0 END) AS noproj_hrs\n      FROM `tabTimesheet Detail` td\n      JOIN `tabTimesheet` t ON t.name = td.parent AND td.parenttype = 'Timesheet'\n      WHERE t.docstatus < 2\n        AND td.from_time >= '2026-11-01'\n        AND td.from_time < CURDATE()\n      GROUP BY t.employee, wk\n    ) l ON l.employee = e.name AND l.wk = w.wk\n    WHERE e.company = 'Condado Group Inc.'\n      AND e.status = 'Active'\n      AND IFNULL(e.user_id,'') NOT IN ('', 'timesheet@cp.com')\n  ) y\n) x\nGROUP BY x.wk\nORDER BY x.wk ASC",
+  "ref_doctype": "Timesheet",
+  "report_name": "Condado Time Adherence - Weekly Summary",
+  "report_type": "Query Report",
+  "roles": [
+    {
+      "role": "System Manager"
+    },
+    {
+      "role": "Projects Manager"
+    }
+  ],
+  "timeout": 0
+}

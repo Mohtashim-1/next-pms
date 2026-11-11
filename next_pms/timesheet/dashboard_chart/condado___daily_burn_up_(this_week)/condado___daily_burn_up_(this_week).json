@@ -1,0 +1,46 @@
+{
+  "chart_name": "Condado - Daily Burn-up (This Week)",
+  "chart_type": "Report",
+  "creation": "2026-11-03 20:16:11.706150",
+  "currency": "",
+  "docstatus": 0,
+  "doctype": "Dashboard Chart",
+  "filters_json": "{}",
+  "group_by_type": "Count",
+  "idx": 0,
+  "is_public": 1,
+  "is_standard": 1,
+  "modified": "2026-11-11 18:45:00.000000",
+  "modified_by": "Administrator",
+  "module": "Timesheet",
+  "name": "Condado - Daily Burn-up (This Week)",
+  "number_of_groups": 0,
+  "owner": "Administrator",
+  "roles": [],
+  "show_values_over_chart": 1,
+  "timeseries": 0,
+  "time_interval": "Yearly",
+  "timespan": "Last Year",
+  "type": "Line",
+  "use_report_chart": 0,
+  "y_axis": [
+    {
+      "color": "#90A4AE",
+      "y_field": "hours_target"
+    },
+    {
+      "color": "#263238",
+      "y_field": "hours_logged"
+    },
+    {
+      "color": "#81C784",
+      "y_field": "billable_target"
+    },
+    {
+      "color": "#1B5E20",
+      "y_field": "billable_logged"
+    }
+  ],
+  "report_name": "Condado Time Adherence - Daily Burn-up",
+  "x_field": "day"
+}

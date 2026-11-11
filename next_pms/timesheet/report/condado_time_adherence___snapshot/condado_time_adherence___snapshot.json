@@ -1,0 +1,31 @@
+{
+  "add_total_row": 0,
+  "columns": [],
+  "creation": "2026-11-03 19:54:30.177756",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Report",
+  "filters": [],
+  "idx": 0,
+  "is_standard": "Yes",
+  "letter_head": null,
+  "modified": "2026-11-11 18:45:00.000000",
+  "modified_by": "Administrator",
+  "module": "Timesheet",
+  "name": "Condado Time Adherence - Snapshot",
+  "owner": "Administrator",
+  "prepared_report": 0,
+  "query": "SELECT\n  (SELECT COUNT(*)\n     FROM `tabTimesheet` t\n     JOIN `tabEmployee` e ON e.name = t.employee\n    WHERE e.company = 'Condado Group Inc.' AND e.status = 'Active'\n      AND IFNULL(e.user_id,'') NOT IN ('', 'timesheet@cp.com')\n      AND t.docstatus = 0\n      AND IFNULL(t.workflow_state,'Draft') NOT IN ('Pending Approval','Approved','Approved By PM')\n      AND t.start_date >= '2026-11-01'\n      AND t.start_date < DATE_SUB(CURDATE(), INTERVAL DAYOFWEEK(CURDATE())-1 DAY)\n  ) AS \"Late Timesheets:Int:120\",\n  (SELECT COUNT(DISTINCT t.employee)\n     FROM `tabTimesheet` t\n     JOIN `tabEmployee` e ON e.name = t.employee\n    WHERE e.company = 'Condado Group Inc.' AND e.status = 'Active'\n      AND IFNULL(e.user_id,'') NOT IN ('', 'timesheet@cp.com')\n      AND t.docstatus = 0\n      AND IFNULL(t.workflow_state,'Draft') NOT IN ('Pending Approval','Approved','Approved By PM')\n      AND t.start_date >= '2026-11-01'\n      AND t.start_date < DATE_SUB(CURDATE(), INTERVAL DAYOFWEEK(CURDATE())-1 DAY)\n  ) AS \"People With Late Timesheets:Int:170\",\n  (SELECT COUNT(*) FROM (\n     SELECT e.name,\n       GREATEST(LEAST(DAYOFWEEK(CURDATE()) - 2, 5)\n         - IFNULL((SELECT COUNT(DISTINCT hl.holiday_date) FROM `tabHoliday` hl\n                    WHERE hl.parent = e.holiday_list AND IFNULL(hl.weekly_off,0) = 0\n                      AND DAYOFWEEK(hl.holiday_date) BETWEEN 2 AND 6\n                      AND hl.holiday_date >= DATE_SUB(CURDATE(), INTERVAL DAYOFWEEK(CURDATE())-1 DAY)\n                      AND hl.holiday_date < CURDATE()), 0), 0) AS due,\n       (SELECT IFNULL(SUM(td.hours),0)\n          FROM `tabTimesheet Detail` td\n          JOIN `tabTimesheet` t ON t.name = td.parent AND td.parenttype = 'Timesheet'\n         WHERE t.employee = e.name AND t.docstatus < 2\n           AND td.from_time >= GREATEST(DATE('2026-11-01'), DATE_SUB(CURDATE(), INTERVAL DAYOFWEEK(CURDATE())-1 DAY))\n           AND td.from_time < CURDATE()) AS hrs\n     FROM `tabEmployee` e\n     WHERE e.company = 'Condado Group Inc.' AND e.status = 'Active'\n       AND IFNULL(e.user_id,'') NOT IN ('', 'timesheet@cp.com')\n  ) q WHERE q.due > 0 AND q.hrs = 0) AS \"No Time This Week:Int:130\",\n  (SELECT COUNT(DISTINCT t.employee)\n     FROM `tabTimesheet Detail` td\n     JOIN `tabTimesheet` t ON t.name = td.parent AND td.parenttype = 'Timesheet'\n     JOIN `tabEmployee` e ON e.name = t.employee\n    WHERE e.company = 'Condado Group Inc.' AND e.status = 'Active'\n      AND IFNULL(e.user_id,'') NOT IN ('', 'timesheet@cp.com')\n      AND t.docstatus < 2\n      AND td.from_time >= GREATEST(DATE('2026-11-01'), DATE_SUB(CURDATE(), INTERVAL DAYOFWEEK(CURDATE())-1 DAY))\n      AND td.from_time < CURDATE()\n      AND IFNULL(td.project,'') = ''\n  ) AS \"No Project This Week:Int:140\"",
+  "ref_doctype": "Timesheet",
+  "report_name": "Condado Time Adherence - Snapshot",
+  "report_type": "Query Report",
+  "roles": [
+    {
+      "role": "System Manager"
+    },
+    {
+      "role": "Projects Manager"
+    }
+  ],
+  "timeout": 0
+}
