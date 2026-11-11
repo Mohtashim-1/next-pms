@@ -11,6 +11,7 @@ from next_pms.resource_management.api.utils.query import get_allocation_list_for
 from next_pms.resource_management.utils.capacity_demand import build_capacity_demand_rows, build_period_buckets
 from next_pms.timesheet.api import filter_employees
 from next_pms.timesheet.api.team import get_week_dates
+from next_pms.timesheet.utils.settings import get_employee_weekly_target_hours
 from next_pms.utils.employee import convert_currency
 
 
@@ -2046,7 +2047,6 @@ def get_personal_timesheet_dashboard() -> dict:
 	project_map: dict[str, dict] = {}
 	activity_map: dict[str, float] = {}
 	recent_entries: list[dict] = []
-	working_hours = 8.0
 
 	if employee:
 		emp_row = frappe.db.get_value(
@@ -2055,10 +2055,6 @@ def get_personal_timesheet_dashboard() -> dict:
 			["employee_name", "department", "company", "holiday_list"],
 			as_dict=True,
 		) or {}
-		# Prefer standard working hours if present on Employee
-		wh = frappe.db.get_value("Employee", employee, "custom_working_hours")
-		if wh:
-			working_hours = flt(wh) or 8.0
 
 		detail_rows = frappe.db.sql(
 			"""
@@ -2185,7 +2181,8 @@ def get_personal_timesheet_dashboard() -> dict:
 
 	billable_pct = (billable / hours * 100.0) if hours else 0.0
 	month_billable_pct = (month_billable / month_hours * 100.0) if month_hours else 0.0
-	target_week = working_hours * 5
+	target_week = get_employee_weekly_target_hours(employee)
+	working_hours = flt(target_week / 5.0, 2) if target_week else 8.0  # daily capacity
 	utilization = (hours / target_week * 100.0) if target_week else 0.0
 	remaining = max(target_week - hours, 0.0)
 	avg_daily = hours / 5.0 if hours else 0.0

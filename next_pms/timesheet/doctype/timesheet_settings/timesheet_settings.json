@@ -33,6 +33,7 @@
   "allocation_conflict_section",
   "allocation_conflict_action",
   "capacity_utilization_section",
+  "default_working_hours_per_month",
   "under_utilized_threshold",
   "column_break_capacity",
   "over_capacity_threshold",
@@ -231,6 +232,14 @@
    "fieldname": "capacity_utilization_section",
    "fieldtype": "Section Break",
    "label": "Capacity Utilization Colors"
+  },
+  {
+   "default": "160",
+   "description": "Used when an Employee has no Work Schedule. Weekly target = this value ÷ 4 (e.g. 160 → 40h/week).",
+   "fieldname": "default_working_hours_per_month",
+   "fieldtype": "Float",
+   "label": "Default Working Hours Per Month",
+   "non_negative": 1
   },
   {
    "default": "70",
