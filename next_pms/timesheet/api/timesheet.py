@@ -204,6 +204,11 @@ def _find_exact_recent_duplicate(candidates, description: str, hours: float, max
     Production duplicates share the same parent, description and hours, but get a
     new duration slot (e.g. 03:30 then 06:15) because the second save missed the
     child-row name. Match without requiring identical from_time.
+
+    Age must use ``modified``, not ``creation``: Frappe copies the *parent*
+    Timesheet.creation onto new child rows (`Document.set_user_and_timestamp`),
+    so after the parent is >30s old every "exact recent" check falsely misses and
+    Add Time / Edit "Add another entry" keeps inserting clones.
     """
     if not candidates:
         return None
@@ -215,12 +220,19 @@ def _find_exact_recent_duplicate(candidates, description: str, hours: float, max
     now = now_datetime()
     target_hours = flt(hours)
 
+    def _activity_ts(log):
+        # Prefer modified (always refreshed on the save that wrote this row).
+        for raw in (getattr(log, "modified", None), getattr(log, "creation", None), getattr(log, "from_time", None)):
+            if raw:
+                return get_datetime(raw)
+        return None
+
     def _sort_key(log):
-        return get_datetime(log.creation) if log.creation else get_datetime(log.from_time)
+        return _activity_ts(log) or now
 
     for log in sorted(candidates, key=_sort_key, reverse=True):
-        created = get_datetime(log.creation) if log.creation else None
-        if not created or abs(time_diff_in_seconds(now, created)) > max_age_seconds:
+        touched = _activity_ts(log)
+        if not touched or abs(time_diff_in_seconds(now, touched)) > max_age_seconds:
             continue
         if (strip_input_mode_marker(log.description) or "").strip() != desc_plain:
             continue
