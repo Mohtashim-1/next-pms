@@ -1,7 +1,7 @@
 /**
  * External dependencies.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -91,17 +91,31 @@ export const Approval = ({ onClose, user, timesheetState, dispatch, employee }: 
   useEffect(() => {
     form.setValue("employee", submitEmployee);
   }, [form, submitEmployee]);
+
+  const approverOptions = useMemo(
+    () =>
+      ((data?.message || []) as Array<{ name: string; employee_name: string }>).filter(
+        (item) => item.name && item.name !== submitEmployee
+      ),
+    [data?.message, submitEmployee]
+  );
+
   useEffect(() => {
-    const candidates = (data?.message || []) as Array<{ name: string }>;
-    if (!candidates.length) {
+    if (!approverOptions.length) {
       form.setValue("approver", "");
       return;
     }
     const current = form.getValues("approver");
-    if (!candidates.some((item) => item.name === current)) {
-      form.setValue("approver", candidates[0].name, { shouldValidate: true });
+    const preferred = user.reportsTo && user.reportsTo !== submitEmployee ? user.reportsTo : "";
+    if (current && approverOptions.some((item) => item.name === current)) {
+      return;
     }
-  }, [data?.message, form]);
+    if (preferred && approverOptions.some((item) => item.name === preferred)) {
+      form.setValue("approver", preferred, { shouldValidate: true });
+      return;
+    }
+    form.setValue("approver", approverOptions[0].name, { shouldValidate: true });
+  }, [approverOptions, form, submitEmployee, user.reportsTo]);
 
   const handleOpen = () => {
     if (isSubmitting) return;
@@ -238,7 +252,7 @@ export const Approval = ({ onClose, user, timesheetState, dispatch, employee }: 
                         onSelect={(value) => {
                           form.setValue("approver", value[0]);
                         }}
-                        data={data?.message?.map((item: { name: string; employee_name: string }) => ({
+                        data={approverOptions.map((item: { name: string; employee_name: string }) => ({
                           value: item.name,
                           label: item.employee_name,
                         }))}

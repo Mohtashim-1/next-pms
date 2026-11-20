@@ -1082,16 +1082,20 @@ def submit_for_approval(start_date: str, notes: str = None, employee: str = None
 
     if not employee:
         employee = get_employee_from_user()
-    summary = _get_timesheet_submission_summary(employee=employee, start_date=start_date)
-    if summary.get("violations"):
-        throw("<br>".join(summary.get("violations")))
 
+    # Resolve / reject self-approval before week validation so the error is clear.
     if not approver:
         reporting_manager = frappe.get_value("Employee", employee, "reports_to")
         if not reporting_manager:
             throw(_("Reporting Manager is not set for the employee."))
     else:
         reporting_manager = approver
+    if reporting_manager == employee:
+        throw(_("You cannot submit a timesheet to yourself. Select a different Line Manager."))
+
+    summary = _get_timesheet_submission_summary(employee=employee, start_date=start_date)
+    if summary.get("violations"):
+        throw("<br>".join(summary.get("violations")))
 
     if not frappe.db.exists("Employee", reporting_manager):
         throw(_("Reporting Manager does not exist."), frappe.DoesNotExistError)

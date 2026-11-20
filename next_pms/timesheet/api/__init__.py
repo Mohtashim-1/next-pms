@@ -29,6 +29,10 @@ def get_employee_with_role(role: str | list[str], employee: str | None = None):
         fields=["name", "employee_name", "user_id", "company"],
         order_by="employee_name asc",
     )
+    # Line Manager picker must never offer the submitter as their own approver
+    # (Condado staff with Timesheet Approver could previously select themselves).
+    if source_employee:
+        employees = [row for row in employees if row.name != source_employee]
     return employees
 
 

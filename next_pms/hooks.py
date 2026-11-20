@@ -197,6 +197,7 @@ scheduler_events = {
     ],
     "daily": [
         "next_pms.next_pms.tasks.security.run_scheduled_key_rotation",
+        "next_pms.project_currency.tasks.sync_currency_exchange.sync_daily_eur_usd_rates",
     ],
     "daily_long": [
         "next_pms.timesheet.tasks.daily_reminder_for_time_entry.send_reminder",
