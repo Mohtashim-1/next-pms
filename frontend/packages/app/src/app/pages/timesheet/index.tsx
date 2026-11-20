@@ -28,10 +28,12 @@ import { Calendar, CalendarArrowDown, EllipsisVertical, Paperclip, Plus, Table2 
 /**
  * Internal dependencies.
  */
+import EmployeeCombo from "@/app/components/employeeComboBox";
 import { PeriodLockAdmin } from "@/app/components/timesheet-period-lock/periodLockAdmin";
 import { TimesheetTable } from "@/app/components/timesheet-table";
 import { SubmitButton } from "@/app/components/timesheet-table/components/submitButton";
 import { Header, Main } from "@/app/layout/root";
+import { getLocalStorage, setLocalStorage } from "@/lib/storage";
 import { isWeekLocked as isTimesheetWeekLocked } from "@/lib/timesheetStatus";
 import {
   filterTimesheetWeeksToMonth,
@@ -47,6 +49,8 @@ import ExpandableHours from "./components/expandableHours";
 import { Footer } from "./components/footer";
 import { initialState, reducer } from "./reducer";
 import { validateDate } from "./utils";
+
+const VIEW_EMPLOYEE_KEY = "next-pms:timesheet-view-employee";
 
 function filterPayloadToCurrentMonth<T extends { data: Record<string, timesheet> }>(
   payload: T,
@@ -64,22 +68,43 @@ function Timesheet() {
 
   const [startDateParam, setStartDateParam] = useQueryParam<string>("date", "");
   const user = useSelector((state: RootState) => state.user);
+  const needsEmployeePicker = !user.employee;
+  const storedViewEmployee = needsEmployeePicker ? String(getLocalStorage(VIEW_EMPLOYEE_KEY) || "") : "";
+  const [viewEmployee, setViewEmployee] = useState(user.employee || storedViewEmployee || "");
+  const [viewEmployeeName, setViewEmployeeName] = useState(user.employeeName || "");
+  const activeEmployee = user.employee || viewEmployee;
+  const activeEmployeeName = user.employeeName || viewEmployeeName;
   const monthBounds = useMemo(() => getCurrentMonthBounds(), []);
   const monthLabel = useMemo(() => getCurrentMonthLabel(), []);
   const [timesheet, dispatch] = useReducer(reducer, initialState);
   const dailyWorkingHour = expectatedHours(user.workingHours, user.workingFrequency);
-  const { data, isLoading, error, mutate } = useFrappeGetCall("next_pms.timesheet.api.timesheet.get_timesheet_data", {
-    employee: user.employee,
-    start_date: getTodayDate(),
-    max_week: MAX_WEEKS_PER_MONTH,
-    current_month_only: 1,
-  });
+  const { data, isLoading, error, mutate } = useFrappeGetCall(
+    "next_pms.timesheet.api.timesheet.get_timesheet_data",
+    {
+      employee: activeEmployee,
+      start_date: getTodayDate(),
+      max_week: MAX_WEEKS_PER_MONTH,
+      current_month_only: 1,
+    },
+    activeEmployee ? undefined : null
+  );
   const { call: recallTimesheet, loading: isRecalling } = useFrappePostCall(
     "next_pms.timesheet.api.timesheet.recall_timesheet"
   );
   const { call: abandonDraft, loading: isAbandoningDraft } = useFrappePostCall(
     "next_pms.timesheet.api.timesheet.abandon_draft"
   );
+
+  useEffect(() => {
+    if (user.employee) {
+      setViewEmployee(user.employee);
+      setViewEmployeeName(user.employeeName || "");
+      return;
+    }
+    if (storedViewEmployee && !viewEmployee) {
+      setViewEmployee(storedViewEmployee);
+    }
+  }, [user.employee, user.employeeName, storedViewEmployee, viewEmployee]);
 
   useEffect(() => {
     const scrollToElement = () => {
@@ -95,7 +120,7 @@ function Timesheet() {
   useEffect(() => {
     dispatch({ type: "SET_DATA", payload: { ...initialState.data } });
     dispatch({ type: "SET_WEEK_DATE", payload: getTodayDate() });
-  }, [user.employee]);
+  }, [activeEmployee]);
 
   useEffect(() => {
     if (data) {
@@ -124,7 +149,7 @@ function Timesheet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatch, startDateParam, timesheet.data.data, monthBounds.start]);
 
-  useFrappeEventListener(`timesheet_update::${user.employee}`, (payload) => {
+  useFrappeEventListener(`timesheet_update::${activeEmployee}`, (payload) => {
     const res = filterPayloadToCurrentMonth(payload.message, monthBounds);
     const key = Object.keys(res.data)[0];
     if (!key || !Object.prototype.hasOwnProperty.call(timesheet.data.data, key)) {
@@ -165,14 +190,27 @@ function Timesheet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const handleViewEmployeeSelect = (employeeId: string) => {
+    setViewEmployee(employeeId);
+    setLocalStorage(VIEW_EMPLOYEE_KEY, employeeId);
+    setViewEmployeeName("");
+  };
+
   const handleAddTime = () => {
+    if (!activeEmployee) {
+      toast({
+        variant: "destructive",
+        description: "Select an employee first — Administrator is not linked to an Employee record.",
+      });
+      return;
+    }
     const timesheetData = {
       name: "",
       task: "",
       date: getFormatedDate(getUTCDateTime()),
       description: "",
       hours: 0,
-      employee: user.employee,
+      employee: activeEmployee,
       project: "",
     };
     dispatch({ type: "SET_TIMESHEET", payload: timesheetData });
@@ -183,7 +221,7 @@ function Timesheet() {
   };
 
   const onCellClick = (data: NewTimesheetProps) => {
-    data.employee = user.employee;
+    data.employee = activeEmployee;
     dispatch({ type: "SET_TIMESHEET", payload: data });
     if (data.hours > 0) {
       dispatch({ type: "SET_EDIT_DIALOG_STATE", payload: true });
@@ -205,7 +243,7 @@ function Timesheet() {
     if (isRecalling) return;
     recallTimesheet({
       start_date,
-      employee: user.employee,
+      employee: activeEmployee,
     })
       .then((res) => {
         toast({
@@ -231,7 +269,7 @@ function Timesheet() {
 
     abandonDraft({
       start_date,
-      employee: user.employee,
+      employee: activeEmployee,
     })
       .then((res) => {
         toast({
@@ -269,6 +307,17 @@ function Timesheet() {
   return (
     <>
       <Header className="justify-end gap-x-3">
+        {needsEmployeePicker ? (
+          <div className="mr-auto min-w-[220px] max-w-xs">
+            <EmployeeCombo
+              value={activeEmployee}
+              employeeName={activeEmployeeName}
+              status={["Active"]}
+              label="View employee timesheet"
+              onSelect={handleViewEmployeeSelect}
+            />
+          </div>
+        ) : null}
         {window.frappe?.boot?.user?.can_create.includes("Leave Application") && (
           <Button variant="outline" onClick={handleAddLeave} title="Add Time">
             <Plus />
@@ -282,7 +331,7 @@ function Timesheet() {
           onUpdated={mutate}
         />
 
-        <Button onClick={handleAddTime} title="Add Time">
+        <Button onClick={handleAddTime} title="Add Time" disabled={!activeEmployee}>
           <Plus />
           Time
         </Button>
@@ -311,7 +360,11 @@ function Timesheet() {
         </DropdownMenu>
       </Header>
 
-      {isLoading && Object.keys(timesheet.data?.data).length == 0 ? (
+      {needsEmployeePicker && !activeEmployee ? (
+        <Typography className="flex items-center justify-center p-8 text-muted-foreground">
+          Select an employee to view their timesheet. Administrator is not linked to an Employee record.
+        </Typography>
+      ) : isLoading && Object.keys(timesheet.data?.data).length == 0 ? (
         <Spinner isFull />
       ) : (
         <>
@@ -398,7 +451,7 @@ function Timesheet() {
                               loadingLikedTasks={loadingLikedTasks}
                               likedTaskData={likedTaskData}
                               getLikedTaskData={getLikedTaskData}
-                              employee={user.employee}
+                              employee={activeEmployee}
                               onSaved={mutate}
                               enableInlineEdit={!weekLocked}
                               periodLocks={timesheet.data.period_locks ?? []}
@@ -413,7 +466,14 @@ function Timesheet() {
           )}
         </>
       )}
-      <Footer timesheet={timesheet} user={user} dispatch={dispatch} callback={handleTimesheetRefresh} />
+      <Footer
+        timesheet={timesheet}
+        user={user}
+        dispatch={dispatch}
+        callback={handleTimesheetRefresh}
+        viewEmployee={activeEmployee}
+        viewEmployeeName={activeEmployeeName}
+      />
     </>
   );
 }

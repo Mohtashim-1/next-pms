@@ -10,6 +10,8 @@ export interface ApprovalProps {
   user: UserState;
   timesheetState: TimesheetState;
   dispatch: (value: Action) => void;
+  /** Employee whose week is being submitted (needed when user has no linked Employee). */
+  employee?: string;
 }
 
 export type TimesheetDetail = Pick<
@@ -56,6 +58,9 @@ export type FooterProps = {
   user: RootState["user"];
   dispatch: React.Dispatch<Action>;
   callback: (savedDate?: string) => void;
+  /** When set (e.g. Administrator viewing another employee), dialogs use this employee. */
+  viewEmployee?: string;
+  viewEmployeeName?: string;
 };
 
 export interface TimesheetState {

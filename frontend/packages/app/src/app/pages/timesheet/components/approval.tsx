@@ -59,20 +59,22 @@ type SubmissionSummary = {
   }>;
 };
 
-export const Approval = ({ onClose, user, timesheetState, dispatch }: ApprovalProps) => {
+export const Approval = ({ onClose, user, timesheetState, dispatch, employee }: ApprovalProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const submitEmployee = employee || user.employee;
   const { call } = useFrappePostCall("next_pms.timesheet.api.timesheet.submit_for_approval");
   const { data } = useFrappeGetCall("next_pms.timesheet.api.get_employee_with_role", {
     role: ["Timesheet Approver"],
-    employee: user.employee,
+    employee: submitEmployee,
   });
   const { data: summaryData, isLoading: isValidating } = useFrappeGetCall(
     "next_pms.timesheet.api.timesheet.validate_submission",
     {
       start_date: timesheetState.dateRange.start_date,
-      employee: user.employee,
-    }
+      employee: submitEmployee,
+    },
+    submitEmployee && timesheetState.dateRange.start_date ? undefined : null
   );
   const summary = summaryData?.message as SubmissionSummary | undefined;
   const form = useForm<z.infer<typeof TimesheetApprovalSchema>>({
@@ -80,12 +82,15 @@ export const Approval = ({ onClose, user, timesheetState, dispatch }: ApprovalPr
     defaultValues: {
       start_date: timesheetState.dateRange.start_date,
       end_date: timesheetState.dateRange.end_date,
-      employee: user.employee,
+      employee: submitEmployee,
       approver: user.reportsTo,
       notes: "",
     },
     mode: "onSubmit",
   });
+  useEffect(() => {
+    form.setValue("employee", submitEmployee);
+  }, [form, submitEmployee]);
   useEffect(() => {
     const candidates = (data?.message || []) as Array<{ name: string }>;
     if (!candidates.length) {

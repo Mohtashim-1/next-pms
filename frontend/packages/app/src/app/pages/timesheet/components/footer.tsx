@@ -13,7 +13,16 @@ import ImportFromGoogleCalendarDialog from "./importFromGoogleCalendarDialog";
 import TimesheetGridDialog from "./timesheetGridDialog";
 import type { FooterProps } from "./types";
 
-export const Footer = ({ timesheet, user, dispatch, callback }: FooterProps) => {
+export const Footer = ({
+  timesheet,
+  user,
+  dispatch,
+  callback,
+  viewEmployee,
+  viewEmployeeName,
+}: FooterProps) => {
+  const employee = viewEmployee || user.employee;
+  const employeeName = viewEmployeeName || user.employeeName;
   const onOpenChange = useCallback(() => {
     dispatch({ type: "SET_DIALOG_STATE", payload: false });
   }, [dispatch]);
@@ -30,13 +39,13 @@ export const Footer = ({ timesheet, user, dispatch, callback }: FooterProps) => 
           open={timesheet.isDialogOpen}
           onOpenChange={onOpenChange}
           initialDate={timesheet.timesheet.date}
-          employee={user.employee}
+          employee={employee}
           workingFrequency={user.workingFrequency}
           workingHours={user.workingHours}
           task={timesheet.timesheet.task}
           project={timesheet.timesheet.project}
           activity_type={timesheet.timesheet.activity_type}
-          employeeName={user.employeeName}
+          employeeName={employeeName}
           onSuccess={() => {
             callback();
           }}
@@ -44,7 +53,7 @@ export const Footer = ({ timesheet, user, dispatch, callback }: FooterProps) => 
       )}
       {timesheet.isEditDialogOpen && (
         <EditTime
-          employee={timesheet.timesheet.employee as string}
+          employee={(timesheet.timesheet.employee as string) || employee}
           date={timesheet.timesheet.date}
           task={timesheet.timesheet.task}
           activity_type={timesheet.timesheet.activity_type}
@@ -56,12 +65,18 @@ export const Footer = ({ timesheet, user, dispatch, callback }: FooterProps) => 
         />
       )}
       {timesheet.isAprrovalDialogOpen && (
-        <Approval user={user} dispatch={dispatch} timesheetState={timesheet} onClose={callback} />
+        <Approval
+          user={user}
+          dispatch={dispatch}
+          timesheetState={timesheet}
+          onClose={callback}
+          employee={employee}
+        />
       )}
       {timesheet.isLeaveDialogOpen && (
         <AddLeave
-          employee={user.employee}
-          employeeName={user.employeeName}
+          employee={employee}
+          employeeName={employeeName}
           open={timesheet.isLeaveDialogOpen}
           onOpenChange={() => {
             dispatch({ type: "SET_LEAVE_DIALOG_STATE", payload: false });
@@ -91,8 +106,8 @@ export const Footer = ({ timesheet, user, dispatch, callback }: FooterProps) => 
             dispatch({ type: "SET_TIMESHEET_GRID_DIALOG_STATE", payload: open });
             if (!open) callback();
           }}
-          employee={user.employee}
-          employeeName={user.employeeName}
+          employee={employee}
+          employeeName={employeeName}
           roles={user.roles}
           onSuccess={callback}
         />
