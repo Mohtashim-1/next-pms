@@ -30,9 +30,9 @@ export const Header = ({
 }: HeaderProps) => {
   if (!showHeading) return <></>;
   return (
-    <TableHeader>
-      <TableRow>
-        <TableHead className="max-w-sm w-2/6 ">
+    <TableHeader className="sticky top-0 z-20 bg-background shadow-[0_1px_0_0_hsl(var(--border))]">
+      <TableRow className="bg-background hover:bg-background">
+        <TableHead className="max-w-sm w-2/6 bg-background">
           <Typography variant="h6" className="font-normal text-muted-foreground flex gap-x-4 items-center">
             Tasks
             {weeklyStatus != "Approved" && importTasks && (
@@ -59,7 +59,10 @@ export const Header = ({
           return (
             <TableHead
               key={date}
-              className={mergeClassNames("max-w-20 text-center px-2 min-w-20", getTimesheetColumnBg(date, holidays))}
+              className={mergeClassNames(
+                "max-w-20 text-center px-2 min-w-20 bg-background",
+                getTimesheetColumnBg(date, holidays)
+              )}
             >
               <Typography
                 variant="p"
@@ -89,7 +92,7 @@ export const Header = ({
             </TableHead>
           );
         })}
-        <TableHead className="max-w-24 w-1/12">
+        <TableHead className="max-w-24 w-1/12 bg-background">
           <Typography variant="p" className="text-base text-muted-foreground font-medium text-right">
             Total
           </Typography>

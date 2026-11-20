@@ -11,7 +11,7 @@ import {
   FormMessage,
   Typography,
 } from "@next-pms/design-system/components";
-import { getFormatedDate } from "@next-pms/design-system/date";
+import { getFormatedDate, getUTCDateTime } from "@next-pms/design-system/date";
 import { floatToTime, mergeClassNames } from "@next-pms/design-system/utils";
 import { CalendarDays, Trash2 } from "lucide-react";
 import type { Control, UseFormReturn } from "react-hook-form";
@@ -24,6 +24,16 @@ import { TimesheetDescriptionField } from "@/app/components/timesheet-descriptio
 import { TimeRangeFields } from "@/app/components/timesheet-input/timeRangeFields";
 import type { TimesheetInputMode } from "@/lib/timesheetTime";
 import { timeStringToFloat, TimesheetDraftUpdateSchema } from "@/schema/timesheet";
+
+/** Normalize API/datetime values to YYYY-MM-DD so DatePicker never sees UTC midnight. */
+export function toDateOnly(value: string | Date | null | undefined): string {
+  if (!value) return "";
+  if (typeof value === "string") {
+    const datePart = value.trim().split(/[\sT]/)[0] || "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return datePart;
+  }
+  return getFormatedDate(getUTCDateTime(value));
+}
 
 type FormValues = z.infer<typeof TimesheetDraftUpdateSchema>;
 
@@ -119,7 +129,9 @@ export const EditTimeEntryCard = ({
                 <FormControl>
                   <div className="[&_button]:h-10 [&_button]:min-h-10 [&_button]:w-full [&_button]:justify-start [&_button]:rounded-lg [&_button]:border-muted-foreground/20 [&_button]:bg-background [&_button]:text-sm">
                     <DatePicker
-                      date={new Date(field.value)}
+                      // Pass YYYY-MM-DD string (not `new Date("YYYY-MM-DD")`) so US
+                      // timezones do not shift the day backward (13 → 12).
+                      date={toDateOnly(field.value)}
                       onDateChange={(nextDate) => {
                         if (!nextDate) return;
                         form.setValue(`data.${index}.date`, getFormatedDate(nextDate), {

@@ -199,7 +199,7 @@ export const TimesheetTable = ({
         data-timesheet-grid
         tabIndex={-1}
         onKeyDown={handleContainerKeyDown}
-        className="outline-none"
+        className="outline-none max-h-[min(70vh,720px)] overflow-auto"
       >
       <Table>
         <Header

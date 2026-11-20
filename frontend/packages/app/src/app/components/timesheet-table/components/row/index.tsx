@@ -49,10 +49,22 @@ const Row = ({
   periodLocks = [],
   dayTotals = {},
 }: RowProps) => {
+  const sortedEntries =
+    Object.keys(tasks).length > 0
+      ? Object.entries(tasks).sort(([, a], [, b]) => {
+          const key = (t: TaskDataProps) =>
+            [
+              (t.activity_type || "").toLowerCase(),
+              (t.project_name || "").toLowerCase(),
+              (t.subject || t.name || "").toLowerCase(),
+            ].join("\0");
+          return key(a).localeCompare(key(b));
+        })
+      : [];
+
   return (
     <>
-      {Object.keys(tasks).length > 0 &&
-        Object.entries(tasks).map(([task, taskData]: [string, TaskDataProps], rowIndex: number) => {
+      {sortedEntries.map(([task, taskData]: [string, TaskDataProps], rowIndex: number) => {
           const gridRow = rowOffset + rowIndex;
           const isRunningTask = runningTimer?.task === taskData.name;
           let totalHours = 0;

@@ -331,7 +331,8 @@ export function serializeTimesheetUpdateRow(row: z.infer<typeof TimesheetDraftSi
     name: row.name,
     parent: row.parent,
     task: row.task,
-    date: row.date,
+    // Strip any time portion so backend getdate() and the date picker agree.
+    date: String(row.date || "").trim().split(/[\sT]/)[0] || row.date,
     description: row.description || "",
     input_mode: row.input_mode,
     hours: 0,
@@ -366,6 +367,13 @@ export const TimesheetUpdateSchema = z.object({
 
 // Preprocessing time function to convert "HH:MM" format to float
 export const timeStringToFloat = (value: string) => {
+  // ".5" (common shorthand) → "0.5" so Edit duration matches Add Time behavior.
+  let normalized = String(value ?? "").trim();
+  if (/^\.\d+$/.test(normalized)) {
+    normalized = `0${normalized}`;
+  }
+  value = normalized;
+
   // First,check if characters other than [0-9,:,.] are not present in string else throw error
   if (/[^0-9:.]/.test(value)) {
     return NaN;

@@ -198,6 +198,38 @@ def _find_autosave_match(candidates, description: str, input_mode: str, max_age_
     return None
 
 
+def _find_exact_recent_duplicate(candidates, description: str, hours: float, max_age_seconds: int = 30):
+    """Collapse Save-after-autosave / double-click clones.
+
+    Production duplicates share the same parent, description and hours, but get a
+    new duration slot (e.g. 03:30 then 06:15) because the second save missed the
+    child-row name. Match without requiring identical from_time.
+    """
+    if not candidates:
+        return None
+
+    desc_plain = (strip_input_mode_marker(description) or "").strip()
+    if not desc_plain:
+        return None
+
+    now = now_datetime()
+    target_hours = flt(hours)
+
+    def _sort_key(log):
+        return get_datetime(log.creation) if log.creation else get_datetime(log.from_time)
+
+    for log in sorted(candidates, key=_sort_key, reverse=True):
+        created = get_datetime(log.creation) if log.creation else None
+        if not created or abs(time_diff_in_seconds(now, created)) > max_age_seconds:
+            continue
+        if (strip_input_mode_marker(log.description) or "").strip() != desc_plain:
+            continue
+        if abs(flt(log.hours) - target_hours) > 0.001:
+            continue
+        return log
+    return None
+
+
 def _append_time_log(
     employee: str,
     task: str | None,
@@ -238,11 +270,19 @@ def _append_time_log(
     existing_log = None
 
     # Prefer an explicit child-row name from the Add Time autosave loop.
-    # If that row was discarded / never committed / is on another timesheet,
-    # fall through and create a fresh log instead of failing the draft save.
+    # If that row lives on another timesheet (project/date changed mid-edit),
+    # switch to that parent instead of silently inserting a duplicate.
     existing_log = None
     if name:
         existing_log = next((log for log in timesheet.time_logs if log.name == name), None)
+        if not existing_log:
+            other_parent = frappe.db.get_value("Timesheet Detail", name, "parent")
+            if other_parent and other_parent != timesheet.name:
+                timesheet = frappe.get_doc("Timesheet", other_parent)
+                if project:
+                    timesheet.update({"parent_project": project})
+                _normalize_invalid_duration_logs(timesheet, from_time)
+                existing_log = next((log for log in timesheet.time_logs if log.name == name), None)
     elif not force_new and task:
         candidates = [
             log
@@ -250,6 +290,8 @@ def _append_time_log(
             if log.task == task and getdate(log.from_time) == getdate(from_time)
         ]
         existing_log = _find_autosave_match(candidates, description, input_mode)
+        if not existing_log:
+            existing_log = _find_exact_recent_duplicate(candidates, description, hours)
     elif not force_new and activity_type:
         # Activity-only logs (Meeting/Admin/…) — never merge solely on work type.
         # Two Meetings on the same day are two entries; only collapse an in-flight
@@ -267,6 +309,8 @@ def _append_time_log(
             and getdate(log.from_time) == day
         ]
         existing_log = _find_autosave_match(candidates, description, input_mode)
+        if not existing_log:
+            existing_log = _find_exact_recent_duplicate(candidates, description, hours)
 
     if existing_log:
         existing_log.hours = hours
@@ -806,38 +850,51 @@ def _save_time_entry(
             to_time=to_time,
             input_mode=input_mode,
         )
-    timesheet, ignore_permissions, row = _append_time_log(
-        employee=employee,
-        task=task,
-        description=set_input_mode_marker(description, input_mode),
-        from_time=resolved_from,
-        to_time=resolved_to,
-        hours=resolved_hours,
-        is_billable=is_billable,
-        billable_override_reason=billable_override_reason,
-        require_override_reason=is_billable is not None,
-        activity_type=activity_type,
-        force_new=force_new,
-        project=project,
-        name=name,
-    )
-    try:
-        timesheet.save(ignore_permissions=ignore_permissions)
-    except OverlapError:
-        if input_mode != "duration":
-            raise
-        resolved_from, resolved_to, resolved_hours = _resolve_duration_time_slot(
-            employee,
-            date,
-            hours,
-            exclude_detail_name=name or getattr(row, "name", None),
-            preferred_from=None,
-            draft_mode=True,
+    timesheet = None
+    ignore_permissions = False
+    row = None
+    for attempt in range(2):
+        timesheet, ignore_permissions, row = _append_time_log(
+            employee=employee,
+            task=task,
+            description=set_input_mode_marker(description, input_mode),
+            from_time=resolved_from,
+            to_time=resolved_to,
+            hours=resolved_hours,
+            is_billable=is_billable,
+            billable_override_reason=billable_override_reason,
+            require_override_reason=is_billable is not None,
+            activity_type=activity_type,
+            force_new=force_new,
+            project=project,
+            name=name,
         )
-        row.from_time = resolved_from
-        row.to_time = resolved_to
-        row.hours = resolved_hours
-        timesheet.save(ignore_permissions=ignore_permissions)
+        try:
+            _mark_draft_save(timesheet)
+            timesheet.save(ignore_permissions=ignore_permissions)
+            break
+        except OverlapError:
+            if input_mode != "duration":
+                raise
+            resolved_from, resolved_to, resolved_hours = _resolve_duration_time_slot(
+                employee,
+                date,
+                hours,
+                exclude_detail_name=name or getattr(row, "name", None),
+                preferred_from=None,
+                draft_mode=True,
+            )
+            row.from_time = resolved_from
+            row.to_time = resolved_to
+            row.hours = resolved_hours
+            _mark_draft_save(timesheet)
+            timesheet.save(ignore_permissions=ignore_permissions)
+            break
+        except frappe.TimestampMismatchError:
+            # Concurrent draft write — rebuild from a fresh parent and retry once.
+            if attempt:
+                raise
+            continue
     detail_name = getattr(row, "name", None) or name
     if not detail_name:
         timesheet.reload()
@@ -1197,11 +1254,57 @@ def update_timesheet_detail(
     activity_type: str | None = None,
     project: str | None = None,
 ):
+    last_err = None
+    for attempt in range(2):
+        try:
+            return _update_timesheet_detail_once(
+                name=name,
+                parent=parent,
+                hours=hours,
+                description=description,
+                task=task,
+                date=date,
+                is_billable=is_billable,
+                billable_override_reason=billable_override_reason,
+                from_time=from_time,
+                to_time=to_time,
+                input_mode=input_mode,
+                activity_type=activity_type,
+                project=project,
+            )
+        except frappe.TimestampMismatchError as err:
+            # Matthew cancel/edit race: another autosave wrote first — rebuild once.
+            last_err = err
+            if attempt:
+                raise
+    if last_err:
+        raise last_err
+    return _("Time entry updated successfully.")
+
+
+def _update_timesheet_detail_once(
+    name: str,
+    parent: str,
+    hours: float,
+    description: str,
+    task: str,
+    date: str | None = None,
+    is_billable: bool | None = None,
+    billable_override_reason: str | None = None,
+    from_time: str | None = None,
+    to_time: str | None = None,
+    input_mode: str = "duration",
+    activity_type: str | None = None,
+    project: str | None = None,
+):
     parent_doc = frappe.get_doc("Timesheet", parent)
     _assert_week_editable(parent_doc.employee, parent_doc.start_date)
     ignore_permissions = employee_has_higher_access(parent_doc.employee, ptype="write")
     logs_to_remove = []
     new_logs = []
+    # Clients sometimes send `from_time` datetime as `date` ("2026-11-13 00:00:00").
+    date = str(getdate(date)) if date else str(getdate(parent_doc.start_date))
+    name = (name or "").strip()
     task = (task or "").strip() or None
     activity_type = (activity_type or "").strip() or None
     project = (project or "").strip() or None
@@ -1212,13 +1315,17 @@ def update_timesheet_detail(
         activity_type = (existing_log.activity_type or "").strip() or None
     if not resolved_project and existing_log:
         resolved_project = (existing_log.project or "").strip() or None
+    # Compare against the row's original day BEFORE rewriting from_time, otherwise
+    # a date change never moves the entry and can leave a duplicate behind.
+    original_log_date = getdate(existing_log.from_time) if existing_log and existing_log.from_time else None
+    date_changed = bool(existing_log and original_log_date and original_log_date != getdate(date))
     if input_mode == "duration":
         resolved_from, resolved_to, resolved_hours = _resolve_duration_time_slot(
             employee=parent_doc.employee,
             date=date,
             hours=hours,
             exclude_detail_name=name,
-            preferred_from=existing_log.from_time if existing_log else None,
+            preferred_from=None if date_changed else (existing_log.from_time if existing_log else None),
             draft_mode=True,
         )
     else:
@@ -1237,10 +1344,11 @@ def update_timesheet_detail(
             "description": strip_input_mode_marker(description),
             "date": date,
             "employee": parent_doc.employee,
-            "from_time": str(resolved_from),
-            "to_time": str(resolved_to),
+            "from_time": str(resolved_from) if input_mode == "range" else None,
+            "to_time": str(resolved_to) if input_mode == "range" else None,
             "input_mode": input_mode,
             "project": resolved_project,
+            "force_new": True,
         }
         if activity_type:
             payload["activity_type"] = activity_type
@@ -1254,6 +1362,12 @@ def update_timesheet_detail(
             continue
 
         if task_project and task_project != parent_doc.parent_project:
+            logs_to_remove.append(log)
+            new_logs.append(build_new_log_payload())
+            continue
+
+        if date_changed or getdate(parent_doc.start_date) != getdate(date):
+            # Move to the target day via save(); do not keep a mutated copy here.
             logs_to_remove.append(log)
             new_logs.append(build_new_log_payload())
             continue
@@ -1277,42 +1391,62 @@ def update_timesheet_detail(
             )
             log.is_billable = resolved_billable
             log.custom_billable_override_reason = override_reason
-        if getdate(log.from_time) != getdate(date):
-            logs_to_remove.append(log)
-            new_logs.append(build_new_log_payload())
 
     for log in logs_to_remove:
         parent_doc.time_logs.remove(log)
 
     if not name:
         if parent_doc.start_date <= getdate(date) <= parent_doc.end_date:
-            log = {
-                "task": task,
-                "hours": resolved_hours,
-                "description": set_input_mode_marker(description, input_mode),
-                "from_time": resolved_from,
-                "to_time": resolved_to,
-                "project": resolved_project,
-            }
-            if activity_type:
-                log["activity_type"] = activity_type
-            if is_billable is not None:
-                resolved_billable, override_reason, _default = resolve_entry_billable(
-                    task,
-                    is_billable,
-                    billable_override_reason,
-                    require_override_reason=True,
-                    project=resolved_project,
-                )
-                log["is_billable"] = resolved_billable
-                log["custom_billable_override_reason"] = override_reason
+            # Double-click Save on "Add another entry" can post the same empty-name
+            # row twice; reuse the clone instead of appending a second duration slot.
+            day_candidates = [
+                log
+                for log in parent_doc.time_logs
+                if getdate(log.from_time) == getdate(date)
+                and (log.project or "") == (resolved_project or "")
+                and (log.task or None) == task
+                and (log.activity_type or "").strip() == (activity_type or "")
+            ]
+            recent_clone = _find_exact_recent_duplicate(
+                day_candidates, set_input_mode_marker(description, input_mode), resolved_hours
+            )
+            if recent_clone:
+                recent_clone.hours = resolved_hours
+                recent_clone.description = set_input_mode_marker(description, input_mode)
+                recent_clone.from_time = resolved_from
+                recent_clone.to_time = resolved_to
+                if resolved_project:
+                    recent_clone.project = resolved_project
+                if activity_type:
+                    recent_clone.activity_type = activity_type
             else:
-                default_billable, _billable_default, _override_reason = resolve_entry_billable(
-                    task, project=resolved_project
-                )
-                log["is_billable"] = default_billable
+                log = {
+                    "task": task,
+                    "hours": resolved_hours,
+                    "description": set_input_mode_marker(description, input_mode),
+                    "from_time": resolved_from,
+                    "to_time": resolved_to,
+                    "project": resolved_project,
+                }
+                if activity_type:
+                    log["activity_type"] = activity_type
+                if is_billable is not None:
+                    resolved_billable, override_reason, _default = resolve_entry_billable(
+                        task,
+                        is_billable,
+                        billable_override_reason,
+                        require_override_reason=True,
+                        project=resolved_project,
+                    )
+                    log["is_billable"] = resolved_billable
+                    log["custom_billable_override_reason"] = override_reason
+                else:
+                    default_billable, _billable_default, _override_reason = resolve_entry_billable(
+                        task, project=resolved_project
+                    )
+                    log["is_billable"] = default_billable
 
-            parent_doc.append("time_logs", log)
+                parent_doc.append("time_logs", log)
         else:
             new_logs.append(build_new_log_payload())
 
@@ -1624,29 +1758,41 @@ def get_timesheet_details(
             project = parsed_project or ""
         task = ""
 
-    logs = frappe.get_list(
+    # Query Details directly. Parent get_list with child fields can return a partial
+    # child set on the first request (Edit dialog showed 1 of N until reopen).
+    ignore_permissions = employee_has_higher_access(employee, ptype="read")
+    parents = frappe.get_all(
         "Timesheet",
-        fields=[
-            "time_logs.name",
-            "time_logs.hours",
-            "time_logs.description",
-            "time_logs.task",
-            "time_logs.activity_type",
-            "time_logs.project",
-            "time_logs.from_time",
-            "time_logs.to_time",
-            "time_logs.from_time as date",
-            "time_logs.parent",
-            "time_logs.is_billable",
-            "time_logs.custom_billable_override_reason",
-        ],
         filters={
-            "start_date": ["=", getdate(date)],
+            "start_date": getdate(date),
             "employee": employee,
-            "docstatus": ["=", 0],
+            "docstatus": 0,
         },
-        ignore_permissions=employee_has_higher_access(employee, ptype="read"),
+        pluck="name",
+        ignore_permissions=ignore_permissions,
     )
+    logs = []
+    if parents:
+        logs = frappe.get_all(
+            "Timesheet Detail",
+            filters={"parent": ["in", parents], "parenttype": "Timesheet"},
+            fields=[
+                "name",
+                "hours",
+                "description",
+                "task",
+                "activity_type",
+                "project",
+                "from_time",
+                "to_time",
+                "from_time as date",
+                "parent",
+                "is_billable",
+                "custom_billable_override_reason",
+            ],
+            order_by="from_time asc",
+            ignore_permissions=ignore_permissions,
+        )
 
     if task:
         logs = [log for log in logs if log.get("task") == task]
@@ -1684,6 +1830,9 @@ def get_timesheet_details(
         enrich_log_billable_fields(log, task or None)
         enrich_log_description_fields(log, project_id)
         log["billable_override_reason"] = log.pop("custom_billable_override_reason", None)
+        # Always return a date-only string so the Edit dialog DatePicker does not
+        # shift a day in US timezones when parsing datetimes / UTC midnight.
+        log["date"] = str(getdate(log.get("date") or log.get("from_time") or date))
         if is_activity_row:
             log["task"] = ""
             log["activity_type"] = activity_type

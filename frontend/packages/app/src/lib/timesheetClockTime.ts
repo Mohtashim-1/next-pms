@@ -63,8 +63,12 @@ export function withDayPeriod(hhmm: string, period: DayPeriod, fallbackFace = "0
  * Accepts: "13:30", "1:30 PM", "1:30pm", "1.5" (duration hours), "8".
  */
 export function parseClockTime(raw: string, minutesStep = 1): string {
-  const trimmed = (raw ?? "").trim();
+  let trimmed = (raw ?? "").trim();
   if (!trimmed) return "";
+  // Edit dialog rejected ".5" while Add Time accepted "0.5" — normalize leading-dot decimals.
+  if (/^\.\d+$/.test(trimmed)) {
+    trimmed = `0${trimmed}`;
+  }
 
   const ampmMatch = /^(\d{1,2})(?::([0-5]?\d))?\s*(am|pm)$/i.exec(trimmed);
   if (ampmMatch) {

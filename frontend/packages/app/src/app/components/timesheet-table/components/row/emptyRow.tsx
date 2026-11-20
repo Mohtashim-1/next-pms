@@ -97,6 +97,7 @@ export const EmptyRow = ({
             task: taskData?.name ?? "",
             parent: "",
             project: taskData?.project ?? "",
+            activity_type: taskData?.activity_type ?? "",
           },
         ];
         return (

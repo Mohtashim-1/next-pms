@@ -15,5 +15,7 @@ export interface AddTimeProps {
   workingFrequency: WorkingFrequency;
   task?: string;
   project?: string;
+  /** Prefill work type when opening from an existing Meeting/Admin/… row (+). */
+  activity_type?: string;
   employeeName?: string;
 }

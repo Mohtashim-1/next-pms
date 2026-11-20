@@ -35,6 +35,7 @@ export const Footer = ({ timesheet, user, dispatch, callback }: FooterProps) => 
           workingHours={user.workingHours}
           task={timesheet.timesheet.task}
           project={timesheet.timesheet.project}
+          activity_type={timesheet.timesheet.activity_type}
           employeeName={user.employeeName}
           onSuccess={() => {
             callback();

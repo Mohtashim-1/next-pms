@@ -71,6 +71,27 @@ const debugAddTime = (event: string, details?: unknown) => {
  * @param task - Task name for the timesheet entry (eg: TASK-0001).
  * @param project - Project name for the timesheet entry (eg: Project-0001).
  */
+const resolveProjectDefaultActivity = (
+  projectName: string | undefined,
+  projectLabel: string | undefined,
+  configured: string | undefined,
+  activityTypes: string[]
+) => {
+  const configuredValue = (configured || "").trim();
+  if (configuredValue && activityTypes.includes(configuredValue)) {
+    return configuredValue;
+  }
+  // Fallback: "[Internal] - Admin" / "... Admin" → Admin when it matches a work type.
+  const label = `${projectLabel || ""} ${projectName || ""}`.trim();
+  for (const activity of activityTypes) {
+    if (!activity) continue;
+    if (label.endsWith(` - ${activity}`) || label.endsWith(` ${activity}`) || label === activity) {
+      return activity;
+    }
+  }
+  return "";
+};
+
 const AddTime = ({
   initialDate,
   employee,
@@ -80,6 +101,7 @@ const AddTime = ({
   onSuccess,
   task = "",
   project = "",
+  activity_type: initialActivityType = "",
 }: AddTimeProps) => {
   const { call } = useContext(FrappeContext) as FrappeConfig;
   const { call: save } = useFrappePostCall("next_pms.timesheet.api.timesheet.save");
@@ -94,6 +116,8 @@ const AddTime = ({
   const pendingAutoSaveRef = useRef<z.infer<typeof TimesheetDraftSchema> | null>(null);
   const pendingCloseOnSuccessRef = useRef(false);
   const submittingRef = useRef(false);
+  // Resolvers waiting for an in-flight autosave + queued Save to finish.
+  const pendingSaveWaitersRef = useRef<Array<(ok: boolean) => void>>([]);
   // Keep the child-row name created by the first autosave so later saves update
   // that row instead of merging into / overwriting another Meeting on the same day.
   const draftEntryNameRef = useRef<string>("");
@@ -120,7 +144,7 @@ const AddTime = ({
       is_billable: false,
       project_default_is_billable: undefined,
       billable_override_reason: "",
-      activity_type: "",
+      activity_type: initialActivityType || "",
     },
     mode: "onChange",
   });
@@ -278,8 +302,10 @@ const AddTime = ({
     const selected = projects?.message?.find(
       (item: {
         name: string;
+        project_name?: string;
         custom_billing_type?: string;
         custom_default_is_billable?: boolean | number;
+        custom_default_activity_type?: string;
       }) => item.name === projectName
     );
     applyProjectBillableDefaults(
@@ -287,6 +313,19 @@ const AddTime = ({
       selected?.custom_default_is_billable,
       selected?.custom_billing_type
     );
+    const defaultActivity = resolveProjectDefaultActivity(
+      projectName,
+      selected?.project_name,
+      selected?.custom_default_activity_type,
+      activityTypes
+    );
+    if (defaultActivity) {
+      form.setValue("activity_type", defaultActivity, {
+        shouldValidate: true,
+        shouldDirty: true,
+        shouldTouch: true,
+      });
+    }
   };
   const handleInputModeChange = (mode: TimesheetInputMode) => {
     form.setValue("input_mode", mode, { shouldDirty: true, shouldValidate: true });
@@ -358,6 +397,12 @@ const AddTime = ({
   );
   const activeTimer = runningTimer?.message?.started_at ? runningTimer.message : null;
 
+  const resolvePendingSaveWaiters = (ok: boolean) => {
+    const waiters = pendingSaveWaitersRef.current;
+    pendingSaveWaitersRef.current = [];
+    waiters.forEach((resolve) => resolve(ok));
+  };
+
   const persistDraft = useCallback(
     async (data: z.infer<typeof TimesheetDraftSchema>, closeOnSuccess = false) => {
       const parsed = TimesheetDraftSchema.safeParse(data);
@@ -373,14 +418,22 @@ const AddTime = ({
           canAutoSave: parsed.success ? canAutoSaveDraft(parsed.data) : false,
           data: parsed.success ? parsed.data : data,
         });
+        if (closeOnSuccess) resolvePendingSaveWaiters(false);
         return false;
       }
 
       // Serialize autosaves AND Save — parallel creates spawn duplicate Timesheet docs.
+      // For Save (closeOnSuccess), wait for the queued flush instead of returning false
+      // (returning false used to unlock the Save button and invite a second click).
       if (autoSaveInFlightRef.current) {
         pendingAutoSaveRef.current = parsed.data;
         pendingCloseOnSuccessRef.current = closeOnSuccess || pendingCloseOnSuccessRef.current;
         debugAddTime("persist queued (in flight)", { closeOnSuccess, data: parsed.data });
+        if (closeOnSuccess) {
+          return await new Promise<boolean>((resolve) => {
+            pendingSaveWaitersRef.current.push(resolve);
+          });
+        }
         return false;
       }
 
@@ -394,6 +447,7 @@ const AddTime = ({
       });
 
       autoSaveInFlightRef.current = true;
+      let savedOk = false;
       try {
         const res = await save(payload);
         debugAddTime("persist response", {
@@ -417,7 +471,6 @@ const AddTime = ({
           draftEntryNameRef.current = savedName;
         }
         setDraftSaveStatus("saved");
-        onSuccess?.(parsed.data);
         debugAddTime("persist success", {
           requestId,
           closeOnSuccess,
@@ -425,6 +478,9 @@ const AddTime = ({
           draftEntryName: draftEntryNameRef.current,
         });
         if (closeOnSuccess) {
+          // Refresh grid only on final Save — draft autosaves used to call
+          // onSuccess too, which raced with a second Save click.
+          onSuccess?.(parsed.data);
           const successMessage =
             typeof savedPayload === "object" && savedPayload !== null
               ? (savedPayload as { message?: string }).message || "Timesheet entry saved successfully."
@@ -435,6 +491,7 @@ const AddTime = ({
             description: successMessage,
           });
         }
+        savedOk = true;
         return true;
       } catch (err) {
         const errorMsg = parseFrappeErrorMsg(err as FrappeError);
@@ -457,6 +514,7 @@ const AddTime = ({
             });
           }
         }
+        savedOk = false;
         return false;
       } finally {
         autoSaveInFlightRef.current = false;
@@ -465,7 +523,10 @@ const AddTime = ({
         pendingAutoSaveRef.current = null;
         pendingCloseOnSuccessRef.current = false;
         if (pending) {
-          void persistDraft(pending, closePending);
+          const pendingOk = await persistDraft(pending, closePending);
+          if (closePending) resolvePendingSaveWaiters(pendingOk);
+        } else if (closeOnSuccess) {
+          resolvePendingSaveWaiters(savedOk);
         }
       }
     },
@@ -592,10 +653,27 @@ const AddTime = ({
 
   const { data: projects, isLoading: isProjectLoading } = useFrappeGetCall("frappe.client.get_list", {
     doctype: "Project",
-    fields: ["name", "project_name", "customer", "custom_billing_type", "custom_default_is_billable"],
+    fields: [
+      "name",
+      "project_name",
+      "customer",
+      "custom_billing_type",
+      "custom_default_is_billable",
+      "custom_default_activity_type",
+    ],
     filters: window.frappe?.boot?.global_filters.project,
     limit_page_length: "null",
   });
+
+  const { data: gridMeta } = useFrappeGetCall(
+    "next_pms.timesheet.api.timesheet.get_timesheet_grid_meta",
+    undefined,
+    open ? undefined : null
+  );
+
+  const activityTypes: string[] = Array.isArray(gridMeta?.message?.activity_types)
+    ? gridMeta.message.activity_types
+    : ["Meeting", "Admin", "Bug", "Development", "Issue", "Research", "Support", "Training"];
 
   // When projects load (or pre-selected project), align billable with project default if no task yet
   useEffect(() => {
@@ -617,6 +695,33 @@ const AddTime = ({
     );
   }, [applyProjectBillableDefaults, form, projects, selectedProject]);
 
+  // Prefill work type from project default when Add Time opens without a row activity.
+  useEffect(() => {
+    if (!open) return;
+    if ((form.getValues("activity_type") || "").trim()) return;
+    const projectName = form.getValues("project") || selectedProject[0] || "";
+    if (!projectName || !projects?.message) return;
+    const selected = projects.message.find(
+      (item: {
+        name: string;
+        project_name?: string;
+        custom_default_activity_type?: string;
+      }) => item.name === projectName
+    );
+    const defaultActivity = resolveProjectDefaultActivity(
+      projectName,
+      selected?.project_name,
+      selected?.custom_default_activity_type,
+      activityTypes
+    );
+    if (!defaultActivity) return;
+    form.setValue("activity_type", defaultActivity, {
+      shouldValidate: true,
+      shouldDirty: true,
+      shouldTouch: true,
+    });
+  }, [open, form, projects, selectedProject, activityTypes]);
+
   const activeProject = form.watch("project") || selectedProject[0] || "";
   const projectCustomer =
     projects?.message?.find((item: { name: string; customer?: string }) => item.name === activeProject)?.customer ?? "";
@@ -632,16 +737,6 @@ const AddTime = ({
     projectCustomer ? `add-time-customer-${projectCustomer}` : null
   );
   const customerLabel = customerData?.message?.customer_name || projectCustomer;
-
-  const { data: gridMeta } = useFrappeGetCall(
-    "next_pms.timesheet.api.timesheet.get_timesheet_grid_meta",
-    undefined,
-    open ? undefined : null
-  );
-
-  const activityTypes: string[] = Array.isArray(gridMeta?.message?.activity_types)
-    ? gridMeta.message.activity_types
-    : ["Meeting", "Admin", "Bug", "Development", "Issue", "Research", "Support", "Training"];
 
   const onEmployeeChange = (value: string) => {
     setSelectedEmployee(value);
@@ -748,14 +843,14 @@ const AddTime = ({
       is_billable: false,
       project_default_is_billable: undefined,
       billable_override_reason: "",
-      activity_type: "",
+      activity_type: initialActivityType || "",
       project: project || "",
     });
     setSelectedDate(getFormatedDate(initialDate));
     setSelectedEmployee(employee);
     setSelectedProject(project ? [project] : []);
     setSearchTask(task || "");
-  }, [open, initialDate, task, project, employee, form, savedInputMode]);
+  }, [open, initialDate, task, project, initialActivityType, employee, form, savedInputMode]);
 
   useEffect(() => {
     updateProject(task);

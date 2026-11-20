@@ -30,7 +30,7 @@ import { isBillableValue } from "@/lib/timesheetBillable";
 import { extractTimeFromDatetime, isRangeEntry, type TimesheetInputMode } from "@/lib/timesheetTime";
 import { parseFrappeErrorMsg } from "@/lib/utils";
 import { TimesheetDraftUpdateSchema, serializeTimesheetUpdateRow, timeStringToFloat } from "@/schema/timesheet";
-import { EditTimeEntryCard } from "./editTimeEntryCard";
+import { EditTimeEntryCard, toDateOnly } from "./editTimeEntryCard";
 import type { EditTimeProps, TimesheetDetail } from "./types";
 
 function sumEntryHours(rows: z.infer<typeof TimesheetDraftUpdateSchema>["data"], mode: TimesheetInputMode): number {
@@ -59,6 +59,9 @@ export const EditTime = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const loadedDialogKeyRef = useRef<string | null>(null);
+  // useState alone cannot block a double-click before re-render; empty-name
+  // rows would otherwise be created twice ("Add another entry" duplicates).
+  const submittingRef = useRef(false);
 
   const form = useForm<z.infer<typeof TimesheetDraftUpdateSchema>>({
     resolver: zodResolver(TimesheetDraftUpdateSchema),
@@ -98,13 +101,29 @@ export const EditTime = ({
     const parts = rest.split("::");
     return parts.length > 1 ? parts.slice(1).join("::") : "";
   }, [project, task]);
-  const { data, isLoading, mutate } = useFrappeGetCall("next_pms.timesheet.api.timesheet.get_timesheet_details", {
-    employee: employee,
-    date: date,
-    task: resolvedTask,
-    activity_type: resolvedActivityType || undefined,
-    project: resolvedProject || undefined,
-  });
+  // Always send project/activity_type (even "") so SWR cache keys stay stable and the
+  // API applies the same filters the grid cell used. Omitting them caused first-open
+  // stale/partial caches that only fixed after close + reopen.
+  const detailsParams = useMemo(
+    () => ({
+      employee,
+      date,
+      task: resolvedTask,
+      activity_type: resolvedActivityType,
+      project: resolvedProject,
+    }),
+    [employee, date, resolvedTask, resolvedActivityType, resolvedProject]
+  );
+  const detailsCacheKey = `timesheet-details:${employee}:${date}:${resolvedTask}:${resolvedActivityType}:${resolvedProject}`;
+  const { data, isLoading, isValidating, mutate } = useFrappeGetCall(
+    "next_pms.timesheet.api.timesheet.get_timesheet_details",
+    detailsParams,
+    detailsCacheKey,
+    {
+      revalidateOnFocus: false,
+      revalidateOnMount: true,
+    }
+  );
   const projectDefaultIsBillable = data?.message?.project_default_is_billable;
   const descriptionRequired = Boolean(data?.message?.description_required);
   const entryLabel = data?.message?.task || resolvedActivityType || "Time entry";
@@ -117,6 +136,8 @@ export const EditTime = ({
       const rangeMode = item.input_mode ? item.input_mode === "range" : isRangeEntry(item.from_time, item.to_time);
       return {
         ...item,
+        // API returns from_time as `date`; keep YYYY-MM-DD only for the picker.
+        date: toDateOnly(item.date || date),
         hours: floatToTime(item.hours),
         input_mode: rangeMode ? "range" : "duration",
         from_time: extractTimeFromDatetime(item.from_time),
@@ -130,7 +151,14 @@ export const EditTime = ({
       };
     });
     return updatedData;
-  }, [data, resolvedActivityType, resolvedTask, dialogProjectId]);
+  }, [data, date, resolvedActivityType, resolvedTask, dialogProjectId]);
+
+  // Force a fresh fetch every time the pencil dialog opens so we never paint a
+  // stale 1-of-N SWR cache while the cell preview already shows all entries.
+  useEffect(() => {
+    if (!open) return;
+    void mutate();
+  }, [open, detailsCacheKey, mutate]);
 
   useEffect(() => {
     if (!open) {
@@ -139,8 +167,20 @@ export const EditTime = ({
     }
     if (!data) return;
 
-    const dialogKey = `${employee}-${date}-${resolvedTask}-${resolvedActivityType}-${dialogProjectId}`;
+    // Include entry names/count so a revalidate that grows 1 → N entries reloads
+    // the form. The old key ignored entry set changes, which is why the first open
+    // stuck on one row until close + reopen.
+    const entriesKey = updatedData.map((row) => row.name || "").join(",");
+    const dialogKey = `${employee}-${date}-${resolvedTask}-${resolvedActivityType}-${dialogProjectId}::${entriesKey}`;
     if (loadedDialogKeyRef.current === dialogKey) return;
+
+    const prevKey = loadedDialogKeyRef.current;
+    const prevCount = prevKey?.split("::")[1]?.split(",").filter(Boolean).length || 0;
+    const nextCount = updatedData.filter((row) => row.name).length;
+    // Don't wipe in-progress edits when a background revalidate returns the same set.
+    if (form.formState.isDirty && prevCount > 0 && nextCount <= prevCount) {
+      return;
+    }
 
     loadedDialogKeyRef.current = dialogKey;
     form.reset({ data: updatedData });
@@ -149,7 +189,7 @@ export const EditTime = ({
       setInputMode("range");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, data, employee, date, resolvedTask, resolvedActivityType, dialogProjectId]);
+  }, [open, data, updatedData, employee, date, resolvedTask, resolvedActivityType, dialogProjectId, isValidating]);
 
   const handleInputModeChange = (mode: TimesheetInputMode) => {
     setInputMode(mode);
@@ -167,7 +207,7 @@ export const EditTime = ({
       name: "",
       parent: parent,
       task: resolvedTask,
-      date: date,
+      date: toDateOnly(date),
       input_mode: inputMode,
       from_time: "",
       to_time: "",
@@ -222,17 +262,22 @@ export const EditTime = ({
   );
 
   const handleUpdate = async (formData: z.infer<typeof TimesheetDraftUpdateSchema>) => {
-    if (isSubmitting) return;
+    if (submittingRef.current || isSubmitting) return;
     if (!form.formState.isDirty) {
       onClose();
       return;
     }
 
+    submittingRef.current = true;
     setIsSubmitting(true);
-    const saved = await persistDraft(formData, true);
-    setIsSubmitting(false);
-    if (saved) {
-      onClose();
+    try {
+      const saved = await persistDraft(formData, true);
+      if (saved) {
+        onClose();
+      }
+    } finally {
+      submittingRef.current = false;
+      setIsSubmitting(false);
     }
   };
 

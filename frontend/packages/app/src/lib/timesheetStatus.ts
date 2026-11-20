@@ -9,7 +9,9 @@ const LOCKED_TIMESHEET_STATUSES = new Set([
 ]);
 
 export const getTimesheetStatusLabel = (status: string) => {
-  if (status === DRAFT_TIMESHEET_STATUS) return "Draft";
+  // Draft weeks use this control to open submit-for-approval — label "Submit"
+  // so users are not told to "click Draft" (Trent UX feedback).
+  if (status === DRAFT_TIMESHEET_STATUS) return "Submit";
   if (status === "Rejected" || status === "Partially Rejected") return `${status} — fix and resubmit`;
   return status;
 };
